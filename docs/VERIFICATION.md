@@ -230,8 +230,23 @@ Console + presentation only; no engine, route or schema change. Local, fake adap
 - `pnpm test` 262 passed (data-folder free space, `sizeHint` through import); `pnpm catalog:verify`
   with 17 `sizeHint`s (hashes refreshed; qualification unchanged — presentation only).
 - Viewed in `pnpm dev:ui` at 1280 and 390 px wide.
-**Not verified live:** the drive default on a real host with a removable drive (logic is the same
-candidate/device match the wizard already used; covered only by mocks).
+**Live, harbor-old (2026-10-11):** self-update 0.26.0 → 0.27.0 → 0.27.1 from the GitHub releases,
+the same 12 containers running throughout. Driven with Playwright at 1280 and 390 px: with the ext4
+USB stick mounted from the page, 0.27.0 made the 14 GB stick Immich's default; 0.27.1 keeps *This
+machine* (234 GB free) and lists the stick as a choice. A real Excalidraw install from the page (review
+→ operation → ready; HTTP 200; `volumes/` fscrypt v2 AES-256) and a full uninstall, once per version.
+0.27.1's review reads "Devices on your home network · http://harbor-old.local:18083/" and "This
+machine" (0.27.0 said "localhost … this machine only, until you publish"); Immich is no longer
+offered the domain Nextcloud uses. Three independent review passes over the 0.27.0 screenshots
+produced the nine fixes of decision 157. Not kept in the repo (screenshots show a private LAN).
+Left over: Immich's long storage purpose doubles the brackets in "Encrypted, except … (your folder)".
+
+## 3p. Install page fixes (2026-10-11, Harbor 0.27.1, decision 157)
+
+Local: `pnpm test` 262, `pnpm test:integration` 206 (+3 live skipped; new: plan `location.onDrive/
+defaultKey` + `notes` vs `warnings`, LAN URL in plans, used domain left out of address options),
+`pnpm test:e2e` 30 (review copy, single-place text, drive lines, "Encrypted, except"), catalog and
+openapi checks. Live: see 3o.
 
 ## 3n. App backups (2026-10-10, Harbor 0.26.0, decisions 149–154)
 

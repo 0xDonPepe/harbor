@@ -3,7 +3,7 @@ import type { DomainsDto, HostStorageDto, InstallCandidateDto } from '../../../s
 import type { AddressOptionsDto, CatalogItemDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageImportResultDto, PlanDto, PlatformToolDto } from '../../../src/contracts/api';
 import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
-import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, Pill, RecoveryCard, StatusPill, appLabel, openUrl } from './components';
+import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, Pill, RecoveryCard, StatusPill, appLabel, endpointUrlHere, openUrl } from './components';
 import { categoryLabel, fmtBytes, fmtTime } from './format';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
@@ -73,17 +73,18 @@ export function PlanDialog({ c }: { c: Console }) {
           <p className="lead">{humanSummary(plan, displayName)}</p>
           <ul className="plain facts-list">
             {plan.endpoints.length > 0 && plan.kind === 'install' && (
+              // decision 157: the same words as the install page — who can reach it, at which address
               <li>
-                <span className="fact-k">Address</span>
-                <span>{plan.endpoints.map((e) => e.browserUrl).join(', ')} <span className="muted small">(this machine only, until you publish)</span></span>
+                <span className="fact-k">Access</span>
+                <span className="url">
+                  {plan.endpoints[0]!.urls.lan || plan.endpoints[0]!.urls.lanSecure ? 'Devices on your home network' : 'Only you, on this machine'} · {endpointUrlHere(plan.endpoints[0]!)}
+                </span>
               </li>
             )}
             {plan.location && (
               <li>
-                <span className="fact-k">Lives on</span>
-                <span>
-                  <code>{plan.location.dir}</code> <span className="muted small">(whole app, sealed on disk — see what Harbor will do, below, for how it opens)</span>
-                </span>
+                <span className="fact-k">Storage</span>
+                <span>{plan.location.onDrive ? 'Your drive' : 'This machine'}</span>
               </li>
             )}
             {!plan.location && plan.kind === 'install' && (
@@ -106,10 +107,10 @@ export function PlanDialog({ c }: { c: Console }) {
                         </>
                       ) : s.mode === 'home' ? (
                         <>
-                          {s.purpose || s.id} on the drive <span className="muted small">(encrypted with the app)</span>
+                          {s.purpose || s.id} <span className="muted small">(encrypted with the app)</span>
                         </>
                       ) : (
-                        `${s.purpose || s.id} in a retained volume${s.state === 'existing' ? ' (kept from before)' : ''}`
+                        `${s.purpose || s.id}${s.state === 'existing' ? ' (kept from before)' : ''}`
                       )}
                     </span>
                   ))}
@@ -170,6 +171,11 @@ export function PlanDialog({ c }: { c: Console }) {
             )}
           </ul>
           <SecretFields plan={plan} values={secretValues} onChange={setSecretValues} />
+          {plan.notes.map((n, i) => (
+            <p key={`n${i}`} className="muted">
+              {n}
+            </p>
+          ))}
           {plan.warnings.map((w, i) => (
             <p key={i} className="warn">
               {w}
@@ -178,6 +184,11 @@ export function PlanDialog({ c }: { c: Console }) {
           {plan.kind === 'remove' && <p className="warn">Containers and the private network are deleted. Data, secrets, the name and its ports are kept, so Reinstall brings it back as it was.</p>}
           <details>
             <summary className="muted small">Exactly what Harbor will do ({plan.changes.length} steps)</summary>
+            {plan.location && (
+              <p className="muted small">
+                Stored at <code>{plan.location.dir}</code>
+              </p>
+            )}
             <ul className="steps">
               {plan.changes.map((ch, i) => (
                 <li key={i}>{ch}</li>
@@ -204,6 +215,24 @@ export function PlanDialog({ c }: { c: Console }) {
 // Free bytes of an install location, null when unknown.
 function freeBytes(cd: { totalBytes: number | null; usedBytes: number | null }): number | null {
   return cd.totalBytes !== null && cd.usedBytes !== null ? Math.max(0, cd.totalBytes - cd.usedBytes) : null;
+}
+
+// Decimal units on the install page (decision 157), so free space reads like the packages' size hints
+// ("about 4 GB") and like the label on the drive itself.
+function fmtGB(n: number): string {
+  const units: [number, string][] = [
+    [1e12, 'TB'],
+    [1e9, 'GB'],
+    [1e6, 'MB'],
+  ];
+  for (const [u, name] of units) if (n >= u) return `${(n / u).toFixed(n / u >= 100 ? 0 : 1).replace(/\.0$/, '')} ${name}`;
+  return `${Math.round(n / 1e3)} kB`;
+}
+// lsblk sizes ("14.4G") are binary units: show them in the same decimal units.
+function fmtDeviceSize(size: string): string {
+  const m = /^([\d.]+)([KMGTP])$/i.exec(size.trim());
+  if (!m) return size;
+  return fmtGB(Number(m[1]) * 1024 ** ('KMGTP'.indexOf(m[2]!.toUpperCase()) + 1));
 }
 
 export function InstallWizard({ item, instances = [], busy, installed = 0, onClose, onStart, onRemovePackage }: { item: CatalogItemDto; instances?: InstanceSummary[]; busy: boolean; installed?: number; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void }) {
@@ -257,11 +286,15 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
   // unique -2 suffix before planning). The preview below shows the full home
   // path for honesty; only the package dir is sent.
   const slugName = name.trim() || item.id;
+  const dataCandidate = (candidates ?? []).find((cd) => cd.label.startsWith('Harbor data folder')) ?? null;
   const roomiest = (candidates ?? [])
     .filter((cd) => cd.eligible && !cd.label.startsWith('Harbor data folder') && devices.some((d) => d.mountpoint && (cd.dir === `${d.mountpoint}/harbor-apps` || cd.dir.startsWith(`${d.mountpoint}/`))))
     .sort((a, b) => (freeBytes(b) ?? 0) - (freeBytes(a) ?? 0))[0] ?? null;
-  const place = placePick ?? (roomiest && item.claims.some((c) => c.external) ? 'external' : 'local');
-  const dataCandidate = (candidates ?? []).find((cd) => cd.label.startsWith('Harbor data folder')) ?? null;
+  // Decision 157: the drive wins only when it has more room than this machine (a 14 GB stick must not
+  // beat 219 GB on the system disk for a photo library); unknown local space lets a drive win.
+  const localFree = dataCandidate ? freeBytes(dataCandidate) : null;
+  const driveWins = roomiest !== null && (localFree === null || (freeBytes(roomiest) ?? 0) > localFree);
+  const place = placePick ?? (driveWins && item.claims.some((c) => c.external) ? 'external' : 'local');
   const driveCandidate = driveDir !== null ? ((candidates ?? []).find((cd) => cd.dir === driveDir) ?? null) : null;
   const locationDir = place === 'local' ? (dataCandidate ? `${dataCandidate.dir}/${item.id}` : null) : driveCandidate ? `${driveCandidate.dir}/${item.id}` : null;
   const locationHome = locationDir ? `${locationDir}/${slugName}` : null;
@@ -280,7 +313,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
   // Default to the first eligible drive when the operator picks External.
   useEffect(() => {
     if (place !== 'external' || driveDir !== null) return;
-    const first = roomiest ?? (candidates ?? []).filter((cd) => !cd.label.startsWith('Harbor data folder') && cd.eligible)[0] ?? null;
+    const first = roomiest ?? (candidates ?? []).filter((cd) => !cd.label.startsWith('Harbor data folder') && cd.eligible).sort((a, b) => (freeBytes(b) ?? 0) - (freeBytes(a) ?? 0))[0] ?? null;
     if (first) setDriveDir(first.dir);
   }, [place, candidates, driveDir, roomiest]);
   // A mount/format is a root oneshot that takes seconds: poll the per-device
@@ -440,13 +473,16 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
   const driveName = (cd: InstallCandidateDto) => deviceFor(cd)?.label ?? cd.label.replace(/ \(.*\)$/, '').replace(/^Drive "(.*)"$/, '$1');
   const free = (cd: InstallCandidateDto | null) => {
     const n = cd ? freeBytes(cd) : null;
-    return n !== null ? ` · ${fmtBytes(n)} free` : '';
+    return n !== null ? ` · ${fmtGB(n)} free` : '';
   };
   const storeName = place === 'local' ? 'This machine' : driveCandidate ? driveName(driveCandidate) : formattedDrive ? (formattedDrive.label ?? formattedDrive.name) : 'No drive chosen yet';
   const storeFree = place === 'local' ? free(dataCandidate) : free(driveCandidate);
   const optionalFolders = external.filter((c) => !c.external!.required);
   const requiredFolders = external.filter((c) => c.external!.required);
   const ownFolders = external.filter((c) => (folders[c.id] ?? '').trim());
+  // decision 157: the headline names what is NOT encrypted as soon as an own folder is ticked
+  const plainParts = external.filter((c) => c.id in folders || c.external!.required).map((c) => c.purpose.charAt(0).toLowerCase() + c.purpose.slice(1));
+  const singlePlace = candidates !== null && drives.length === 0 && !formattedDrive;
   const reach = !addr || addr.local.kind === 'loopback' ? 'Only you, on this machine' : 'Devices on your home network';
   const reachUrl = addr && addr.local.kind !== 'loopback' ? `${addr.local.kind}://${addr.local.host}` : null;
   const alsoOn = mainSel === 'tailnet' && addr?.tailnet ? `Also your Tailscale devices, at https://${addr.tailnet.hostname}` : mainSel?.startsWith('public:') ? `Also anyone on the internet, at https://${mainSel.slice('public:'.length)}` : null;
@@ -539,7 +575,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
           </span>
           <div className="choice-text">
             <p className="choice-main">
-              {customPass ? 'Encrypted with your own passphrase' : 'Encrypted — unlocks automatically when you sign in'}{' '}
+              {plainParts.length ? `Encrypted, except ${plainParts.join(' and ')} (your folder)` : customPass ? 'Encrypted with your own passphrase' : 'Encrypted — unlocks automatically when you sign in'}{' '}
               <button className="btn ghost small" type="button" aria-expanded={howOpen} onClick={() => setHowOpen(!howOpen)} aria-label="How the encryption works">
                 How?
               </button>
@@ -592,9 +628,14 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
         {changing.storage && (
           <fieldset className="storage-choices" id={`${sectionId}-where`}>
             <legend>Where to keep {item.name}</legend>
-            <label className="check">
-              <input type="radio" name="loc" checked={place === 'local'} onChange={() => setPlace('local')} /> This machine{free(dataCandidate)}
-            </label>
+            {singlePlace ? (
+              // one place only: plain text, not a one-option radio group (decision 157)
+              <p className="check">This machine{free(dataCandidate)} · the only place right now</p>
+            ) : (
+              <label className="check">
+                <input type="radio" name="loc" checked={place === 'local'} onChange={() => setPlace('local')} /> This machine{free(dataCandidate)}
+              </label>
+            )}
             {drives.map((cd) => {
               const drive = deviceFor(cd);
               return (
@@ -622,7 +663,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
             })}
             {formattedDrive && !driveCandidate && (
               <label className="check">
-                <input type="radio" name="loc" checked={place === 'external'} onChange={() => setPlace('external')} /> {formattedDrive.label ?? formattedDrive.name} · {formattedDrive.size}
+                <input type="radio" name="loc" checked={place === 'external'} onChange={() => setPlace('external')} /> {formattedDrive.label ?? formattedDrive.name} · {fmtDeviceSize(formattedDrive.size)}
               </label>
             )}
             {candidates === null && <p className="muted small">Checking drives…</p>}
@@ -632,9 +673,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
               const wrongFs = needsFormatForApps(d.fsType);
               return (
                 <p key={d.device} className="muted small">
-                  {d.label ?? d.name} ({d.size}
-                  {d.fsType ? `, ${d.fsType}` : ''}) is plugged in but not mounted.
-                  {wrongFs ? ' Format it as ext4 to use it for apps.' : ''} {wrongFs ? formatButton(d) : mountButton(d)}
+                  {wrongFs ? `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) uses ${d.fsType}, which cannot hold apps. Format it as ext4 to use it.` : `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) is plugged in. Mount it to use it.`} {wrongFs ? formatButton(d) : mountButton(d)}
                 </p>
               );
             })}
@@ -758,7 +797,13 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
             <dd>{item.storage ? `${item.storage} data volume${item.storage > 1 ? 's' : ''}, kept when you remove the app` : 'No data of its own'}</dd>
             <dt>Version</dt>
             <dd>
-              {item.version ?? '—'} · package revision {item.revision} · {item.origin === 'local' ? 'your own upload' : `qualification ${item.qualification}`}
+              {[
+                item.version ? `Version ${item.version}` : null,
+                `package revision ${item.revision}`,
+                item.origin === 'local' ? 'your own upload' : item.qualification === 'passed' ? 'tested on a real machine' : 'not yet tested on a real machine',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </dd>
             <dt>About</dt>
             <dd>
@@ -1574,7 +1619,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
 function humanSummary(plan: PlanDto, n: string): string {  switch (plan.kind) {
     case 'install':
       return plan.location
-        ? `Harbor will install ${n} encrypted at ${plan.location.dir}. It usually takes a minute or two (the first time includes downloading the app).`
+        ? `Harbor will install ${n} ${plan.location.onDrive ? 'on your drive' : 'on this machine'}, encrypted. It usually takes a minute or two (the first time includes downloading the app).`
         : `Harbor will install ${n} on this machine. It usually takes a minute or two (the first time includes downloading the app).`;
     case 'start':
       return `Harbor will start ${n} again with the same data and address.`;

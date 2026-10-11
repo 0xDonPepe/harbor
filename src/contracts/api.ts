@@ -267,13 +267,16 @@ export interface PlanDto {
   changes: string[];
   endpoints: EndpointDto[];
   storage: StorageDto[];
-  // install-location plans: where the whole app will live (null = system disk)
-  location: { dir: string; encrypted: true } | null;
+  // install-location plans: where the whole app will live (null = system disk). Decision 157: onDrive =
+  // not the Harbor data folder; defaultKey = Harbor's own key (unlocks at sign-in), false = own passphrase
+  location: { dir: string; encrypted: true; onDrive: boolean; defaultKey: boolean } | null;
   // decision 125: source operator = the submission carries the value (ask: required/optional); never a value here
   secrets: { id: string; state: 'new' | 'existing'; source: 'generated' | 'operator'; prompt: string | null; optional: boolean; minLength: number | null; maxLength: number | null; ask: 'required' | 'optional' | null }[];
   // decision 126: links this plan sets up or changes
   links: { id: string; purpose: string; optional: boolean; provider: { instanceId: string; name: string; endpointId: string; url: string } | null; alias: string; network: string; change: 'set' | 'keep' | 'clear' }[];
   warnings: string[];
+  // decision 157: plain facts worth reading before approving (how it opens, what happens next) — not warnings
+  notes: string[];
   // update plans: what changes between the installed release and the new one
   update?: { fromRevision: string; toRevision: string; fromVersion: string | null; toVersion: string | null; images: { service: string; from: string; to: string }[]; newSecrets: string[]; newStorage: string[]; newEndpoints: string[]; releaseNotes: string | null };
   exposure?: { endpointId: string; via: ExposureVia; url: string; protection: 'none' | 'basic'; makePrimary: boolean; credentials?: { username: string; password: string } };

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { DomainDto, DomainsDto, InstanceSummary } from '../../src/contracts/api.js';
+import type { AddressOptionsDto, DomainDto, DomainsDto, InstanceSummary } from '../../src/contracts/api.js';
 import { startHarness, type Harness } from './harness.js';
 
 let h: Harness;
@@ -108,8 +108,13 @@ describe('public domains wizard', () => {
     expect(good.warnings.join('\n')).toMatch(/points at this machine/);
     const bad = await h.api.plan({ kind: 'expose', instanceId: inst.id, via: 'public', hostname: 'blog.example.com' });
     expect(bad.warnings.join('\n')).toMatch(/does not point at this machine yet/);
+    const before = await h.api.expect<AddressOptionsDto>(200, 'GET', '/v1/network/addresses');
+    expect(before.domains).toContain('photos.example.com');
     const op = await h.api.waitOperation((await h.api.submit(good.id)).operationId);
     expect(op.state).toBe('succeeded');
+    // decision 157: a domain another app already uses is no longer offered as a main address
+    const after = await h.api.expect<AddressOptionsDto>(200, 'GET', '/v1/network/addresses');
+    expect(after.domains).not.toContain('photos.example.com');
     const d = await h.api.expect<DomainsDto>(200, 'GET', '/v1/domains');
     const used = d.items.find((i) => i.hostname === 'photos.example.com')!;
     expect(used.usedBy?.instanceName).toBe('draw2');

@@ -196,6 +196,7 @@ export interface PlanProposal {
   links?: PlannedLink[];
   changes: string[];
   warnings: string[];
+  notes?: string[]; // decision 157: informational lines (absent on plans made before 0.27.1)
   releaseHashes: Record<string, string>;
   // expose/unexpose/reconfigure payloads (absent for lifecycle kinds)
   // forget (decision 135): an unexpose on a removed app only drops the address kept for Reinstall

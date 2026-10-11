@@ -88,6 +88,10 @@ describe('install to an encrypted app home', () => {
     const appsDir = path.join(h.userDataDir, 'harbor-apps');
     const p = await h.api.plan({ kind: 'install', packageId: 'excalidraw', name: 'defaultkey', location: { dir: path.join(appsDir, 'excalidraw') } });
     expect(p.changes.join('\n')).toMatch(/this machine unlocks it when you log in/);
+    // decision 157: the review states where it lives and how it opens as data + a plain note, not a warning
+    expect(p.location).toMatchObject({ encrypted: true, onDrive: false, defaultKey: true });
+    expect(p.notes.join('\n')).toMatch(/unlocks automatically when you sign in/);
+    expect(p.warnings.join('\n')).not.toMatch(/sealed|unlocks/);
     const sub = await h.api.expect<{ operationId: string }>(202, 'POST', '/v1/operations', { planId: p.id }, { 'idempotency-key': 'home-default-key-1' });
     const op = await h.api.waitOperation(sub.operationId);
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
@@ -113,12 +117,14 @@ describe('install to an encrypted app home', () => {
 
   it('the plan names the encrypted home and warns about the drive and the passphrase', async () => {
     plan = await h.api.plan({ kind: 'install', packageId: 'excalidraw', location: { dir: path.join(drive, 'harbor-apps', 'excalidraw'), passphrase: PASS } });
-    expect(plan.location).toEqual({ dir: path.join(drive, 'harbor-apps', 'excalidraw'), encrypted: true });
+    expect(plan.location).toMatchObject({ dir: path.join(drive, 'harbor-apps', 'excalidraw'), encrypted: true, defaultKey: false });
     expect(plan.changes.join('\n')).toMatch(/sealed at .*harbor-apps\/excalidraw\//);
     // This harness's "drive" is a tmpdir on the same filesystem as the data
     // folder, so Harbor classifies it as local and the warning says so. The
     // drive-specific wording is exercised by the install-wizard e2e.
-    expect(plan.warnings.join('\n')).toMatch(/its own passphrase opens it on another Harbor machine/);
+    // decision 157: how it opens is a note; losing the passphrase AND the recovery key stays a warning
+    expect(plan.notes.join('\n')).toMatch(/own passphrase, which also opens it on another Harbor machine/);
+    expect(plan.warnings.join('\n')).toMatch(/Lose both its passphrase and your Harbor recovery key/);
     // The passphrase is never stored in the plan.
     expect(JSON.stringify(plan)).not.toContain(PASS);
   });

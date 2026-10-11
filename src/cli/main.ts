@@ -142,6 +142,7 @@ function planSummary(p: PlanDto): string {
   for (const l of p.links ?? []) lines.push(`  Link:      ${l.id} -> ${l.provider ? `${l.provider.name}/${l.provider.endpointId} as ${l.provider.url}` : 'no provider'}${l.change === 'keep' ? ' (unchanged)' : l.change === 'clear' ? ' (unlink)' : ''}`);
   if (p.exposure) lines.push(`  Address:   ${p.exposure.url} via ${p.exposure.via}, protection ${p.exposure.protection}${p.exposure.makePrimary ? ', becomes primary' : ''}`);
   for (const w of p.warnings) lines.push(`  ! ${w}`);
+  for (const n of p.notes ?? []) lines.push(`  · ${n}`);
   return lines.join('\n');
 }
 

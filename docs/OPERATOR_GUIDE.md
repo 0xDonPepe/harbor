@@ -419,14 +419,17 @@ much room the app needs) and *Encrypted — unlocks automatically when you sign 
 *Change* lists this machine and every drive in one list (a drive that is not
 mounted, or not ext4, offers *Mount it* or *Format as ext4…* right there). Apps
 that keep a media library (Immich, Jellyfin, Nextcloud, …) start out on the
-plugged-in drive with the most free space; everything else starts on this
-machine. Either way the app is sealed, this machine unlocks it when you log in,
+plugged-in drive with the most free space, when it has more room than this
+machine; everything else starts on this machine. Either way the app is sealed, this machine unlocks it when you log in,
 and your Harbor recovery key opens it on any other machine. Neither choice asks
 you to invent a passphrase.
 
 The **Access** line says who can reach the app right after install (*Only you, on
 this machine*, or *Devices on your home network* in LAN mode); its *Change* picks
-the main address (Tailscale or a domain also publishes it there). Everything else
+the main address (Tailscale or a domain also publishes it there; a domain another
+app already uses is not offered). The review step that follows repeats the same
+two lines — where it lives and who can reach it — and keeps the exact path and
+every step under *Exactly what Harbor will do*. Everything else
 — instance name, your own passphrase, your own folders, versions and the exact
 path — is under **Advanced**.
 

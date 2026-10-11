@@ -622,7 +622,9 @@ export class ApplicationService {
     } catch {
       tailnet = null;
     }
-    const domains = (await this.caddyReady()) ? this.ctx.repo.domains().filter((d) => d.dnsState === 'points_here').map((d) => d.hostname).sort() : [];
+    // decision 157: a domain another app already uses is not a choice (it would take that app's address)
+    const used = new Set(this.exposuresList().filter((e) => e.via === 'public').map((e) => e.hostname));
+    const domains = (await this.caddyReady()) ? this.ctx.repo.domains().filter((d) => d.dnsState === 'points_here' && !used.has(d.hostname)).map((d) => d.hostname).sort() : [];
     return { local, tailnet, domains };
   }
 
@@ -1558,7 +1560,7 @@ export class ApplicationService {
       const secretsDir = path.join(instanceDir(this.ctx.config.stateDir, inst.id), 'secrets');
       for (const s of p.proposal.secrets) secretStates[s.id] = secretExists(secretsDir, s.id) ? 'existing' : 'new';
     }
-    return planDto(p, storageStates, secretStates);
+    return planDto(p, storageStates, secretStates, { lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), onDrive: p.proposal.location ? !this.isDataFolderLocation(p.proposal.location.dir) : false });
   }
 
   operation(id: string): OperationDto {
@@ -1710,19 +1712,20 @@ export class ApplicationService {
           ...mainWarnings,
           ...(Object.keys(pkg.release.builds ?? {}).length ? ['Parts of this app are built from source on this machine; their provenance is the git commit, not a registry digest.'] : []),
           ...(pkg.release.qualification.status !== 'passed' ? [pkg.origin === 'local' ? 'This is your own uploaded app; Harbor has not checked it on a real machine the way it checks the built-in catalog.' : `Package qualification is ${pkg.release.qualification.status}`] : []),
-          ...(pkg.manifest.setup ? ['This app has its own onboarding after installation; Harbor does not create its accounts.'] : []),
           ...(pkg.manifest.defaultCredentials ? [`This app ships with a default login (${pkg.manifest.defaultCredentials.username}); change it right after the first sign-in.`] : []),
+          // a passphrase of its own is the one way the data can be lost for good: that stays a warning
+          ...(location && !location.defaultKey ? ['Lose both its passphrase and your Harbor recovery key and the data is gone.'] : []),
+          ...(location ? [] : [NOT_ENCRYPTED_WARNING]),
+        ],
+        // decision 157: the plain facts (how it opens, what happens next) read as notes, not amber warnings
+        notes: [
           ...(location
             ? [
-                locationOnDrive
-                  ? location.defaultKey
-                    ? 'The app (including its database) lives sealed on the drive: unplug it and the app stops. Opening it on another Harbor machine needs your Harbor recovery key, so keep that paper safe.'
-                    : 'The app (including its database) lives sealed on the drive: unplug it and the app stops. Lose both its passphrase and your Harbor recovery key and the data is gone.'
-                  : location.defaultKey
-                    ? 'The app (including its database) lives sealed on this machine and unlocks silently when you log in.'
-                    : 'The app (including its database) lives sealed on this machine; its own passphrase opens it on another Harbor machine.',
+                location.defaultKey ? 'Encrypted — unlocks automatically when you sign in. Your Harbor recovery key opens it on another machine.' : 'Encrypted with its own passphrase, which also opens it on another Harbor machine.',
+                ...(locationOnDrive ? ['Unplug the drive and the app pauses until it is back.'] : []),
               ]
-            : [NOT_ENCRYPTED_WARNING]),
+            : []),
+          ...(pkg.manifest.setup ? [`After install you'll create your ${pkg.manifest.metadata.name} account; Harbor does not create it.`] : []),
         ],
         releaseHashes: pkg.hashes,
         ...(mainExposure ? { exposure: mainExposure } : {}),

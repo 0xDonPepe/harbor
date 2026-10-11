@@ -139,6 +139,7 @@ const planFor = (kind: PlanDto['kind'], instanceId: string, packageId: string, n
   secrets: [],
   links: [],
   warnings: [],
+  notes: [],
 });
 
 const opFor = (kind: OperationDto['kind'], instanceId: string, planId: string): OperationDto => ({
@@ -243,9 +244,9 @@ export const mockApi = {
     const inst = req.instanceId ? (instances.find((i) => i.id === req.instanceId) ?? instances[0]!) : instances[0]!;
     const p = planFor(req.kind, req.instanceId ?? inst.id, req.packageId ?? inst.packageId, req.name ?? inst.name);
     if (req.location) {
-      p.location = { dir: req.location.dir, encrypted: true };
+      p.location = { dir: req.location.dir, encrypted: true, onDrive: !req.location.dir.startsWith('/srv/harbor/'), defaultKey: true };
       p.changes = [...p.changes, `Whole app encrypted at ${req.location.dir}`];
-      p.warnings = [...p.warnings, 'Write down the app passphrase: losing it loses the data.'];
+      p.notes = ['Encrypted — unlocks automatically when you sign in. Your Harbor recovery key opens it on another machine.'];
     }
     return p;
   },

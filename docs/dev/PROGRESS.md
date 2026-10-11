@@ -388,6 +388,11 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Decision 148: `tls/` chmod 0750 (UMask=0077 masked mkdir), no re-send of a Caddy-rejected config for 10 min, 3 s Caddy probe, console loads platform tools off Home's critical path
 - [x] Tests: integration `lan-https` (0700 dir repaired to 0750 on enable; a rejected config is sent once over four ticks)
 
+## Phase 59 — install page fixes from the live run (2026-10-11, 0.27.1)
+- [x] Decision 157: review matches the install page (plan endpoints carry LAN URLs, `location.onDrive/defaultKey`, new `notes[]` vs `warnings[]`, CLI prints notes); drive default needs more room than this machine; used domains not offered as main address; GB/TB units; "Encrypted, except …"; opaque dialogs + tray; single-place text; plainer drive lines; no empty version
+- [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
+- [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
+
 ## Phase 58 — install page redesign (2026-10-11, 0.27.0)
 - [x] Decision 156: one Storage summary (place, free space, encrypted, *How?*), one Access summary (who can reach it), *Change* reveals the choices (a single radio group for this machine + drives), *Advanced* holds name, own passphrase, own folders and technical details; footer says what happens next
 - [x] Manifest `presentation.sizeHint` (≤ 120 plain text) + hints for the 17 bundled packages (hashes refreshed, no revision bump); data-folder candidate reports its disk's free space

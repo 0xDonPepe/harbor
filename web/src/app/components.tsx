@@ -536,6 +536,11 @@ export function FolderPicker({ title, hint, initial, onPick, onClose }: { title:
 // (mDNS name or IP), else the plain LAN address, else loopback.
 export function openUrl(inst: InstanceSummary, endpoint = inst.endpoints.find((e) => e.id === inst.primaryEndpoint) ?? inst.endpoints[0]): string | null {
   if (!endpoint || inst.apiOnly) return null; // decision 141: an API has addresses, not a page to open
+  return endpointUrlHere(endpoint);
+}
+
+// The same choice for one endpoint (also used by the install review, decision 157, before an instance exists).
+export function endpointUrlHere(endpoint: InstanceSummary['endpoints'][number]): string {
   const primary = endpoint.urls[endpoint.primary as keyof typeof endpoint.urls];
   if (primary && endpoint.primary !== 'loopback') return primary;
   const here = location.hostname;

@@ -143,7 +143,12 @@ test('store app page, install with plan review, progress tray, Open link; duplic
   await about.getByRole('button', { name: 'Install Excalidraw now' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Review install');
-  await expect(dialog).toContainText(/Harbor will install Excalidraw encrypted at .*excalidraw\/excalidraw/);
+  // decision 157: the review says what the install page said — no localhost-only claim, no path up front
+  await expect(dialog).toContainText('Harbor will install Excalidraw on this machine, encrypted');
+  await expect(dialog).toContainText('Only you, on this machine');
+  await expect(dialog).toContainText('Encrypted — unlocks automatically when you sign in');
+  await expect(dialog).not.toContainText('until you publish');
+  await expect(dialog.locator('p.warn', { hasText: 'unlocks' })).toHaveCount(0);
   await dialog.getByText(/Exactly what Harbor will do/).click();
   await expect(dialog).toContainText(/Publish endpoint web: 127\.0\.0\.1:\d+/);
   await expect(dialog).toContainText(/Pull image excalidraw\/excalidraw@sha256:/);
@@ -384,9 +389,9 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   // This machine is the default (no media folder); Change lists it and every drive as ONE radio group
   await expect(where.locator('.choice-main strong').first()).toHaveText('This machine');
   await where.getByRole('button', { name: 'Change where BentoPDF is stored' }).click();
-  await expect(where.getByRole('radio', { name: /This machine/ })).toBeChecked();
+  await expect(where.getByRole('group', { name: 'Where to keep BentoPDF' })).toContainText('This machine');
   // the unmounted vfat stick shows with Format, never Mount
-  await expect(where.getByText(/Format it as ext4 to use it for apps/)).toBeVisible();
+  await expect(where.getByText(/uses vfat, which cannot hold apps\. Format it as ext4 to use it\./)).toBeVisible();
   await expect(where.getByRole('button', { name: 'Format USB20FD as ext4', exact: true })).toBeVisible();
   await expect(where.getByRole('button', { name: 'Mount USB20FD', exact: true })).toHaveCount(0);
   // formatting from the wizard remounts ext4 and selects the drive
@@ -453,6 +458,7 @@ test('install page: bring your own folder validates the path in the plan and mou
   await picker2.getByRole('button', { name: 'Use this folder' }).click();
   await expect(again.locator('.folder-choice code.path')).toHaveText(chosen);
   await expect(again.getByRole('region', { name: 'Storage' })).toContainText('(not encrypted)');
+  await expect(again.getByRole('region', { name: 'Storage' })).toContainText('Encrypted, except your media library (your folder)');
   folder = chosen;
   await again.getByRole('button', { name: 'Install Jellyfin now' }).click();
   const plan = page.getByRole('dialog');

@@ -119,6 +119,9 @@ describe('app addresses: hook, restart, HTTPS main address', () => {
   it('offers only the main addresses that exist, and installs with the tailnet as main address in one operation', async () => {
     const opts = await h.api.expect<AddressOptionsDto>(200, 'GET', '/v1/network/addresses');
     expect(opts.local.kind).toBe('http');
+    // decision 157: in LAN mode the install review shows the LAN address, not only loopback
+    const preview = await h.api.plan({ kind: 'install', packageId: 'hostapp', name: 'lan-preview' });
+    expect(preview.endpoints[0]!.urls.lan).toBe(`http://${opts.local.host}:${preview.endpoints[0]!.hostPort}/`);
     expect(opts.tailnet).toEqual({ hostname: 'harbor-test.tail1234.ts.net' });
     const r = await h.api.run({ kind: 'install', packageId: 'secureapp', main: { via: 'tailnet' } });
     expect(r.plan.changes.some((c) => /Publish it at https:\/\/harbor-test\.tail1234\.ts\.net:\d+\/ and make that its main address/.test(c))).toBe(true);

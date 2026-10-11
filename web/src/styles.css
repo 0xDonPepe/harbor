@@ -1093,7 +1093,8 @@ label.small {
   max-width: 640px;
   width: calc(100% - 32px);
   color: var(--fg);
-  background: color-mix(in srgb, var(--card-solid) 88%, transparent);
+  /* opaque (decision 157): the backdrop blur is not guaranteed to render, and a see-through dialog lets the page behind read through */
+  background: var(--card-solid);
   box-shadow: var(--shadow);
   animation: pop 0.22s var(--ease);
 }
@@ -1140,7 +1141,7 @@ details summary {
   right: 20px;
   bottom: 20px;
   width: min(440px, calc(100% - 40px));
-  background: var(--card);
+  background: var(--card-solid); /* opaque like dialogs (decision 157) */
   border: 1px solid var(--line-strong);
   border-left: 5px solid var(--accent);
   border-radius: var(--radius);
@@ -1210,8 +1211,18 @@ progress {
 .choice-text p {
   margin: 0;
 }
-.choice-main .btn.small {
+.choice-main .btn.small,
+.choice > .btn.small {
+  /* line up with the text line, not the block: no extra height from the 34px button floor */
   padding: 0 6px;
+  min-height: 0;
+  line-height: inherit;
+}
+.choice-main .btn.small {
+  vertical-align: baseline;
+}
+.advanced-body .btn.ghost {
+  padding-inline: 0;
 }
 .url {
   overflow-wrap: anywhere;

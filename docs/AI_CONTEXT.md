@@ -18,7 +18,7 @@ is also a `harbor` CLI command against the same local API. Owner/user: Carlos (o
 | Need | Look at |
 |---|---|
 | Requirements and original scope | `docs/spec/TDD.md` (spec), `docs/spec/plan.md` (build order). Several exclusions in TDD were later lifted at Carlos's explicit request; each lift is a numbered decision. |
-| Every design decision, numbered (1–156 so far) | `docs/DECISIONS.md` — **next number is 157**. Add a row for every non-obvious choice. |
+| Every design decision, numbered (1–157 so far) | `docs/DECISIONS.md` — **next number is 158**. Add a row for every non-obvious choice. |
 | Phase-by-phase progress, test counts, blockers, exact next step | `docs/dev/PROGRESS.md` (build changelog) |
 | What blocks the beta tag (audit 2026-09-21) | `docs/dev/BETA_TODO.md` — tick items as they ship; no LICENSE until 1.0.0 (decision 100) |
 | Agent rules of engagement (what/where/why/HOW) | `AGENTS.md` — read it before writing code or packages. |
@@ -93,6 +93,7 @@ bootstrap adds the `caddy` user to the `harbor` group and makes the state dir gr
 validated live against Caddy v2.11.4.
 
 **Last three actions, most recent first:**
+1. **0.27.1 (decision 157, 2026-10-11)**: fixes from the live harbor-old run of 0.27.0 — the install review matches the install page (LAN address, plan `notes` vs `warnings`, `location.onDrive/defaultKey`), drive default needs more room than this machine, used domains not offered, GB units, opaque dialogs/tray. harbor-old updated 0.26.0 → 0.27.0 → 0.27.1; .192 untouched.
 1. **0.27.0 (decision 156, 2026-10-11)**: install page redesign — one Storage summary (place + free space + encrypted), Access summary (who can reach it), *Change* reveals choices, everything else under *Advanced*; manifest `presentation.sizeHint`; media apps default to the roomiest removable drive. UI + presentation only; no engine change.
 1. **0.26.0 (decisions 149–155, 2026-10-10)**: app backups. restic 0.19.1 (+ rclone 1.75.2) through the root step `harbor-backup@<requestId>`; places are target packages (`targets/`: Another disk, S3, SFTP, Proton Drive beta); nightly window + max pause per app + retention; warm passes while the app runs, the cold pass as a `backup` operation; restore in place (old home kept aside) and restore on another machine with the recovery card (an install plan from `POST /v1/backups/restore`). Live-tested on harbor-old (.146); never on .192. Next batch: database dumps (consistency B), uploaded place packages, Google Drive/MEGA.
 1. **0.25.0 (decisions 145–146, 2026-10-06)**: move an encrypted app between locations (root `transfer` step; fscrypt cannot raw-copy ciphertext, so the copy goes through the kernel between two unlocked homes with the same key), unique protector names. docs/TODO.md is now fully done. Production box (.192) is still on 0.22.1 — Carlos updates it himself.

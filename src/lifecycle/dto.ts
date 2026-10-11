@@ -42,7 +42,7 @@ export function instanceSummary(i: InstanceRow, packageName: string, primaryEndp
   };
 }
 
-export function planDto(p: PlanRow, storageStates: Record<string, 'new' | 'existing'>, secretStates: Record<string, 'new' | 'existing'>): PlanDto {
+export function planDto(p: PlanRow, storageStates: Record<string, 'new' | 'existing'>, secretStates: Record<string, 'new' | 'existing'>, look: { lanHost?: string | null; lanSecureHost?: string | null; onDrive?: boolean } = {}): PlanDto {
   return {
     id: p.id,
     kind: p.kind,
@@ -53,12 +53,14 @@ export function planDto(p: PlanRow, storageStates: Record<string, 'new' | 'exist
     expiresAt: p.expiresAt,
     expectedGeneration: p.expectedGeneration,
     changes: p.proposal.changes,
-    endpoints: p.proposal.endpoints.map((e) => ({ id: e.id, containerPort: e.containerPort, hostPort: e.hostPort, browserUrl: browserUrlFor(e.hostPort), urls: { loopback: browserUrlFor(e.hostPort) }, primary: 'loopback' as const })),
+    // decision 157: the same LAN addresses an installed app gets, so the review matches the install page
+    endpoints: p.proposal.endpoints.map((e) => ({ id: e.id, containerPort: e.containerPort, hostPort: e.hostPort, browserUrl: browserUrlFor(e.hostPort), urls: endpointUrls(e, [], look.lanHost ?? null, look.lanSecureHost ? { host: look.lanSecureHost } : null), primary: 'loopback' as const })),
     storage: p.proposal.storage.map((s) => ({ id: s.id, mode: s.homePath ? ('home' as const) : s.hostPath ? ('external' as const) : ('managed' as const), volumeName: s.homePath ?? (s.hostPath ? null : s.volumeName), hostPath: s.hostPath ?? null, readOnly: s.readOnly ?? false, purpose: s.purpose, state: storageStates[s.id] ?? 'new' })),
-    location: p.proposal.location ? { dir: p.proposal.location.dir, encrypted: true as const } : null,
+    location: p.proposal.location ? { dir: p.proposal.location.dir, encrypted: true as const, onDrive: look.onDrive ?? false, defaultKey: p.proposal.location.defaultKey ?? false } : null,
     secrets: p.proposal.secrets.map((s) => ({ id: s.id, state: secretStates[s.id] ?? 'new', source: s.source === 'operator' ? ('operator' as const) : ('generated' as const), prompt: s.prompt ?? null, optional: s.optional ?? false, minLength: s.minLength ?? null, maxLength: s.maxLength ?? null, ask: s.ask ?? null })),
     links: (p.proposal.links ?? []).map((l) => ({ id: l.id, purpose: l.purpose, optional: l.optional, provider: l.provider ? { instanceId: l.provider.instanceId, name: l.provider.name, endpointId: l.provider.endpointId, url: linkValue(l.alias, l.provider.containerPort) } : null, alias: l.alias, network: l.network, change: l.change ?? 'set' })),
     warnings: p.proposal.warnings,
+    notes: p.proposal.notes ?? [],
     ...(p.proposal.update ? { update: p.proposal.update } : {}),
     ...(p.proposal.exposure
       ? { exposure: { endpointId: p.proposal.exposure.endpointId, via: p.proposal.exposure.via, url: exposureUrl(p.proposal.exposure), protection: p.proposal.exposure.protection, makePrimary: p.proposal.exposure.makePrimary } }

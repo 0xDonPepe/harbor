@@ -44,6 +44,7 @@ export interface PackagePresentation {
   developer?: string;
   website?: string;
   releaseNotes?: string;
+  sizeHint?: string; // decision 148: plain-words disk need for the install page
   // Home widget (decision 81): JSON the app serves on its own port, proxied by the daemon.
   widget?: { endpoint: string; path: string; kind: 'metrics' | 'list'; refreshSeconds?: number };
   // decision 131: suggest hiding the app from Home (helpers without a page of their own); the operator decides

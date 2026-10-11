@@ -28,6 +28,7 @@ ui:
   primaryEndpoint: web
 presentation:
   tagline: Merge, split and convert PDFs in your browser
+  sizeHint: "About 100 MB"
   category: files
   icon: icon.svg
   developer: alam00000

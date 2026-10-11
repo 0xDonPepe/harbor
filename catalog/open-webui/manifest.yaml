@@ -51,6 +51,7 @@ configuration:
   - {service: web, environment: WEBUI_URL, endpoint: web, format: origin}
 presentation:
   tagline: "Your private AI assistant, with local models"
+  sizeHint: "About 6 GB, plus each model you download (1 to 40 GB)"
   category: ai
   icon: icon.png
   developer: "Open WebUI contributors"

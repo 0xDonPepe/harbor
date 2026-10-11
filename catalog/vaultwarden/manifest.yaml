@@ -39,6 +39,7 @@ configuration:
   - {service: web, environment: DOMAIN, endpoint: web, format: origin}
 presentation:
   tagline: "Your passwords, on your own server"
+  sizeHint: "About 100 MB"
   category: security
   icon: icon.svg
   developer: "Vaultwarden contributors"

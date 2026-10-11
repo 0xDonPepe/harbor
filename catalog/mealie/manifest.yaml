@@ -38,6 +38,7 @@ configuration:
   - {service: web, environment: BASE_URL, endpoint: web, format: origin}
 presentation:
   tagline: "Recipes, meal plans and shopping lists"
+  sizeHint: "About 600 MB, plus recipe photos"
   category: home
   icon: icon.svg
   developer: "Mealie contributors"

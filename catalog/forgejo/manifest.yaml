@@ -39,6 +39,7 @@ configuration:
   - {service: web, environment: FORGEJO__server__DOMAIN, endpoint: web, format: host}
 presentation:
   tagline: "Your own Git hosting, light and fast"
+  sizeHint: "About 300 MB, plus your repositories"
   category: developer
   icon: icon.svg
   developer: "Forgejo (Codeberg e.V.)"

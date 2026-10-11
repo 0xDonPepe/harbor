@@ -388,6 +388,12 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Decision 148: `tls/` chmod 0750 (UMask=0077 masked mkdir), no re-send of a Caddy-rejected config for 10 min, 3 s Caddy probe, console loads platform tools off Home's critical path
 - [x] Tests: integration `lan-https` (0700 dir repaired to 0750 on enable; a rejected config is sent once over four ticks)
 
+## Phase 58 — install page redesign (2026-10-11, 0.27.0)
+- [x] Decision 156: one Storage summary (place, free space, encrypted, *How?*), one Access summary (who can reach it), *Change* reveals the choices (a single radio group for this machine + drives), *Advanced* holds name, own passphrase, own folders and technical details; footer says what happens next
+- [x] Manifest `presentation.sizeHint` (≤ 120 plain text) + hints for the 17 bundled packages (hashes refreshed, no revision bump); data-folder candidate reports its disk's free space
+- [x] Media apps default to the roomiest removable drive; Cancel replaces Close on the install page
+- [x] Tests: unit install-location (data-folder free space), packages-store (sizeHint); e2e install specs rewritten for summaries/Change/Advanced (30 passed)
+
 ## Phase 57 — app backups (2026-10-10, 0.26.0)
 - [x] Decision 149: restic 0.19.1 + rclone 1.75.2 pinned by sha256 (bootstrap installs into `/usr/local/lib/harbor/bin`); a restore point = app home + state slice; one repository per place
 - [x] Decision 150: backup key (machine-wrapped) + Harbor recovery card as restic keys; card rotation re-keys places on the next run; the app key travels inside the snapshot; state slice via FIFO to tmpfs
@@ -406,7 +412,7 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 |---|---|
 | `pnpm typecheck` | pass |
 | `pnpm lint` | pass |
-| `pnpm test` (unit) | 261 passed (2026-10-10, 0.26.0) |
+| `pnpm test` (unit) | 262 passed (2026-10-11, 0.27.0) |
 | `pnpm test:integration` (fake adapter) | 206 passed (0.26.0: app backups — places, warm + cold passes, cap, restore in place and on another daemon; 0.25.2: Caddy-rejected config not re-sent, tls/ dir 0750; 0.25.0: move between locations; 0.24.0: seal in place + passphrase change; 0.23.0: repair paths, own tailnet port, exposure check at the health path, several public hostnames per endpoint, links + operator secrets, install, lifecycle, auth incl. remember/sessions, tools, exposure, storage incl. drive guard + auto-start + policy, app-homes install-location + adopt, settings, purge/domains, appearance, packages/updates, git sources, notifications, security/terminal, setup/LAN/self-update, lan-https); 3 live-Docker tests skipped without opt-in |
 | `HARBOR_LIVE_DOCKER_SOCKET=… pnpm test:integration` (Docker Desktop, opt-in) | 3 passed (real Compose/Dockerode path) |
 | `pnpm test:e2e` (Playwright, fake adapter) | 30 passed (backups: add a place, back up, restore in place, delete the kept copy; publish wizard incl. Add another domain + withdraw one by name, app links + typed-in secret, console: login, store, install wizard incl. Local default + External Format-first + passphrase-after-format, drawer lifecycle, publish wizard, phone width, own folder, settings incl. storage Format-first + format-as-ext4, network secure-addresses card, uninstall incl. purge-reinstall, domains + palette, customize, arrange, rotating wallpapers, upload + update via wizard, terminal/troubleshoot/rename, two-factor, Harbor update card + default login; first-run wizard against a setup-mode daemon) |

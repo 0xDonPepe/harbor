@@ -36,6 +36,7 @@ storage:
     retention: retain
 presentation:
   tagline: "Know when your services go down"
+  sizeHint: "About 500 MB"
   category: network
   icon: icon.svg
   developer: "Louis Lam"

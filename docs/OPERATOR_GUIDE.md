@@ -339,8 +339,9 @@ harbor install jellyfin --storage media=/mnt/media          # Jellyfin sees it a
 harbor inspect immich                                       # `bind` resources show the folder and whether it is present
 ```
 
-In the console, the app page shows "Where should the data live?" with *Managed by Harbor* or *Use a
-folder on this machine* per claim.
+In the console, open **Advanced** on the install page and tick *Keep … in a folder of my own (not
+encrypted)* for the claim, then choose the folder. Without that, the data lives inside the app's
+encrypted home like everything else.
 
 Rules and behaviour:
 
@@ -412,12 +413,24 @@ are never touched.
 
 Some apps keep everything in a database that cannot live in one of your own
 folders — and on a machine with tiny onboard storage even the database needs to
-move. At install time the wizard asks **where the app should live**: **Local**, in the
-Harbor data folder on this machine, or **External drive**. Either way the app is
-sealed, this machine unlocks it when you log in, and your Harbor recovery key
-opens it on any other machine. Neither choice asks you to invent a passphrase.
+move. The install page shows one **Storage** line: where the whole app will live
+(*This machine* or a drive, with its free space and, when the package says, how
+much room the app needs) and *Encrypted — unlocks automatically when you sign in*.
+*Change* lists this machine and every drive in one list (a drive that is not
+mounted, or not ext4, offers *Mount it* or *Format as ext4…* right there). Apps
+that keep a media library (Immich, Jellyfin, Nextcloud, …) start out on the
+plugged-in drive with the most free space; everything else starts on this
+machine. Either way the app is sealed, this machine unlocks it when you log in,
+and your Harbor recovery key opens it on any other machine. Neither choice asks
+you to invent a passphrase.
 
-*Use my own passphrase instead…* opts into one, for either location. Give an app
+The **Access** line says who can reach the app right after install (*Only you, on
+this machine*, or *Devices on your home network* in LAN mode); its *Change* picks
+the main address (Tailscale or a domain also publishes it there). Everything else
+— instance name, your own passphrase, your own folders, versions and the exact
+path — is under **Advanced**.
+
+*Use my own passphrase instead…* (under Advanced) opts into one, for either location. Give an app
 its own passphrase for one of two reasons: you want to open that one app on a
 machine that does not have your Harbor recovery key, or you want to hand that
 one app over along with its drive without giving away everything else. A

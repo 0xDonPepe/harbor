@@ -65,7 +65,11 @@ export function installCandidates(mounts: CandidateMount[], dataFolder: { path: 
     const norm = normalizeHostPath(dir);
     if (!seen.has(norm)) {
       seen.add(norm);
-      out.push({ dir: norm, label: `Harbor data folder (${dataFolder.path}/${APP_HOME_DIR_NAME})`, fsType: 'unknown', totalBytes: null, usedBytes: null, writable: true, eligible: true, reason: null });
+      // Free space (decision 148): the mount that holds the data folder — the longest mountpoint prefix.
+      const holder = mounts
+        .filter((m) => m.mountpoint === '/' || dataFolder.path === m.mountpoint || dataFolder.path.startsWith(m.mountpoint + '/'))
+        .sort((a, b) => b.mountpoint.length - a.mountpoint.length)[0];
+      out.push({ dir: norm, label: `Harbor data folder (${dataFolder.path}/${APP_HOME_DIR_NAME})`, fsType: 'unknown', totalBytes: holder?.totalBytes ?? null, usedBytes: holder?.usedBytes ?? null, writable: true, eligible: true, reason: null });
     }
   }
   return out.sort((a, b) => a.dir.localeCompare(b.dir));

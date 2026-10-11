@@ -54,3 +54,32 @@ export function EyeOffIcon(): ReactNode {
     </svg>
   );
 }
+
+// Install page summaries (decision 148): where the app is stored, how it is protected, who can reach it.
+export function DriveIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="4" width="12" height="8" rx="2" />
+      <path d="M5 9.5h3" />
+      <circle cx="11" cy="9.5" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function LockIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </svg>
+  );
+}
+
+export function PeopleIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="6" cy="5.5" r="2.2" />
+      <path d="M2 13c.4-2.2 2-3.5 4-3.5s3.6 1.3 4 3.5M10.5 3.6a2.1 2.1 0 0 1 0 3.9M12 9.8c1 .5 1.7 1.7 2 3.2" />
+    </svg>
+  );
+}

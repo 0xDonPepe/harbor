@@ -48,6 +48,7 @@ presentation:
   developer: Excalidraw contributors
   website: https://excalidraw.com
   releaseNotes: Pinned image digest …             # plain text
+  sizeHint: About 50 MB                           # plain text ≤ 120, shown as "Needs about 50 MB" (decision 156)
 ```
 
 Rules: files are read only from the package directory (contained paths, bounded sizes, hashed in
@@ -81,7 +82,7 @@ Harbor's sections and what they call: Account (`PUT /v1/account/password`), Remo
 `GET/POST /v1/host/folders`, device mount/unmount + status, `PUT /v1/host/storage/policy` for the
 auto-mount/auto-start toggles), Appearance (theme + wallpaper, per browser), Advanced access (SSH line, CLI),
 About. Home is a launcher: icon grid with labels and a status dot, "⋯" for the drawer, retained apps folded.
-The install page uses a folder picker (places = disks + removable drives + Harbor data folder; navigate; create folder) with a
+The install page (decision 156) is summaries, not forms: *Storage* (where the whole app lives, free space, "Encrypted") and *Access* (who can reach it) each show the current choice in plain words with a *Change* button; name, own passphrase, own folders and technical details sit under *Advanced*; the footer says what happens after Install. Own folders use a folder picker (places = disks + removable drives + Harbor data folder; navigate; create folder) with a
 "type a path" fallback. An app whose drive left shows "Needs its drive" on Home and a banner with
 "Use this folder instead" (adopt) in its drawer.
 

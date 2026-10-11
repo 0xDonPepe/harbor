@@ -100,6 +100,7 @@ secrets:
       - {service: app, environment: POSTGRES_PASSWORD}
 presentation:
   tagline: "Your files, calendar, contacts and office, at home"
+  sizeHint: "About 2 GB, plus everyone's files"
   category: files
   icon: icon.svg
   developer: "Nextcloud GmbH and contributors"

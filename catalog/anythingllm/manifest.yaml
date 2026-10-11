@@ -55,6 +55,7 @@ secrets:
       - {service: web, environment: SIG_SALT}
 presentation:
   tagline: "Chat with your documents and build AI agents"
+  sizeHint: "About 2 GB, plus your documents"
   category: ai
   icon: icon.png
   developer: "Mintplex Labs"

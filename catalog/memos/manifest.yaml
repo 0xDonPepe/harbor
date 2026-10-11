@@ -36,6 +36,7 @@ storage:
     retention: retain
 presentation:
   tagline: "Quick notes that stay yours"
+  sizeHint: "About 100 MB, plus your attachments"
   category: productivity
   developer: "usememos"
   website: https://usememos.com

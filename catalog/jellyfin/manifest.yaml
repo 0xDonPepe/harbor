@@ -47,6 +47,7 @@ configuration:
   - {service: web, environment: JELLYFIN_PublishedServerUrl, endpoint: web, format: origin}
 presentation:
   tagline: "Your movies and music, streamed from your own machine"
+  sizeHint: "About 1.5 GB, plus your media library"
   category: media
   icon: icon.svg
   developer: "Jellyfin Project"

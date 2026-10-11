@@ -24,6 +24,17 @@ describe('install candidates', () => {
     expect(out[0]!.label).toMatch(/Harbor data folder/);
   });
 
+  it('the data folder reports the free space of the disk that holds it (decision 148)', () => {
+    const data = path.join(tmpdir(), 'harbor-data-space');
+    mkdirSync(data, { recursive: true });
+    const list = [
+      { mountpoint: '/', device: '/dev/sda1', fsType: 'ext4', totalBytes: 1000, usedBytes: 400, writable: true, label: 'System disk' },
+      { mountpoint: path.dirname(data), device: '/dev/sda2', fsType: 'ext4', totalBytes: 500, usedBytes: 100, writable: true, label: 'tmp' },
+    ];
+    const home = installCandidates(list, { path: data, exists: true, writable: true }).find((c) => c.label.startsWith('Harbor data folder'))!;
+    expect(home).toMatchObject({ totalBytes: 500, usedBytes: 100 }); // the longest mount prefix wins over /
+  });
+
   it('refuses non-POSIX filesystems with a plain-words reason', () => {
     const out = installCandidates(mounts([{ mountpoint: '/', fsType: 'ext4' }, { mountpoint: '/mnt/stick', fsType: 'vfat', label: 'Stick' }]), { path: path.join(tmpdir(), 'harbor-no-data'), exists: false, writable: false });
     const stick = out.find((c) => c.dir === '/mnt/stick/harbor-apps')!;

@@ -1179,6 +1179,81 @@ progress {
 }
 
 /* install wizard: storage choices */
+.install-section {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 8px;
+}
+.section-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.choice {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 4px 12px;
+  align-items: start;
+}
+.choice-icon {
+  color: var(--muted);
+  padding-top: 1px;
+}
+.choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.choice-text p {
+  margin: 0;
+}
+.choice-main .btn.small {
+  padding: 0 6px;
+}
+.url {
+  overflow-wrap: anywhere;
+}
+.advanced {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+}
+.advanced-body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+.advanced-body > p {
+  margin: 0;
+}
+.tech {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.tech dt {
+  color: var(--muted);
+}
+.tech dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.next-step {
+  margin: 16px 0 8px;
+}
+@media (max-width: 760px) {
+  .tech {
+    grid-template-columns: 1fr;
+  }
+  .tech dd {
+    margin-bottom: 6px;
+  }
+}
 .storage-choices {
   border: 1px solid var(--line);
   border-radius: 10px;

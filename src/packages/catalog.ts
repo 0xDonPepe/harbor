@@ -104,7 +104,7 @@ export interface CatalogItem {
   reason: string | null;
   qualification: 'passed' | 'blocked' | 'pending' | 'invalid';
   requiresHttps: boolean;
-  presentation: { tagline: string | null; category: string; icon: string | null; gallery: string[]; developer: string | null; website: string | null; releaseNotes: string | null; hasWidget: boolean };
+  presentation: { tagline: string | null; category: string; icon: string | null; gallery: string[]; developer: string | null; website: string | null; releaseNotes: string | null; sizeHint: string | null; hasWidget: boolean };
   defaultCredentials: { username: string; password: string; note: string | null } | null;
   setup: boolean;
   storage: number;
@@ -159,7 +159,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         reason: e instanceof HarborError ? e.message : 'invalid package',
         qualification: 'invalid',
         requiresHttps: false,
-        presentation: { tagline: null, category: 'other', icon: null, gallery: [], developer: null, website: null, releaseNotes: null, hasWidget: false },
+        presentation: { tagline: null, category: 'other', icon: null, gallery: [], developer: null, website: null, releaseNotes: null, sizeHint: null, hasWidget: false },
         defaultCredentials: null,
         setup: false,
         storage: 0,
@@ -176,7 +176,7 @@ export { RELEASE_FILES };
 
 export function presentationOf(pkg: LoadedPackage): CatalogItem['presentation'] {
   const p = pkg.manifest.presentation ?? {};
-  return { tagline: p.tagline ?? null, category: p.category ?? 'other', icon: p.icon ?? null, gallery: p.gallery ?? [], developer: p.developer ?? null, website: p.website ?? null, releaseNotes: p.releaseNotes ?? null, hasWidget: p.widget != null };
+  return { tagline: p.tagline ?? null, category: p.category ?? 'other', icon: p.icon ?? null, gallery: p.gallery ?? [], developer: p.developer ?? null, website: p.website ?? null, releaseNotes: p.releaseNotes ?? null, sizeHint: p.sizeHint ?? null, hasWidget: p.widget != null };
 }
 
 export function defaultCredentialsOf(m: Manifest): CatalogItem['defaultCredentials'] {

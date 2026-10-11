@@ -36,6 +36,7 @@ storage:
     retention: retain
 presentation:
   tagline: "Budgeting that stays on your machine"
+  sizeHint: "About 200 MB"
   category: finance
   icon: icon.svg
   developer: "Actual Budget contributors"

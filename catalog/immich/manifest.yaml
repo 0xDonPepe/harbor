@@ -56,6 +56,7 @@ secrets:
       - {service: server, environment: DB_PASSWORD}
 presentation:
   tagline: "Back up every photo from your phone, privately"
+  sizeHint: "About 4 GB, plus your photos and videos"
   category: media
   icon: icon.svg
   developer: "Immich (FUTO)"

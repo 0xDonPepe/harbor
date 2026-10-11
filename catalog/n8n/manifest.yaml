@@ -59,6 +59,7 @@ configuration:
   - {service: web, environment: WEBHOOK_URL, endpoint: web}
 presentation:
   tagline: Automate workflows with a private PostgreSQL database
+  sizeHint: "About 1 GB"
   category: automation
   icon: icon.svg
   developer: n8n GmbH

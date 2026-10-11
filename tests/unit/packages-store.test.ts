@@ -99,7 +99,7 @@ describe('package store: your own apps', () => {
   };
   it('imports a zip with tag images, pins them by digest, generates release.json, lists it next to the bundled catalog', async () => {
     const { store, registry } = setup();
-    const zip = writeZip({ 'manifest.yaml': MANIFEST('1', 'presentation:\n  icon: icon.svg\n  tagline: Says hello\n'), 'compose.yaml': COMPOSE('nginx:1.27-alpine'), 'icon.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>', 'notes.txt': 'ignored' }, { folder: 'hello' });
+    const zip = writeZip({ 'manifest.yaml': MANIFEST('1', 'presentation:\n  icon: icon.svg\n  tagline: Says hello\n  sizeHint: Under 50 MB\n'), 'compose.yaml': COMPOSE('nginx:1.27-alpine'), 'icon.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>', 'notes.txt': 'ignored' }, { folder: 'hello' });
     const r = await store.importZip(zip, { fileName: 'hello.zip', actor: 'admin' });
     expect(r.item).toMatchObject({ id: 'hello', origin: 'local', revision: '1', version: '1.1.0', availability: 'available', qualification: 'pending' });
     expect(r.pinned).toEqual([{ service: 'web', from: 'nginx:1.27-alpine', to: `nginx@${DIGEST_A}` }]);
@@ -110,6 +110,7 @@ describe('package store: your own apps', () => {
     expect(pkg.compose.services['web']!.image).toBe(`nginx@${DIGEST_A}`);
     expect(pkg.release.images['web']).toMatchObject({ reference: `nginx@${DIGEST_A}`, repository: 'nginx', tag: '1.27-alpine', imageCreated: '2026-01-02T00:00:00Z' });
     expect(pkg.assets['icon.svg']).toBeDefined();
+    expect(store.list().find((i) => i.id === 'hello')?.presentation.sizeHint).toBe('Under 50 MB'); // decision 148
     expect(store.list().map((i) => i.id)).toContain('hello');
     expect(store.list().find((i) => i.id === 'excalidraw')?.origin).toBe('bundled');
     expect(store.currentRevisions().get('hello')).toEqual({ revision: '1', version: '1.1.0', releaseNotes: null });

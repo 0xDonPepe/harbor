@@ -40,6 +40,7 @@ storage:
     retention: retain
 presentation:
   tagline: "Read the web on your terms"
+  sizeHint: "About 150 MB"
   category: productivity
   icon: icon.svg
   developer: "FreshRSS contributors"

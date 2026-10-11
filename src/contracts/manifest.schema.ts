@@ -266,6 +266,8 @@ export const MANIFEST_SCHEMA = {
         developer: plainText(80),
         website: { type: 'string', pattern: '^https://[^\\s<>"]{1,200}$' },
         releaseNotes: plainText(1000),
+        // decision 148: plain-words disk need shown on the install page, e.g. "About 2 GB, plus your photos"
+        sizeHint: plainText(120),
         // decision 131: helpers without a page of their own (an MCP gateway, a document server)
         hideFromHome: { type: 'boolean' },
         // Home widget (decision 81): the app exposes JSON on its own port; the daemon proxies it.

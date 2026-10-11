@@ -150,6 +150,7 @@ presentation:
   developer: You
   website: https://example.com
   releaseNotes: What changed in this revision (shown before an update)
+  sizeHint: About 300 MB, plus your files   # optional, ≤ 120 chars: shown as "Needs …" on the install page
   hideFromHome: false            # true suggests hiding it from Home (helpers without a page); the operator decides
 ```
 

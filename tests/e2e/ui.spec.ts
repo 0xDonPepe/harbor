@@ -43,10 +43,10 @@ async function installFromStore(page: Page, pkgName: string) {
   await page.getByRole('link', { name: 'App Store' }).click();
   await expect(page.getByRole('heading', { name: 'App Store' })).toBeVisible();
   await page.getByRole('button', { name: `Install ${pkgName}`, exact: true }).click();
-  // Every install goes through the wizard now (Local vs External drive):
-  // accept the Local default and continue to plan review.
+  // Every install goes through the install page (decision 148: one Storage
+  // summary, defaults accepted) and continues to plan review.
   const wiz = page.getByRole('dialog');
-  await expect(wiz).toContainText('Where should the app live?');
+  await expect(wiz.getByRole('region', { name: 'Storage' })).toBeVisible();
   await wiz.getByRole('button', { name: `Install ${pkgName} now` }).click();
 }
 
@@ -122,16 +122,24 @@ test('store app page, install with plan review, progress tray, Open link; duplic
   await page.getByRole('link', { name: 'App Store' }).click();
   await page.getByRole('button', { name: 'About Excalidraw' }).click();
   const about = page.getByRole('dialog');
-  await expect(about).toContainText('Runs on 127.0.0.1 only until you publish it');
-  await expect(about).toContainText('website');
-  // Local is the default: sealed on this machine (kernel encryption), silent unlock
-  await expect(about.getByRole('radio', { name: /Local/ })).toBeChecked();
+  // Decision 148: plain summaries — stored encrypted on this machine (no media folder, no drive),
+  // reachable only here (loopback), and what happens after Install.
+  await expect(about.getByRole('region', { name: 'Storage' })).toContainText('This machine');
+  await expect(about).toContainText('Encrypted — unlocks automatically when you sign in');
+  await expect(about.getByRole('region', { name: 'Access' })).toContainText('Only you, on this machine');
+  await expect(about).toContainText(/After install/);
+  await expect(about.getByRole('group', { name: 'Main address' })).toHaveCount(0);
+  await about.getByRole('button', { name: 'How the encryption works' }).click();
+  await expect(about).toContainText("Linux's built-in encryption");
+  // the technical details wait behind Advanced
+  await about.getByText('Advanced: name, passphrase, folders, technical details').click();
   await expect(about.locator('code.path')).toContainText('excalidraw/excalidraw');
-  await expect(about).toContainText("sealed here with the kernel's own encryption");
-  // Main address (decision 116): only what is set up — this machine, plus the (fake) tailnet; this machine is the default.
+  await expect(about.getByRole('link', { name: 'website' })).toBeVisible();
+  // Main address (decision 116) behind Change: only what is set up — this machine, plus the (fake) tailnet; full URLs, no ellipsis.
+  await about.getByRole('button', { name: 'Change who can reach Excalidraw' }).click();
   await expect(about.getByRole('group', { name: 'Main address' })).toBeVisible();
-  await expect(about.getByRole('radio', { name: /This machine \(localhost\)/ })).toBeChecked();
-  await expect(about.getByRole('radio', { name: /Tailscale \(https:\/\// })).toBeEnabled();
+  await expect(about.getByRole('radio', { name: 'This machine only' })).toBeChecked();
+  await expect(about.getByRole('radio', { name: /^Tailscale — https:\/\/[^…]+$/ })).toBeEnabled();
   await about.getByRole('button', { name: 'Install Excalidraw now' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Review install');
@@ -337,7 +345,7 @@ test('phone width: bottom tabs navigate, tiles render in two columns, dialogs op
   await expect(page.getByRole('heading', { name: 'App Store' })).toBeVisible();
   await page.getByRole('button', { name: 'About BentoPDF' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   expect(await page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')).toBe(true);
 });
 
@@ -373,11 +381,11 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   await page.getByRole('link', { name: 'App Store' }).click();
   await page.getByRole('button', { name: 'About BentoPDF' }).click();
   const where = page.getByRole('dialog');
-  await expect(where).toContainText('Where should the app live?');
-  // Local is the default: encrypted on this machine, silent unlock
-  await expect(where.getByRole('radio', { name: /Local/ })).toBeChecked();
-  // External shows the unmounted vfat stick with Format, never Mount
-  await where.getByRole('radio', { name: /External drive/ }).check();
+  // This machine is the default (no media folder); Change lists it and every drive as ONE radio group
+  await expect(where.locator('.choice-main strong').first()).toHaveText('This machine');
+  await where.getByRole('button', { name: 'Change where BentoPDF is stored' }).click();
+  await expect(where.getByRole('radio', { name: /This machine/ })).toBeChecked();
+  // the unmounted vfat stick shows with Format, never Mount
   await expect(where.getByText(/Format it as ext4 to use it for apps/)).toBeVisible();
   await expect(where.getByRole('button', { name: 'Format USB20FD as ext4', exact: true })).toBeVisible();
   await expect(where.getByRole('button', { name: 'Mount USB20FD', exact: true })).toHaveCount(0);
@@ -393,7 +401,10 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   await expect(where.getByRole('button', { name: /Formatting/ })).toBeVisible();
   // The formatted drive lands selected and installable WITHOUT a passphrase
   // (decision 106): the Harbor recovery key is what opens it elsewhere.
-  await expect(where.getByRole('button', { name: 'Use my own passphrase instead…' })).toBeVisible({ timeout: 30_000 });
+  await expect(where.locator('.choice-main strong').first()).toHaveText('USB20FD', { timeout: 30_000 });
+  await expect(where).toContainText('Unplug the drive and BentoPDF pauses');
+  await where.getByText('Advanced: name, passphrase, folders, technical details').click();
+  await expect(where.getByRole('button', { name: 'Use my own passphrase instead…' })).toBeVisible();
   await expect(where.getByLabel('Encryption passphrase for this app')).toHaveCount(0);
   await expect(where.getByRole('button', { name: 'Install BentoPDF' })).toBeEnabled();
   // …and opting in still offers one, with the 8-character floor gating Install.
@@ -404,7 +415,7 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   await expect(where.getByRole('button', { name: 'Install BentoPDF' })).toBeEnabled();
   // the enforced path nests package + instance under the drive
   await expect(where.locator('code.path')).toContainText('bentopdf/bentopdf');
-  await where.getByRole('button', { name: 'Close', exact: true }).click();
+  await where.getByRole('button', { name: 'Cancel', exact: true }).click();
 });
 
 test('install page: bring your own folder validates the path in the plan and mounts it', async ({ page }) => {
@@ -413,8 +424,9 @@ test('install page: bring your own folder validates the path in the plan and mou
   await page.getByRole('link', { name: 'App Store' }).click();
   await page.getByRole('button', { name: 'About Jellyfin' }).click();
   const about = page.getByRole('dialog');
-  await expect(about).toContainText('Where should the data live?');
-  await about.getByLabel('Use a folder on this machine').check();
+  // decision 148: an own folder is an Advanced exception, labeled as not encrypted
+  await about.getByText('Advanced: name, passphrase, folders, technical details').click();
+  await about.getByLabel(/Keep your media library in a folder of my own \(not encrypted\)/).check();
   // typed path (advanced) that does not exist
   await about.getByRole('button', { name: 'Choose folder for Your media library' }).click();
   const picker = page.getByRole('dialog', { name: /^Folder for/ });
@@ -427,7 +439,8 @@ test('install page: bring your own folder validates the path in the plan and mou
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
   await page.getByRole('button', { name: 'About Jellyfin' }).click();
   const again = page.getByRole('dialog');
-  await again.getByLabel('Use a folder on this machine').check();
+  await again.getByText('Advanced: name, passphrase, folders, technical details').click();
+  await again.getByLabel(/in a folder of my own/).check();
   // the picker: go to the Harbor data folder, create a folder, use it
   await again.getByRole('button', { name: 'Choose folder for Your media library' }).click();
   const picker2 = page.getByRole('dialog', { name: /^Folder for/ });
@@ -438,7 +451,8 @@ test('install page: bring your own folder validates the path in the plan and mou
   await expect(picker2.locator('code.path')).toContainText('Media e2e');
   const chosen = (await picker2.locator('code.path').textContent())!.trim();
   await picker2.getByRole('button', { name: 'Use this folder' }).click();
-  await expect(again.getByRole('group', { name: 'Where should the data live?' }).locator('code.path')).toHaveText(chosen);
+  await expect(again.locator('.folder-choice code.path')).toHaveText(chosen);
+  await expect(again.getByRole('region', { name: 'Storage' })).toContainText('(not encrypted)');
   folder = chosen;
   await again.getByRole('button', { name: 'Install Jellyfin now' }).click();
   const plan = page.getByRole('dialog');
@@ -856,7 +870,7 @@ ${notes ? `  releaseNotes: ${JSON.stringify(notes)}\n` : ''}`;
   await expect(card).toContainText('Your app · 1.1');
   await card.getByRole('button', { name: 'Install Hello E2E', exact: true }).click();
   const wiz = page.getByRole('dialog');
-  await expect(wiz).toContainText('Where should the app live?');
+  await expect(wiz.getByRole('region', { name: 'Storage' })).toBeVisible();
   await wiz.getByRole('button', { name: 'Install Hello E2E now' }).click();
   const plan = page.getByRole('dialog');
   await expect(plan).toContainText('your own uploaded app');

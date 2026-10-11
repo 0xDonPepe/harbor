@@ -6,7 +6,7 @@
   },
   "files": {
     "manifest.yaml": {
-      "sha256": "28dee8e6ad52d181781fc5fa67182d60c9c260e712642193a745f75aa0d35fa8"
+      "sha256": "20460cca3c520727af5d7c671cfade7c8cad07cb3ef6fb8f1f5684366ec49306"
     },
     "compose.yaml": {
       "sha256": "12a1aa7755b2cc96962d935f5d956883676bca659d0035f6ec0b865571fb6de4"

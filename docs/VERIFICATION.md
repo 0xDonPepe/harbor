@@ -220,6 +220,19 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3o. Install page redesign (2026-10-11, Harbor 0.27.0, decision 156)
+
+Console + presentation only; no engine, route or schema change. Local, fake adapter:
+- `pnpm test:e2e` 30 passed: the Excalidraw spec checks the Storage/Access summaries, *How?*, the
+  Advanced details (path, website) and the Main address behind *Change* with full URLs; the BentoPDF
+  spec formats the vfat stick from the single *Where to keep* list and sees the summary switch to the
+  drive; the Jellyfin spec binds its own folder from Advanced and the summary marks it "(not encrypted)".
+- `pnpm test` 262 passed (data-folder free space, `sizeHint` through import); `pnpm catalog:verify`
+  with 17 `sizeHint`s (hashes refreshed; qualification unchanged — presentation only).
+- Viewed in `pnpm dev:ui` at 1280 and 390 px wide.
+**Not verified live:** the drive default on a real host with a removable drive (logic is the same
+candidate/device match the wizard already used; covered only by mocks).
+
 ## 3n. App backups (2026-10-10, Harbor 0.26.0, decisions 149–154)
 
 **Live, harbor-old (physical test box) + droplet `harbor-test`** ([evidence](evidence/live-2026-10-10-backups/README.md)):

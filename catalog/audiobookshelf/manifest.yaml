@@ -50,6 +50,7 @@ storage:
     external: {hint: "Where downloaded podcast episodes go, mounted at /podcasts."}
 presentation:
   tagline: "Audiobooks and podcasts, streamed from home"
+  sizeHint: "About 300 MB, plus your audiobooks and podcasts"
   category: media
   icon: icon.svg
   developer: "advplyr"

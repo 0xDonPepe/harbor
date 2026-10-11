@@ -28,6 +28,7 @@ ui:
   primaryEndpoint: web
 presentation:
   tagline: Whiteboard for quick sketches and diagrams
+  sizeHint: "About 50 MB"
   category: productivity
   icon: icon.svg
   developer: Excalidraw contributors

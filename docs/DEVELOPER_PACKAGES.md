@@ -393,9 +393,15 @@ catalog within about 6 hours, without a Harbor release.
 ```
 harbor-apps/
   apps/index.json          id -> { revision, dir, optional minHarbor }
-  apps/<id>/manifest.yaml, compose.yaml, README.md, release.json (+ icon, screenshots)
+  apps/<id>/manifest.yaml, compose.yaml, README.md, release.json, icon.png|svg (+ screenshots)
   scripts/subset.mjs       CI helper: copies a list of apps + a filtered index.json into a folder
+  scripts/require-icons.mjs CI check: every app has an icon
 ```
+
+**Every official app has an icon** (2026-10-12): a square tile, .png or .svg, at most 256 KiB, readable on both the
+light and dark themes (the console draws it as a rounded square). Use the project's own logo or
+[dashboard-icons](https://github.com/homarr-labs/dashboard-icons); a transparent mark goes on a plain plate (white
+for dark marks, dark slate for light ones), no gradients. Never Umbrel's gallery (umbrel-apps has no license).
 
 **Contribution flow.** Clone both repositories side by side (`harbor/` and `harbor-apps/`) and run the
 tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; otherwise pass

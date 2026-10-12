@@ -170,6 +170,8 @@ The non-negotiable subset:
 - **Official apps live in carlosalaniz/harbor-apps** (`apps/<id>/`), not here. Edit them there, run
   this repo's scripts against that checkout, and open a PR there; its CI verifies, bundles and
   publishes (decision 158). `tests/fixtures/catalog/` is frozen test data — do not "update" it to match.
+- **Icon**: every official app ships one (`presentation.icon`, a square .svg/.png ≤ 256 KiB that reads on light and dark;
+  harbor-apps CI refuses an app without it). Take it from the project itself or dashboard-icons, never Umbrel's gallery.
 - **Identity**: `metadata.id` lowercase/dashes, must not collide with bundled ids;
   `release.revision` must rise on every upload (that is what triggers Updates).
 - **Secrets the operator types** (`source: operator` + `prompt`) and **links to another app**

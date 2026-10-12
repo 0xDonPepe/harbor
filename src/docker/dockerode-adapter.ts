@@ -11,9 +11,10 @@ function isNotFound(e: unknown): boolean {
 function fromInspect(c: InspectInfo): ContainerInfo {
   const ports = [];
   for (const [key, bindings] of Object.entries(c.NetworkSettings?.Ports ?? {})) {
-    const containerPort = Number(key.split('/')[0]);
+    const [num, proto] = key.split('/');
+    const containerPort = Number(num);
     for (const b of bindings ?? []) {
-      ports.push({ hostIp: b.HostIp, hostPort: Number(b.HostPort), containerPort });
+      ports.push({ hostIp: b.HostIp, hostPort: Number(b.HostPort), containerPort, ...(proto === 'udp' ? { protocol: 'udp' as const } : {}) });
     }
   }
   const health = c.State.Health?.Status as ContainerInfo['health'] | undefined;

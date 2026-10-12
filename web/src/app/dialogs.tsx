@@ -53,9 +53,15 @@ function SecretFields({ plan, values, onChange }: { plan: PlanDto; values: Recor
 export function PlanDialog({ c }: { c: Console }) {
   const { pending, plan, planError } = c;
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
-  useEffect(() => setSecretValues({}), [plan?.id]);
+  // decision 163: permissions get their own explicit yes
+  const [permissionsAccepted, setPermissionsAccepted] = useState(false);
+  useEffect(() => {
+    setSecretValues({});
+    setPermissionsAccepted(false);
+  }, [plan?.id]);
   if (!pending) return null;
   const missingSecret = plan ? plan.secrets.some((s) => s.ask === 'required' && (secretValues[s.id] ?? '').length < Math.max(1, s.minLength ?? 1)) : false;
+  const needsPermission = plan ? plan.permissions.length > 0 && !permissionsAccepted : false;
   const typed = Object.fromEntries(Object.entries(secretValues).filter(([id, v]) => v !== '' || plan?.secrets.find((s) => s.id === id)?.ask === 'optional' && plan.kind === 'configure'));
   const title = plan ? (plan.kind === 'install' && pending.kind === 'restore-app' ? 'Review restore' : `Review ${verb(plan.kind)}`) : `Planning ${pending.kind === 'restore-app' ? 'restore' : verb(pending.kind)}…`;
   const appName = plan ? (c.data.catalog.find((i) => i.id === plan.packageId)?.name ?? plan.name) : '';
@@ -81,6 +87,14 @@ export function PlanDialog({ c }: { c: Console }) {
                 </span>
               </li>
             )}
+            {plan.ports.map((x) => (
+              <li key={`port-${x.id}`}>
+                <span className="fact-k">Port</span>
+                <span>
+                  {x.protocol.toUpperCase()} {x.hostPort} on every network · {x.purpose} <span className="muted small">· to reach it from outside, forward this port on your router to this machine</span>
+                </span>
+              </li>
+            ))}
             {plan.location && (
               <li>
                 <span className="fact-k">Storage</span>
@@ -170,6 +184,21 @@ export function PlanDialog({ c }: { c: Console }) {
               </li>
             )}
           </ul>
+          {plan.permissions.length > 0 && (
+            <fieldset className="permissions">
+              <legend>{plan.kind === 'update' ? 'This update also asks to' : 'This app asks to'}</legend>
+              <ul className="plain">
+                {plan.permissions.map((x) => (
+                  <li key={`${x.service}-${x.permission}`}>
+                    {x.label} <span className="muted small">· {x.service}</span>
+                  </li>
+                ))}
+              </ul>
+              <label className="row small">
+                <input type="checkbox" checked={permissionsAccepted} onChange={(e) => setPermissionsAccepted(e.target.checked)} /> Allow {displayName} to do this
+              </label>
+            </fieldset>
+          )}
           <SecretFields plan={plan} values={secretValues} onChange={setSecretValues} />
           {plan.notes.map((n, i) => (
             <p key={`n${i}`} className="muted">
@@ -204,7 +233,7 @@ export function PlanDialog({ c }: { c: Console }) {
         <button className="btn" onClick={c.cancel}>
           Cancel
         </button>
-        <button className="btn primary" onClick={() => void c.approve(typed)} disabled={!plan || Boolean(planError) || missingSecret} title={missingSecret ? 'Fill in the value the app needs first' : undefined}>
+        <button className="btn primary" onClick={() => void c.approve(typed, permissionsAccepted)} disabled={!plan || Boolean(planError) || missingSecret || needsPermission} title={missingSecret ? 'Fill in the value the app needs first' : needsPermission ? 'Allow the permissions first' : undefined}>
           {approveLabel}
         </button>
       </div>
@@ -1467,6 +1496,19 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
                   <Copy text={e.url} />
                 </li>
               ))}
+          </ul>
+        </>
+      )}
+      {!retained && inst.ports.length > 0 && (
+        // decision 163: fixed ports have no address to open; say which port to forward on the router
+        <>
+          <h4>Ports</h4>
+          <ul className="addresses">
+            {inst.ports.map((x) => (
+              <li key={x.id}>
+                <Pill tone="muted">{x.protocol}</Pill> <strong>{x.hostPort}</strong> <span className="muted small">· {x.purpose} · open on every network of this machine; to reach it from outside, forward {x.protocol.toUpperCase()} {x.hostPort} on your router to this machine</span>
+              </li>
+            ))}
           </ul>
         </>
       )}

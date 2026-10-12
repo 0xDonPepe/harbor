@@ -406,6 +406,14 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 63 — the VPN pack: fixed UDP ports and permissions (2026-10-12, 0.29.0)
+- [x] Decision 163: manifest `ports:` (fixed UDP, every interface, single-instance) and `permissions:` (net-admin, tun, ip-forwarding); submit `acceptPermissions`, CLI `--accept-permissions`, console checkbox; update-all/auto-update skip new permissions
+- [x] Plan-time port checks (Harbor range, other apps' claims, Docker, a real UDP bind); submit claims them
+- [x] Console: review lists the port and permissions, Install waits for the box; drawer Ports section
+- [x] harbor-apps `wireguard` (wg-easy 15.3.0, minHarbor 0.29.0)
+- [x] Live: qualified, and a real WireGuard tunnel from a second droplet (VERIFICATION 3u)
+- [ ] OpenVPN package (pick an image with a web page)
+
 ## Phase 62 — porting the Umbrel store (2026-10-12, 0.28.4) ⏳ release
 - [x] `docs/design/UMBREL_COMPAT.md`: all 393 Umbrel apps classified; feature ladder to 100%; §7 the first port
 - [x] `scripts/umbrel-import.mjs`: deterministic 1:1 converter (refuses anything without an exact equivalent); `catalog-pin --keep-digest`; registry `HARBOR_DOCKERHUB_MIRROR` / `HARBOR_DOCKERHUB_LOGIN`

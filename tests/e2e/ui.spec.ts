@@ -1219,3 +1219,76 @@ test('backups: add a place, back an encrypted app up, restore it in place, delet
   await after.getByRole('button', { name: 'Delete it' }).click();
   await expect(after).not.toContainText('before the last restore', { timeout: 15_000 });
 });
+
+test('a VPN-style app: the review lists its UDP port and permissions; Install waits for the permission box; the drawer shows the port to forward (decision 163)', async ({ page }) => {
+  const { writeZip } = await import('../../src/packages/zip.js');
+  const { createSocket } = await import('node:dgram');
+  const s = createSocket('udp4');
+  await new Promise<void>((r) => s.bind(0, '0.0.0.0', () => r()));
+  const port = s.address().port;
+  await new Promise<void>((r) => s.close(() => r()));
+  const manifest = `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: tunnel-e2e
+  name: Tunnel E2E
+  description: A VPN server
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: false
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+ports:
+  tunnel:
+    service: web
+    containerPort: 51820
+    hostPort: ${port}
+    protocol: udp
+    purpose: VPN tunnels
+permissions:
+  web: [net-admin, tun]
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+`;
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('button', { name: 'Add your own app' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Your own app' });
+  await dlg.getByLabel('Package zip file').setInputFiles({ name: 'tunnel-e2e.zip', mimeType: 'application/zip', buffer: writeZip({ 'manifest.yaml': manifest, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }, { folder: 'tunnel-e2e' }) });
+  await expect(dlg).toContainText('Tunnel E2E is in your App Store');
+  await dlg.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  await page.locator('.tile.store').filter({ hasText: 'Tunnel E2E' }).getByRole('button', { name: 'Install Tunnel E2E', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install Tunnel E2E now' }).click();
+  const review = page.getByRole('dialog');
+  await expect(review).toContainText(`UDP ${port} on every network`);
+  await expect(review.getByRole('group', { name: 'This app asks to' })).toContainText('create network tunnels');
+  await expect(review.getByRole('group', { name: 'This app asks to' })).toContainText('/dev/net/tun');
+  const install = review.getByRole('button', { name: 'Install', exact: true });
+  await expect(install).toBeDisabled();
+  await review.getByLabel('Allow Tunnel E2E to do this').check();
+  await expect(install).toBeEnabled();
+  await install.click();
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of tunnel-e2e' }).click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer.getByRole('heading', { name: 'Ports' })).toBeVisible();
+  await expect(drawer).toContainText(`forward UDP ${port} on your router`);
+});

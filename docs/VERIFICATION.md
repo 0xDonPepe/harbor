@@ -220,6 +220,35 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3u. Fixed UDP ports and permissions: the VPN pack (2026-10-12, Harbor 0.29.0, decision 163)
+
+**Local gate + live droplets** (two disposable DigitalOcean droplets, Ubuntu 24.04, archive 0.29.0 with the
+WireGuard package in its seed):
+
+- **Gate:** `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 331 passed (new: `manifest.test.ts` — a fixed UDP port +
+  the three permissions accepted on a single-instance app; refused on `multiInstance: true`, for an unknown service,
+  protocol `sctp`, permission `privileged`, a permission for an unknown service, the same host port twice;
+  `links-secrets.test.ts` — render publishes `0.0.0.0:<port>/udp` beside the loopback TCP endpoint and renders exactly
+  `cap_add: [NET_ADMIN]`, `devices: [/dev/net/tun:/dev/net/tun]` and the five `net.*` sysctls); `pnpm
+  test:integration` 220 passed + 3 live-Docker skipped (new `tests/integration/permissions.test.ts`: the install plan
+  lists the port and permissions in plain words; submit without `acceptPermissions` → 409 `PERMISSION_REQUIRED` and
+  no instance; with it the app runs with `NET_ADMIN` and the UDP port; a second app wanting the same port and a port
+  bound on the host are refused `PORT_CONFLICT` naming it; an update adding `tun` asks only for `tun`, update-all
+  skips it with a reason, the accepted update renders the device; an update with nothing new needs no acceptance);
+  `pnpm build && pnpm test:e2e` 31 passed (new: the review shows `UDP <port> on every network` and the permission
+  group, Install stays disabled until "Allow Tunnel E2E to do this" is ticked, the drawer's Ports section says which
+  port to forward); `catalog:verify` fixtures 9 ok; `catalog:hash --check` ok; `pnpm openapi -- --check` current
+  (`acceptPermissions` on `POST /v1/operations`).
+- **Live:** `qualify-catalog.mjs --only wireguard` passed (healthy after 93 s, page title "WireGuard", health 302).
+  `harbor install wireguard --yes` refused with `PERMISSION_REQUIRED`; `harbor --accept-permissions install
+  wireguard --yes` succeeded, Docker published `0.0.0.0:51820->51820/udp` and `127.0.0.1:18080->51821/tcp`. wg-easy
+  set up through its API (admin, host = the droplet's public IP), one client created; on a second droplet
+  `wg-quick up` with that config (AllowedIPs narrowed to 10.8.0.0/24 so SSH stayed up) → `ping 10.8.0.1` 3/3, both
+  ends showed a handshake seconds old and bytes both ways. Kernel WireGuard loaded on demand without `SYS_MODULE`.
+  With IPv6 left on (as Umbrel ships wg-easy) `wg-quick up` failed: `modprobe: FATAL: Module ip6_tables not found`,
+  `can't initialize ip6tables table 'nat'` — hence the package's `DISABLE_IPV6: "true"`. UDP 51820 was opened on the
+  test firewall for the run only (`do-vm.mjs firewall-udp`), both droplets destroyed after.
+
 ## 3t. Fixes from porting the Umbrel store (2026-10-12, Harbor 0.28.4, decision 162)
 
 **Local gate + live droplets** (not yet a published release; harbor-apps branch `umbrel-import` is local):

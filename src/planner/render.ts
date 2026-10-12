@@ -53,6 +53,15 @@ export interface RenderedCompose {
   generatedEnv: Record<string, string[]>;
 }
 
+// Decision 163: what `ip-forwarding` means, exactly (namespaced to the container's own network stack)
+export const IP_FORWARDING_SYSCTLS: Readonly<Record<string, string>> = {
+  'net.ipv4.ip_forward': '1',
+  'net.ipv4.conf.all.src_valid_mark': '1',
+  'net.ipv6.conf.all.disable_ipv6': '0',
+  'net.ipv6.conf.all.forwarding': '1',
+  'net.ipv6.conf.default.forwarding': '1',
+};
+
 // Compose interpolates `$` in every string; the only way to pass a literal is `$$`.
 export function escapeCompose(value: string): string {
   return value.replace(/\$/g, '$$$$');
@@ -134,10 +143,14 @@ export function renderCompose(input: RenderInput): RenderedCompose {
     }
     generatedEnv[service] = generated.sort();
 
-    const ports = endpoints
+    const ports: Record<string, unknown>[] = endpoints
       .filter((e) => e.service === service)
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((e) => ({ target: e.containerPort, published: String(e.hostPort), host_ip: input.bindHost ?? '127.0.0.1', protocol: 'tcp', mode: 'host' }));
+    // decision 163: fixed ports go on every interface whatever the LAN setting (a tunnel port is useless on loopback)
+    for (const [, p] of Object.entries(manifest.ports ?? {}).filter(([, p]) => p.service === service).sort(([a], [b]) => a.localeCompare(b))) {
+      ports.push({ target: p.containerPort, published: String(p.hostPort), host_ip: '0.0.0.0', protocol: p.protocol, mode: 'host' });
+    }
 
     // Built services (git sources, decision 80) reference the locally built tag from release.json.
     const builtTag = input.builtImages?.[service];
@@ -160,6 +173,11 @@ export function renderCompose(input: RenderInput): RenderedCompose {
       for (const n of Object.keys(joins)) linkNetworks.add(n);
     }
     if (src.command) def['command'] = src.command.map(escapeCompose);
+    // decision 163: the only privileges a package can ask for, rendered from Harbor's fixed table
+    const perms = manifest.permissions?.[service] ?? [];
+    if (perms.includes('net-admin')) def['cap_add'] = ['NET_ADMIN'];
+    if (perms.includes('tun')) def['devices'] = ['/dev/net/tun:/dev/net/tun'];
+    if (perms.includes('ip-forwarding')) def['sysctls'] = { ...IP_FORWARDING_SYSCTLS };
     if (Object.keys(env).length) def['environment'] = env;
     if (ports.length) def['ports'] = ports;
     if (src.depends_on) def['depends_on'] = src.depends_on;

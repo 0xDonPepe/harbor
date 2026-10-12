@@ -132,7 +132,8 @@ async function qualifyOne(id, variant, storageArgs) {
   const m = manifests[id];
   const name = `${id}-${SUFFIX}${variant ? 'x' : ''}`;
   const t0 = Date.now();
-  const op = cliOk(target, ['install', id, '--name', name, ...storageArgs, '--yes'], { timeoutMs: 2400_000 });
+  // decision 163: qualification accepts the permissions a package lists (it is the reviewer here)
+  const op = cliOk(target, ['--accept-permissions', 'install', id, '--name', name, ...storageArgs, '--yes'], { timeoutMs: 2400_000 });
   if (op.state !== 'succeeded') throw new Error(`install ${op.state}: ${JSON.stringify(op.error)} | ${op.events.slice(-3).map((e) => e.message).join(' | ')}`);
   const inst = await waitHealthy(name, 600_000);
   const url = inst.endpoints[0].browserUrl;

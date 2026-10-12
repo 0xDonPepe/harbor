@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'OWNERSHIP_CONFLICT'
   | 'DATA_MISSING'
   | 'SECRET_MISSING'
+  | 'PERMISSION_REQUIRED'
   | 'READINESS_TIMEOUT'
   | 'DOCKER_UNAVAILABLE'
   | 'STATE_UNAVAILABLE'
@@ -41,6 +42,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   BUSY: 409,
   DATA_MISSING: 409,
   SECRET_MISSING: 409,
+  PERMISSION_REQUIRED: 409,
   PLAN_EXPIRED: 410,
   PLAN_STALE: 409,
   READINESS_TIMEOUT: 409,
@@ -72,6 +74,7 @@ const EXIT_CODE: Record<ErrorCode, number> = {
   BUSY: 3,
   DATA_MISSING: 3,
   SECRET_MISSING: 3,
+  PERMISSION_REQUIRED: 3,
   PLAN_EXPIRED: 3,
   PLAN_STALE: 3,
   READINESS_TIMEOUT: 1,
@@ -137,6 +140,7 @@ function defaultNextAction(code: ErrorCode): string {
     case 'OWNERSHIP_CONFLICT': return 'A resource with this name is not owned by this installation; inspect it manually.';
     case 'DATA_MISSING': return 'Retained data is missing or replaced; investigate before continuing. Nothing was recreated.';
     case 'SECRET_MISSING': return 'A retained secret file is missing; restore it from your own backup. Nothing was regenerated.';
+    case 'PERMISSION_REQUIRED': return 'Review the permissions the plan lists and approve with them accepted.';
     case 'READINESS_TIMEOUT': return 'Inspect the instance; resources were kept. Use remove to clean up.';
     case 'DOCKER_UNAVAILABLE': return 'Start Docker Engine and retry.';
     case 'STATE_UNAVAILABLE': return 'Repair the state directory; Harbor never replaces a corrupt database.';

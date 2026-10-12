@@ -14,6 +14,7 @@
 //   node scripts/vm/do-vm.mjs wait-ssh
 //   node scripts/vm/do-vm.mjs ssh -- <command>  # run a command on the VM
 //   node scripts/vm/do-vm.mjs firewall-web on|off   # allow inbound 80/443 (public exposure tests)
+//   node scripts/vm/do-vm.mjs firewall-udp on|off <port>  # allow inbound UDP <port> (VPN tests, decision 163)
 //   node scripts/vm/do-vm.mjs dns-set <fqdn>        # A record in the DO-managed zone -> droplet IP
 //   node scripts/vm/do-vm.mjs dns-delete <fqdn>
 //   node scripts/vm/do-vm.mjs destroy --yes
@@ -287,6 +288,18 @@ async function cmdFirewallWeb(on) {
   console.log(`inbound 80/443 ${on ? 'allowed' : 'removed'} on ${fw.name}`);
 }
 
+// Inbound UDP for a VPN tunnel test (decision 163), same firewall and same on/off shape as firewall-web.
+async function cmdFirewallUdp(on, port) {
+  if (!/^\d{1,5}$/.test(String(port ?? '')) || Number(port) < 1 || Number(port) > 65535) fail('usage: firewall-udp on|off <port>');
+  const { firewalls } = await api('GET', '/firewalls?per_page=200');
+  const fw = firewalls.find((f) => f.name === 'harbor-test-ssh-only');
+  if (!fw) fail('firewall harbor-test-ssh-only not found');
+  const rules = [{ protocol: 'udp', ports: String(port), sources: { addresses: ['0.0.0.0/0', '::/0'] } }];
+  if (on) await api('POST', `/firewalls/${fw.id}/rules`, { inbound_rules: rules });
+  else await api('DELETE', `/firewalls/${fw.id}/rules`, { inbound_rules: rules });
+  console.log(`inbound udp ${port} ${on ? 'allowed' : 'removed'} on ${fw.name}`);
+}
+
 // DNS records in a DigitalOcean-managed zone. Only records the suite created (name suffix) are touched.
 function splitFqdn(fqdn) {
   const parts = fqdn.split('.');
@@ -343,6 +356,7 @@ switch (cmd) {
   case 'destroy': await cmdDestroy(rest.includes('--yes')); break;
   case 'wait-ssh': await cmdWaitSsh(); break;
   case 'firewall-web': await cmdFirewallWeb(args[0] !== 'off'); break;
+  case 'firewall-udp': await cmdFirewallUdp(args[0] !== 'off', args[1]); break;
   case 'dns-set': await cmdDnsSet(args[0]); break;
   case 'dns-delete': await cmdDnsDelete(args[0]); break;
   case 'ssh': await cmdSsh(args); break;

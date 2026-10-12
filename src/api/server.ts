@@ -938,14 +938,14 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
       schema: {
         description: 'Submit an exact plan ID. Requires Idempotency-Key. Install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Returns 202 with the (possibly existing) operation.',
         headers: { type: 'object', properties: { 'idempotency-key': { type: 'string', pattern: IDEMPOTENCY_KEY_RE.source } }, required: ['idempotency-key'] },
-        body: { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } } } },
+        body: { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } }, acceptPermissions: { type: 'boolean', description: 'Decision 163: true accepts the permissions the plan lists (required when it lists any).' } } },
       },
     },
     async (req, reply) => {
       const key = req.headers['idempotency-key'] as string;
-      const { planId, passphrase, secrets } = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string> };
+      const { planId, passphrase, secrets, acceptPermissions } = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string>; acceptPermissions?: boolean };
       if (typeof passphrase === 'string' && passphrase) service.submitInstallLocationSecret(planId, passphrase);
-      const result = service.submit(planId, key, req.actor!, secrets ? { secrets } : {});
+      const result = service.submit(planId, key, req.actor!, { ...(secrets ? { secrets } : {}), ...(acceptPermissions === true ? { acceptPermissions: true } : {}) });
       return reply.status(202).send({ operationId: result.operation.id, created: result.created, operation: service.operation(result.operation.id) });
     },
   );

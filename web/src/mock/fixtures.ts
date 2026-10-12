@@ -174,6 +174,7 @@ export function mockInstances(): InstanceSummary[] {
     operatorSecrets: [],
     hiddenFromHome: false,
     apiOnly: false,
+    ports: [],
   };
   return [
     {

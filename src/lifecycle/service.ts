@@ -2,8 +2,9 @@ import { accessSync, constants, existsSync, mkdirSync, readdirSync, rmSync, stat
 import path from 'node:path';
 import { UUID_RE } from '../contracts/patterns.js';
 import { tagValue } from '../backups/restic.js';
-import type { AppLinkDto, LinkChoice, LinkDto } from '../contracts/api.js';
-import type { LinkClaim, Manifest, SecretClaim } from '../contracts/types.js';
+import type { AppLinkDto, FixedPortDto, LinkChoice, LinkDto } from '../contracts/api.js';
+import type { LinkClaim, Manifest, ManifestPermission, SecretClaim } from '../contracts/types.js';
+import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permissionsOf } from '../planner/permissions.js';
 import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
@@ -747,15 +748,15 @@ export class ApplicationService {
     return this.ctx.packages.list();
   }
 
-  private packageMeta(i: InstanceRow): { name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean } {
-    const from = (pkg: LoadedPackage) => ({ hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
+  private packageMeta(i: InstanceRow): { name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
+    const from = (pkg: LoadedPackage) => ({ ports: fixedPortsOf(pkg.manifest), hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
     try {
       return from(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'release'), i.packageId));
     } catch {
       try {
         return from(this.ctx.packages.load(i.packageId));
       } catch {
-        return { name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], hideFromHome: false, apiOnly: false };
+        return { name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], hideFromHome: false, apiOnly: false, ports: [] };
       }
     }
   }
@@ -792,9 +793,9 @@ export class ApplicationService {
 
   // Read-time look that is not a column: links, operator secrets and Hide from Home (decision 131: the
   // operator's per-app choice in the `home.hidden` setting wins over the package's suggestion).
-  private extraLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean }): ReturnType<ApplicationService['linkLook']> & { hiddenFromHome: boolean; apiOnly: boolean } {
+  private extraLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
     const choice = this.ctx.repo.setting<Record<string, boolean>>('home.hidden')?.[i.id];
-    return { ...this.linkLook(i, meta), hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly };
+    return { ...this.linkLook(i, meta), hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports };
   }
 
   private linkLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[] }): { links: AppLinkDto[]; linkedBy: InstanceSummary['linkedBy']; operatorSecrets: InstanceSummary['operatorSecrets'] } {
@@ -1474,6 +1475,8 @@ export class ApplicationService {
       const instanceId = manifest.instanceId;
       const identity = identityFor(this.ctx.installationId, instanceId);
       const endpoints = await this.allocatePorts(pkg);
+      const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
+      const permissions = permissionsOf(pkg.manifest);
       const storage = this.resolveStorage(pkg, identity, {}, instances);
       const now = this.ctx.clock.now();
       const expiresAt = rfc3339(addSeconds(now, this.ctx.config.planTtlSeconds));
@@ -1483,6 +1486,8 @@ export class ApplicationService {
         name: proposed.name,
         project: identity.project,
         endpoints,
+        ports: fixedPorts,
+        permissions,
         storage,
         // Nested layout: the home is <candidate>/<packageId>/<instanceName>;
         // the location dir is the package dir (strip one segment).
@@ -1493,6 +1498,7 @@ export class ApplicationService {
           `Verify the encryption passphrase once; the app stays locked until you Start it with the passphrase`,
           `Create Compose project ${identity.project} with a private bridge network`,
           ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
+          ...this.fixedPortChanges(fixedPorts, permissions),
           ...storage.map((s) => `Use the drive's data at ${home}/volumes/${s.composeVolume} (${s.purpose})`),
         ],
         warnings: ['Ports are allocated fresh on this machine; addresses differ from the previous one.'],
@@ -1658,6 +1664,8 @@ export class ApplicationService {
       const instanceId = ids.uuid();
       const identity = identityFor(this.ctx.installationId, instanceId);
       const endpoints = await this.allocatePorts(pkg);
+      const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
+      const permissions = permissionsOf(pkg.manifest);
       // Install location (whole encrypted app on a drive): validated here so a
       // bad dir or weak passphrase never reaches Docker. The passphrase itself
       // is never stored in the plan — only the dir. The runner collects it at
@@ -1711,6 +1719,8 @@ export class ApplicationService {
         name: proposed.name,
         project: identity.project,
         endpoints,
+        ports: fixedPorts,
+        permissions,
         storage,
         location,
         secrets: plannedSecrets(pkg.manifest),
@@ -1719,6 +1729,7 @@ export class ApplicationService {
           `Install ${pkg.manifest.metadata.name} (${pkg.id} revision ${pkg.revision}) as instance "${proposed.name}"`,
           `Create Compose project ${identity.project} with a private bridge network`,
           ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
+          ...this.fixedPortChanges(fixedPorts, permissions),
           ...(location
             ? [
                 location.defaultKey
@@ -1901,6 +1912,9 @@ export class ApplicationService {
     const missing = Object.keys(next.manifest.endpoints).filter((id) => !inst.endpoints.some((e) => e.id === id));
     const fresh = missing.length ? (await this.allocatePorts({ ...next, manifest: { ...next.manifest, endpoints: Object.fromEntries(missing.map((id) => [id, next.manifest.endpoints[id]!])) } }, new Set(kept.map((e) => e.hostPort)))) : [];
     const endpoints = [...kept, ...fresh];
+    const fixedPorts = await this.checkFixedPorts(next.manifest, inst.id);
+    const heldPorts = new Set(fixedPortsOf(current.manifest).map((p) => p.hostPort));
+    const addedPermissions = newPermissions(current.manifest, next.manifest);
     // kept: every secret the instance has, plus optional operator secrets the current release already declared (left empty on purpose)
     const keptSecrets = new Set([...inst.secrets.map((r) => r.id), ...(current.manifest.secrets ?? []).map((s) => s.id)]);
     const newSecrets = (next.manifest.secrets ?? []).filter((s) => !keptSecrets.has(s.id)).map((s) => s.id);
@@ -1918,6 +1932,8 @@ export class ApplicationService {
       name: inst.name,
       project: inst.project,
       endpoints,
+      ports: fixedPorts,
+      permissions: addedPermissions,
       storage: [...keptStorage, ...newStorage],
       location: null,
       secrets: plannedSecrets(next.manifest, keptSecrets),
@@ -1932,6 +1948,7 @@ export class ApplicationService {
         ...this.linkChanges(links, pkgName),
         ...droppedLinks.map((l) => `Remove link ${l.linkId} (this release no longer uses it) and its network ${l.networkName}`),
         ...fresh.map((e) => `Publish new endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
+        ...this.fixedPortChanges(fixedPorts.filter((p) => !heldPorts.has(p.hostPort)), addedPermissions),
         ...droppedVolumes.map((v) => `Volume ${v} is no longer used by this release; it is kept, not deleted`),
         'Pull the new images by digest, start the new containers, check readiness',
         'If the new release does not become healthy, put the previous release back and start it again',
@@ -2219,6 +2236,8 @@ export class ApplicationService {
     if (proposed.error) throw new HarborError(proposed.error.includes('already used') ? 'NAME_CONFLICT' : 'INVALID_REQUEST', proposed.error);
     const identity = identityFor(this.ctx.installationId, instanceId);
     const endpoints = await this.allocatePorts(pkg);
+    const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
+    const permissions = permissionsOf(pkg.manifest);
     const storage = this.resolveStorage(pkg, identity, {}, instances);
     const dir = this.resolveInstallLocation(req.location.dir, instances, pkg.id);
     const target = path.posix.join(dir, proposed.name);
@@ -2230,6 +2249,8 @@ export class ApplicationService {
       name: proposed.name,
       project: identity.project,
       endpoints,
+      ports: fixedPorts,
+      permissions,
       storage,
       location: { dir, defaultKey: true },
       secrets: (pkg.manifest.secrets ?? []).map((s) => ({ id: s.id })),
@@ -2238,6 +2259,7 @@ export class ApplicationService {
         `Create a sealed home at ${target}/ with the app's own key; this machine unlocks it when you log in, and your Harbor recovery key opens it anywhere`,
         `Put back its secrets, then create Compose project ${identity.project}`,
         ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
+        ...this.fixedPortChanges(fixedPorts, permissions),
       ],
       warnings: ['Ports are allocated fresh on this machine; addresses differ from the previous one.', ...(tagValue(point.snapshot.tags, 'pkg') && pkg.revision ? [`It runs package revision ${pkg.revision} here; the app updates its own data if that is newer than the one it was backed up with.`] : [])],
       releaseHashes: pkg.hashes,
@@ -2469,6 +2491,46 @@ export class ApplicationService {
   }
 
   // Non-mutating Compose canonical validation of the prospective model, in a scratch directory.
+  // Decision 163: fixed ports are not allocated, so check them: outside Harbor's own ports, not claimed by another
+  // app (retained ones keep theirs), not published by Docker, and free on every interface right now. Ports this
+  // instance already holds (an update) are its own.
+  private async checkFixedPorts(manifest: Manifest, selfId: string | null): Promise<FixedPortDto[]> {
+    const { repo, docker, ports, config } = this.ctx;
+    const wanted = fixedPortsOf(manifest);
+    if (!wanted.length) return wanted;
+    const claims = repo.claimedPorts();
+    let published: number[];
+    try {
+      published = await docker.publishedHostPorts();
+    } catch (e) {
+      throw new HarborError('DOCKER_UNAVAILABLE', `cannot query Docker port bindings: ${(e as Error).message}`);
+    }
+    for (const p of wanted) {
+      const where = `${manifest.metadata.name} needs ${p.protocol.toUpperCase()} port ${p.hostPort}`;
+      if (p.hostPort === config.listen.port || (p.hostPort >= config.appPortRange.from && p.hostPort <= config.appPortRange.to)) {
+        throw new HarborError('PORT_CONFLICT', `${where}, which is one of Harbor's own ports`, { nextAction: 'Change Harbor\'s app port range in its configuration, or use a package with another port.' });
+      }
+      const claim = claims.find((c) => c.port === p.hostPort);
+      if (claim && claim.instanceId === selfId) continue;
+      if (claim) {
+        const holder = repo.instance(claim.instanceId);
+        throw new HarborError('PORT_CONFLICT', `${where}, which ${holder ? `${holder.name}${holder.installState === 'retained' ? ' (removed, data kept)' : ''}` : 'another app'} holds`, { nextAction: holder?.installState === 'retained' ? `Purge ${holder.name} to free the port, or reinstall it instead.` : 'Remove the app that holds it first.' });
+      }
+      if (published.includes(p.hostPort) || (ports.udpFree && !(await ports.udpFree(p.hostPort)))) {
+        throw new HarborError('PORT_CONFLICT', `${where}, which something else on this machine already uses`, { nextAction: `Stop whatever listens on ${p.protocol.toUpperCase()} ${p.hostPort} (another VPN server?), then plan again.` });
+      }
+    }
+    return wanted;
+  }
+
+  // plan lines for fixed ports and permissions (decision 163)
+  private fixedPortChanges(ports: FixedPortDto[], perms: { service: string; permission: ManifestPermission }[]): string[] {
+    return [
+      ...ports.map((p) => `Open ${p.protocol.toUpperCase()} port ${p.hostPort} on every network of this machine for ${p.purpose} (-> ${p.service}:${p.containerPort}); to reach it from the internet, forward ${p.protocol.toUpperCase()} ${p.hostPort} on your router to this machine`),
+      ...perms.map((p) => `Allow ${p.service}: ${PERMISSION_LABEL[p.permission]}`),
+    ];
+  }
+
   private async validateProspective(pkg: LoadedPackage, identity: ReturnType<typeof identityFor>, endpoints: PlanProposal['endpoints']): Promise<void> {
     const builtImages = Object.fromEntries(Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => [svc, b.tag]));
     const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints, secretValues: null, builtImages });
@@ -2515,7 +2577,7 @@ export class ApplicationService {
     return v;
   }
 
-  submit(planId: string, idempotencyKey: string, actor: string, opts: { secrets?: Record<string, string> } = {}): SubmitResult {
+  submit(planId: string, idempotencyKey: string, actor: string, opts: { secrets?: Record<string, string>; acceptPermissions?: boolean } = {}): SubmitResult {
     const { repo, ids } = this.ctx;
     let checked: { store: Record<string, string>; clear: string[] } | null = null;
     const result = repo.transaction((): SubmitResult => {
@@ -2532,6 +2594,22 @@ export class ApplicationService {
       }
       if (new Date(plan.expiresAt).getTime() <= this.ctx.clock.now().getTime()) throw new HarborError('PLAN_EXPIRED', `plan ${planId} expired at ${plan.expiresAt}`);
       checked = checkSubmittedSecrets((plan.proposal.secrets ?? []) as PlannedSecret[], opts.secrets);
+      // Decision 163: permissions are accepted by the person approving, never by default. Update-all, auto-update
+      // and git redeploys submit without it, so an update that asks for more stops here and waits for a person.
+      const asked = plan.proposal.permissions ?? [];
+      if (asked.length && opts.acceptPermissions !== true) {
+        throw new HarborError('PERMISSION_REQUIRED', `${plan.proposal.name} asks for permissions you have not accepted: ${asked.map((p) => `${p.service} ${p.permission}`).join(', ')}`, { nextAction: 'Review them in the plan and approve with them accepted (console: tick the box; CLI: --accept-permissions).' });
+      }
+      // fixed ports (decision 163): the planner checked them; claim them now, unless this instance already holds one
+      const fixedClaims = (instanceId: string) => {
+        const claims = repo.claimedPorts();
+        for (const p of plan.proposal.ports ?? []) {
+          const held = claims.find((c) => c.port === p.hostPort);
+          if (held && held.instanceId === instanceId) continue;
+          if (held) throw new HarborError('PORT_CONFLICT', `port ${p.hostPort} was claimed by another app since planning`);
+          repo.claimPort(p.hostPort, instanceId, fixedPortClaim(p.id));
+        }
+      };
 
       const operationId = ids.uuid();
       if (plan.kind === 'install') {
@@ -2570,11 +2648,13 @@ export class ApplicationService {
           autoUpdate: repo.setting<boolean>('updates.autoDefault') ?? false,
         });
         for (const e of plan.proposal.endpoints) repo.claimPort(e.hostPort, plan.instanceId, e.id);
+        fixedClaims(plan.instanceId);
       } else {
         const inst = repo.instance(plan.instanceId);
         if (!inst) throw new HarborError('NOT_FOUND', `instance ${plan.instanceId} no longer exists`);
         if (inst.generation !== plan.expectedGeneration) throw new HarborError('STATE_CHANGED', `instance ${inst.name} changed since the plan was created (generation ${inst.generation}, expected ${plan.expectedGeneration})`);
         if (inst.activeOperationId) throw new HarborError('BUSY', `instance ${inst.name} has an active operation`, { operationId: inst.activeOperationId });
+        fixedClaims(inst.id);
         repo.updateInstance(inst.id, { activeOperationId: operationId });
       }
       repo.insertOperation({ id: operationId, idempotencyKey, planId, actor, kind: plan.kind, instanceId: plan.instanceId });

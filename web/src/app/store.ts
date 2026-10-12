@@ -146,12 +146,12 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   };
 
   // secrets: values typed in the review dialog for operator-provided secrets (decision 125); in memory only.
-  const approve = async (secrets?: Record<string, string>) => {
+  const approve = async (secrets?: Record<string, string>, acceptPermissions = false) => {
     if (!plan || submitting.current) return;
     submitting.current = true;
     try {
       const k = key.current ?? (key.current = newIdempotencyKey());
-      const r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets);
+      const r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions);
       setWatching(r.operation);
       setPending(null);
       setPlan(null);

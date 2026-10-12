@@ -185,6 +185,9 @@ export interface PlanProposal {
   name: string;
   project: string;
   endpoints: EndpointAllocation[];
+  // decision 163: fixed ports published on every interface; permissions the submitter must accept (absent before 0.29.0)
+  ports?: { id: string; service: string; protocol: 'udp'; hostPort: number; containerPort: number; purpose: string }[];
+  permissions?: { service: string; permission: 'net-admin' | 'tun' | 'ip-forwarding' }[];
   // external claims: hostPath set, volumeName null (nothing is created in Docker)
   storage: { id: string; composeVolume: string; volumeName: string | null; purpose: string; hostPath?: string; readOnly?: boolean; homePath?: string }[];
   // install-location: the whole app lives in an encrypted home under this dir.

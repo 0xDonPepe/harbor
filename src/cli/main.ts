@@ -20,6 +20,7 @@ import { exitAfterFlush } from './exit.js';
 interface Globals {
   url: string;
   json: boolean;
+  acceptPermissions: boolean;
 }
 
 const program = new Command();
@@ -29,6 +30,7 @@ program
   .version(productVersion())
   .option('--url <url>', 'daemon URL', process.env['HARBOR_URL'] ?? readCliState()?.url ?? `http://localhost:${PRODUCT.defaults.managementPort}`)
   .option('--json', 'machine-readable output', false)
+  .option('--accept-permissions', 'accept the permissions a plan lists (a VPN app asking to create network tunnels); needed with --yes', false)
   .showHelpAfterError();
 
 function globals(): Globals {
@@ -138,6 +140,8 @@ function planSummary(p: PlanDto): string {
   for (const c of p.changes) lines.push(`  - ${c}`);
   if (p.kind === 'install') lines.push(encryptionLine(p.location));
   if (p.endpoints.length) lines.push('  Endpoints: ' + p.endpoints.map((e) => `${e.id}=${e.browserUrl}`).join(', '));
+  for (const x of p.ports ?? []) lines.push(`  Port:      ${x.protocol.toUpperCase()} ${x.hostPort} on every network (${x.purpose}); forward it on your router to reach it from outside`);
+  for (const x of p.permissions ?? []) lines.push(`  Permission: ${x.service}: ${x.label}`);
   if (p.storage.length) lines.push('  Storage:   ' + p.storage.map((s) => `${s.volumeName} (${s.state})`).join(', '));
   if (p.secrets.length) lines.push('  Secrets:   ' + p.secrets.map((s) => `${s.id} (${s.source === 'operator' ? (s.ask ? `you provide it${s.ask === 'optional' ? ', optional' : ''}` : 'kept') : s.state})`).join(', '));
   for (const l of p.links ?? []) lines.push(`  Link:      ${l.id} -> ${l.provider ? `${l.provider.name}/${l.provider.endpointId} as ${l.provider.url}` : 'no provider'}${l.change === 'keep' ? ' (unchanged)' : l.change === 'clear' ? ' (unlink)' : ''}`);
@@ -197,12 +201,19 @@ async function approveAndApply(api: ApiClient, plan: PlanDto, opts: { yes?: bool
     const ok = await confirm('Apply this plan?');
     if (!ok) throw new HarborError('INVALID_REQUEST', 'plan not approved', { nextAction: 'Re-run with --yes to approve non-interactively.' });
   }
+  // Decision 163: permissions are their own yes, never implied by --yes
+  let acceptPermissions = false;
+  if (plan.permissions?.length) {
+    if (globals().acceptPermissions) acceptPermissions = true;
+    else if (!opts.yes && (await confirm(`Allow ${plan.name} the permission${plan.permissions.length === 1 ? '' : 's'} listed above?`))) acceptPermissions = true;
+    else throw new HarborError('PERMISSION_REQUIRED', `${plan.name} asks for permissions: ${plan.permissions.map((x) => `${x.service} ${x.permission}`).join(', ')}`, { nextAction: `Re-run with --accept-permissions to allow them (${PRODUCT.cliName} --accept-permissions …).` });
+  }
   const key = opts.idempotencyKey ?? `cli-${randomUUID()}`;
   const secrets = await askMissingSecrets(plan, opts.secrets ?? {}, Boolean(opts.yes));
   let submitted: { operationId: string; created: boolean } | null = null;
   for (let attempt = 0; attempt < 3 && !submitted; attempt++) {
     try {
-      submitted = await api.post<{ operationId: string; created: boolean }>('/v1/operations', { planId: plan.id, ...(opts.passphrase ? { passphrase: opts.passphrase } : {}), ...(Object.keys(secrets).length ? { secrets } : {}) }, { 'idempotency-key': key });
+      submitted = await api.post<{ operationId: string; created: boolean }>('/v1/operations', { planId: plan.id, ...(opts.passphrase ? { passphrase: opts.passphrase } : {}), ...(Object.keys(secrets).length ? { secrets } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }, { 'idempotency-key': key });
     } catch (e) {
       // Transport failures retry with the same key; API errors do not.
       if (HarborError.is(e, 'STATE_UNAVAILABLE') && attempt < 2) continue;
@@ -319,6 +330,7 @@ program
         `  install ${d.installState}  desired ${d.desired}  runtime ${d.runtime}  readiness ${d.readiness}  observed ${d.observedAt ?? '-'}`,
         d.home ? `  encrypted: yes — sealed at ${d.home.path} (${d.home.state}${d.home.defaultKey ? ', Harbor\'s own key' : ', own passphrase'})` : '  encrypted: no — plain Docker volumes (readable on disk, starts on its own after a reboot); encrypt it with: harbor seal ' + d.name,
         ...d.endpoints.map((e) => `  endpoint ${e.id} (container port ${e.containerPort}, primary ${e.primary}): loopback ${e.urls.loopback}${e.urls.tailnet ? `, tailnet ${e.urls.tailnet}` : ''}${e.urls.public ? `, public ${e.urls.public}` : ''}`),
+        ...(d.ports ?? []).map((x) => `  port ${x.id}: ${x.protocol.toUpperCase()} ${x.hostPort} on every network -> ${x.service}:${x.containerPort} (${x.purpose}); forward it on your router to reach it from outside`),
         ...(d.setup ? [`  setup: ${d.setup.instructions} -> ${d.setup.browserUrl}`] : []),
         ...(d.lastError ? [`  last error ${d.lastError.code}: ${d.lastError.message}`, `  next: ${d.lastError.nextAction}`] : []),
         '  resources:',

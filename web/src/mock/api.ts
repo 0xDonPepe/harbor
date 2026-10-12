@@ -136,6 +136,8 @@ const planFor = (kind: PlanDto['kind'], instanceId: string, packageId: string, n
   expectedGeneration: 1,
   changes: [`Mock plan: ${kind} ${name || packageId} (nothing runs in design mode)`],
   endpoints: [],
+  ports: [],
+  permissions: [],
   storage: [],
   location: null,
   secrets: [],

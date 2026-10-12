@@ -121,6 +121,35 @@ export const MANIFEST_SCHEMA = {
         },
       },
     },
+    // Decision 163: raw ports Harbor publishes on every interface at a fixed host port (no proxy, no URL): a VPN
+    // server's tunnel port. Single-instance apps only; the plan refuses a port already in use.
+    ports: {
+      type: 'object',
+      minProperties: 1,
+      maxProperties: 8,
+      propertyNames: { pattern: ID_PATTERN },
+      additionalProperties: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['service', 'containerPort', 'hostPort', 'protocol', 'purpose'],
+        properties: {
+          service: idString,
+          containerPort: { type: 'integer', minimum: 1, maximum: 65535 },
+          hostPort: { type: 'integer', minimum: 1, maximum: 65535 },
+          protocol: { enum: ['udp'] },
+          purpose: plainText(120),
+        },
+      },
+    },
+    // Decision 163: per service, from a fixed list Harbor renders itself (compose keeps refusing cap_add/devices/
+    // sysctls); the operator accepts them when approving the plan
+    permissions: {
+      type: 'object',
+      minProperties: 1,
+      maxProperties: 16,
+      propertyNames: { pattern: ID_PATTERN },
+      additionalProperties: { type: 'array', minItems: 1, maxItems: 3, uniqueItems: true, items: { enum: ['net-admin', 'tun', 'ip-forwarding'] } },
+    },
     health: {
       type: 'object',
       additionalProperties: false,

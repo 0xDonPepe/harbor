@@ -27,6 +27,22 @@ export interface EndpointDto {
   primary: PrimaryExposure;
 }
 
+// Decision 163: a fixed host port published on every interface (a VPN tunnel port); no URL, no proxy
+export interface FixedPortDto {
+  id: string;
+  service: string;
+  protocol: 'udp';
+  hostPort: number;
+  containerPort: number;
+  purpose: string;
+}
+// Decision 163: a privilege the operator accepts when approving (label: what it lets the app do)
+export interface PermissionDto {
+  service: string;
+  permission: 'net-admin' | 'tun' | 'ip-forwarding';
+  label: string;
+}
+
 export interface ExposureDto {
   id: string;
   instanceId: string;
@@ -57,6 +73,7 @@ export interface InstanceSummary {
   readiness: Readiness;
   observedAt: string | null;
   endpoints: EndpointDto[];
+  ports: FixedPortDto[]; // decision 163: fixed ports published on every interface (a VPN tunnel port)
   primaryEndpoint: string;
   operationId: string | null;
   hasRetainedData: boolean;
@@ -266,6 +283,9 @@ export interface PlanDto {
   expectedGeneration: number;
   changes: string[];
   endpoints: EndpointDto[];
+  // decision 163: fixed ports this plan publishes; permissions the approver must accept (update: only new ones)
+  ports: FixedPortDto[];
+  permissions: PermissionDto[];
   storage: StorageDto[];
   // install-location plans: where the whole app will live (null = system disk). Decision 157: onDrive =
   // not the Harbor data folder; defaultKey = Harbor's own key (unlocks at sign-in), false = own passphrase

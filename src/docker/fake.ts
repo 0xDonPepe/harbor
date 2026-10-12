@@ -238,7 +238,7 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
     if (this.behaviour.failUp) throw new ComposeError(`docker compose up failed: ${this.behaviour.failUp}`, { command: ['up'], exitCode: 1, stderrTail: this.behaviour.failUp, timedOut: false });
     const text = readFileSync(inv.file, 'utf8').replace(/\$\$/g, '$');
     const doc = parseYaml(text) as {
-      services: Record<string, { image: string; labels?: Record<string, string>; ports?: { target: number; published: string; host_ip: string }[]; volumes?: { source: string }[]; environment?: Record<string, string>; networks?: string[] | Record<string, { aliases?: string[] } | null> }>;
+      services: Record<string, { image: string; labels?: Record<string, string>; ports?: { target: number; published: string; host_ip: string; protocol?: string }[]; volumes?: { source: string }[]; environment?: Record<string, string>; networks?: string[] | Record<string, { aliases?: string[] } | null> }>;
       volumes?: Record<string, { name?: string; external?: boolean }>;
       networks?: Record<string, { name?: string; labels?: Record<string, string>; external?: boolean }>;
     };
@@ -275,7 +275,7 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
           createdAt: rfc3339(this.clock.now()),
           startedAt: null,
           health: 'none',
-          ports: (def.ports ?? []).map((p) => ({ hostIp: p.host_ip, hostPort: Number(p.published), containerPort: p.target })),
+          ports: (def.ports ?? []).map((p) => ({ hostIp: p.host_ip, hostPort: Number(p.published), containerPort: p.target, ...(p.protocol === 'udp' ? { protocol: 'udp' as const } : {}) })),
           networkIds: [net.id],
           project: inv.projectName,
           service,
@@ -350,6 +350,7 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   // --- fake app listeners
   private async listen(c: FakeContainer): Promise<void> {
     for (const p of c.ports) {
+      if (p.protocol === 'udp') continue; // a fixed UDP port (decision 163) has no HTTP listener to fake
       // the fake always binds loopback (LAN mode renders 0.0.0.0 but tests must not open the machine)
       const server = createServer((req, res) => {
         const verdict = this.behaviour.respond?.(c.service, req.url ?? '/') ?? 200;

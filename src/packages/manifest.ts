@@ -127,6 +127,20 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
     if (manifest.defaultCredentials) problems.push('defaultCredentials and provisionedCredentials are mutually exclusive');
   }
 
+  // Decision 163: fixed ports belong to a declared service, each host port once; two copies of an app could never
+  // share a fixed port, so only single-instance apps may declare one. Permissions name declared services.
+  const fixedPorts = new Map<number, string>();
+  for (const [id, p] of Object.entries(manifest.ports ?? {})) {
+    if (!(p.service in manifest.deployment.services)) problems.push(`ports.${id}.service references unknown service ${p.service}`);
+    const key = p.hostPort;
+    if (fixedPorts.has(key)) problems.push(`ports.${id}: host port ${p.hostPort}/${p.protocol} is declared twice (also ports.${fixedPorts.get(key)})`);
+    fixedPorts.set(key, id);
+  }
+  if (fixedPorts.size && manifest.deployment.multiInstance) problems.push('ports: an app with fixed host ports must set deployment.multiInstance: false (two copies cannot share a port)');
+  for (const svc of Object.keys(manifest.permissions ?? {})) {
+    if (!(svc in manifest.deployment.services)) problems.push(`permissions references unknown service ${svc}`);
+  }
+
   const hook = manifest.hooks?.afterStart;
   if (hook && !(hook.service in manifest.deployment.services)) problems.push(`hooks.afterStart references unknown service ${hook.service}`);
 

@@ -10,6 +10,8 @@ export interface Manifest {
   release: { revision: string; version?: string; minHarbor?: string };
   deployment: { compose: 'compose.yaml'; multiInstance: boolean; services: Record<string, ServiceRole> };
   endpoints: Record<string, ManifestEndpoint>;
+  ports?: Record<string, ManifestPort>; // decision 163
+  permissions?: Record<string, ManifestPermission[]>; // decision 163
   health: { endpoint: string; path: string; expectedStatus: number[]; timeoutSeconds: number; deadlineSeconds: number };
   ui: { primaryEndpoint: string };
   storage?: StorageClaim[];
@@ -50,6 +52,16 @@ export interface PackagePresentation {
   // decision 131: suggest hiding the app from Home (helpers without a page of their own); the operator decides
   hideFromHome?: boolean;
 }
+
+// Decision 163: a fixed host port published on every interface (no proxy, no URL)
+export interface ManifestPort {
+  service: string;
+  containerPort: number;
+  hostPort: number;
+  protocol: 'udp';
+  purpose: string;
+}
+export type ManifestPermission = 'net-admin' | 'tun' | 'ip-forwarding';
 
 export interface ManifestEndpoint {
   service: string;

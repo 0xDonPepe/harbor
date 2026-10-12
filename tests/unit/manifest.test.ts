@@ -236,3 +236,26 @@ describe('afterStart hooks (decision 116)', () => {
     expect(m.endpoints['web']?.httpsRequired).toBe(true);
   });
 });
+
+// decision 163: fixed UDP ports and a short list of permissions a VPN server needs
+describe('ports and permissions (decision 163)', () => {
+  const single = MINIMAL_MANIFEST.replace('multiInstance: true', 'multiInstance: false');
+  const PORTS = 'ports:\n  vpn:\n    service: web\n    containerPort: 51820\n    hostPort: 51820\n    protocol: udp\n    purpose: WireGuard tunnels\n';
+  const PERMS = 'permissions:\n  web: [net-admin, tun, ip-forwarding]\n';
+  it('accepts a fixed UDP port and the three permissions on a single-instance app', () => {
+    const { manifest } = full(single + PORTS + PERMS, MINIMAL_COMPOSE);
+    expect(manifest.ports?.['vpn']).toEqual({ service: 'web', containerPort: 51820, hostPort: 51820, protocol: 'udp', purpose: 'WireGuard tunnels' });
+    expect(manifest.permissions?.['web']).toEqual(['net-admin', 'tun', 'ip-forwarding']);
+  });
+  it('refuses a fixed port on a multi-instance app (two copies cannot share it)', () => {
+    expectCode(() => full(MINIMAL_MANIFEST + PORTS, MINIMAL_COMPOSE), 'INVALID_PACKAGE', /multiInstance/);
+  });
+  it('refuses unknown services, protocols, permissions and duplicate host ports', () => {
+    expectCode(() => full(single + PORTS.replace('service: web', 'service: nope'), MINIMAL_COMPOSE), 'INVALID_PACKAGE', /unknown service nope/);
+    expectCode(() => manifestOf(single + PORTS.replace('protocol: udp', 'protocol: sctp')), 'INVALID_PACKAGE', /protocol/);
+    expectCode(() => manifestOf(single + 'permissions:\n  web: [privileged]\n'), 'INVALID_PACKAGE', /permissions/);
+    expectCode(() => full(single + 'permissions:\n  nope: [tun]\n', MINIMAL_COMPOSE), 'INVALID_PACKAGE', /unknown service nope/);
+    const two = PORTS + '  again:\n    service: web\n    containerPort: 51821\n    hostPort: 51820\n    protocol: udp\n    purpose: Twice\n';
+    expectCode(() => full(single + two, MINIMAL_COMPOSE), 'INVALID_PACKAGE', /51820.*twice/);
+  });
+});

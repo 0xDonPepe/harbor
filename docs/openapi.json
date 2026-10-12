@@ -2954,6 +2954,10 @@
                       "type": "string",
                       "maxLength": 4096
                     }
+                  },
+                  "acceptPermissions": {
+                    "type": "boolean",
+                    "description": "Decision 163: true accepts the permissions the plan lists (required when it lists any)."
                   }
                 }
               }

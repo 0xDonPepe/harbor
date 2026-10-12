@@ -286,3 +286,21 @@ What the port taught us:
     Needs a decision against AGENTS.md §3.4 ("never chowns").
   - *A UI path* (kokoro): its page lives at `/web/`; `/` answers 404. Umbrel's `path:` field. Proposal:
     `ui.path` (where Open goes; the health check can use the same path).
+
+## 8. The VPN pack (Harbor 0.29.0, decision 163)
+
+The first slice of §2.2 (raw ports) and §3 (permissions), cut to what VPN servers need:
+
+- **`ports:`** in the manifest: a fixed UDP host port published on every interface. Its own block (not an
+  endpoint scheme), so nothing that assumes HTTP sees it. Single-instance apps only; the plan refuses a port in
+  Harbor's range, held by another app, published by Docker or bound on the host.
+- **`permissions:`** per service, from `net-admin`, `tun`, `ip-forwarding` only. Harbor renders `cap_add`,
+  `devices` and namespaced `net.*` sysctls itself; compose keeps refusing those keys. The review lists them in
+  plain words and Install waits for a checkbox (`--accept-permissions` in the CLI). An update that adds one is
+  never applied by update-all or auto-update.
+- **WireGuard** (wg-easy 15.3.0) in harbor-apps: `ports.wireguard` UDP 51820, `permissions: [net-admin,
+  ip-forwarding]`. Umbrel's `SYS_MODULE` + `/lib/modules` are left out (Ubuntu 24.04 loads the module on demand),
+  so the package sets `DISABLE_IPV6: "true"`: wg-easy's IPv6 rules need `ip6table_nat`, which only `SYS_MODULE` could
+  load. Live: qualified, and a real tunnel from a second droplet (VERIFICATION 3u).
+
+Not yet: raw TCP ports (Git over SSH, MQTT), host networking, devices beyond `/dev/net/tun`, Docker-in-Docker.

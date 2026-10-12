@@ -4,6 +4,7 @@ export interface PortBinding {
   hostIp: string;
   hostPort: number;
   containerPort: number;
+  protocol?: 'tcp' | 'udp'; // absent = tcp (decision 163 adds udp fixed ports)
 }
 
 export interface ContainerInfo {

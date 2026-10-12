@@ -54,6 +54,19 @@ endpoints:
                                  # (secure LAN, Tailscale or a domain) and the store says so before install
     kind: web                    # web (default) | api: machine-facing (an MCP gateway, a document server):
                                  # addresses to copy, no Open button (decision 141). Put it on ui.primaryEndpoint.
+ports:                           # optional (Harbor 0.29.0, decision 163; set release.minHarbor: "0.29.0"):
+  wireguard:                     # a fixed host port published on EVERY network of the machine, no proxy, no URL
+    service: app                 # e.g. a VPN server's tunnel port. Needs multiInstance: false. The plan refuses
+    containerPort: 51820         # a port another app holds, something on the machine uses, or one inside
+    hostPort: 51820              # Harbor's own range. The console says which port to forward on the router.
+    protocol: udp                # udp only for now
+    purpose: WireGuard VPN tunnels
+permissions:                     # optional (0.29.0, decision 163): per service, from this fixed list only.
+  app: [net-admin, ip-forwarding]  # net-admin = NET_ADMIN (tunnels, routes, firewall rules); tun = the
+                                 # /dev/net/tun device (OpenVPN); ip-forwarding = net.ipv4.ip_forward and friends,
+                                 # inside the app's own network. Harbor renders them; cap_add/devices/sysctls stay
+                                 # refused in compose.yaml. The operator accepts them when approving the install
+                                 # (and an update that adds one); update-all and auto-update skip such updates.
 health:
   endpoint: web
   path: /                        # must answer before any account exists; a published address of this

@@ -660,6 +660,27 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   *New apps and updates loaded*, and when catalog updates are off (it prints the off line once; nothing
   was checked — `--json` shows `"source": null`); it exits 1 when the check failed.
 
+### Apps that ask for permissions (VPN servers)
+
+A few apps need more than a normal app: a VPN server such as **WireGuard** creates network tunnels and opens a
+UDP port on your machine. Harbor lets an app ask for only a short, fixed list (decision 163):
+
+| The review says | What it lets the app do |
+|---|---|
+| Change network settings inside the app (NET_ADMIN) | create tunnels, routes and firewall rules in its own network |
+| Use this machine's tunnel device | open `/dev/net/tun` (OpenVPN-style servers) |
+| Pass traffic between networks inside the app | IP forwarding, so VPN clients reach your home network |
+| Port: UDP 51820 on every network | the tunnel port, open on every network of this machine (not only this one) |
+
+The **Install** button stays off until you tick **Allow … to do this**. On the command line, add
+`--accept-permissions` (`harbor --accept-permissions install wireguard`); `--yes` alone never accepts them.
+An update that asks for a new permission waits for you: *Update all* and automatic updates skip it.
+
+**Reaching the VPN from outside.** Forward the UDP port on your router to this machine (the app's drawer shows
+which), and tell the app your public IP or a domain when it asks for its host. Inside your home network it works
+without that. Only one VPN server can use a port: Harbor refuses a second app, or anything else on the machine,
+that wants the same one.
+
 ### Values an app asks you for, and apps that talk to each other
 
 - **A value only you have** (decision 125): some apps need something you already own — another

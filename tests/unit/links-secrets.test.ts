@@ -196,3 +196,21 @@ describe('planner: healthcheck disable (decision 162)', () => {
     expect(doc.services.web.healthcheck).toEqual({ disable: true });
   });
 });
+
+describe('planner: fixed UDP ports and permissions (decision 163)', () => {
+  it('publishes the UDP port on every interface and renders only the fixed permission set', () => {
+    const m = MINIMAL_MANIFEST.replace('multiInstance: true', 'multiInstance: false') + 'ports:\n  vpn:\n    service: web\n    containerPort: 51820\n    hostPort: 51820\n    protocol: udp\n    purpose: WireGuard tunnels\npermissions:\n  web: [net-admin, tun, ip-forwarding]\n';
+    const manifest = validateManifestShape(y(m));
+    const compose = validateComposeSource(y(MINIMAL_COMPOSE));
+    validateManifestReferences(manifest, compose);
+    const id = identityFor('0a0a0a0a-0000-4000-8000-000000000001', '44444444-4444-4444-8444-444444444444');
+    const doc = parseYaml(renderCompose({ manifest, compose, identity: id, endpoints: [{ id: 'web', service: 'web', containerPort: 80, hostPort: 18080 }], secretValues: null }).yaml);
+    expect(doc.services.web.ports).toEqual([
+      { target: 80, published: '18080', host_ip: '127.0.0.1', protocol: 'tcp', mode: 'host' },
+      { target: 51820, published: '51820', host_ip: '0.0.0.0', protocol: 'udp', mode: 'host' },
+    ]);
+    expect(doc.services.web.cap_add).toEqual(['NET_ADMIN']);
+    expect(doc.services.web.devices).toEqual(['/dev/net/tun:/dev/net/tun']);
+    expect(doc.services.web.sysctls).toEqual({ 'net.ipv4.ip_forward': '1', 'net.ipv4.conf.all.src_valid_mark': '1', 'net.ipv6.conf.all.disable_ipv6': '0', 'net.ipv6.conf.all.forwarding': '1', 'net.ipv6.conf.default.forwarding': '1' });
+  });
+});

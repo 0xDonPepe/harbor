@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **163**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **164**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -131,16 +131,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (327)
-   pnpm test:integration        # 215 + 3 live-Docker skipped (~5 min)
-   pnpm build && pnpm test:e2e  # 30 Playwright (~2 min, ports 18500/18700)
+   pnpm test                    # unit (331)
+   pnpm test:integration        # 220 + 3 live-Docker skipped (~5 min)
+   pnpm build && pnpm test:e2e  # 31 Playwright (~2 min, ports 18500/18700)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
    pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **163**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **164**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -165,7 +165,8 @@ The non-negotiable subset:
 - **Compose subset ONLY**: `image`, `command` (argument array, decision 123), `environment`
   (literals), `depends_on`, `healthcheck`, `volumes: type: volume`. NO `ports` (Harbor publishes
   endpoints itself), NO `entrypoint`, `privileged`, `cap_add`, `devices`, host networking, bind mounts. (`build:` allowed for
-  git sources only.)
+  git sources only.) A VPN server declares manifest `ports:` (fixed UDP) and `permissions:` (net-admin, tun,
+  ip-forwarding) instead; Harbor renders them and the operator accepts them (decision 163).
 - **Official apps live in carlosalaniz/harbor-apps** (`apps/<id>/`), not here. Edit them there, run
   this repo's scripts against that checkout, and open a PR there; its CI verifies, bundles and
   publishes (decision 158). `tests/fixtures/catalog/` is frozen test data — do not "update" it to match.

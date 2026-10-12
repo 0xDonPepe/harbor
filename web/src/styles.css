@@ -486,6 +486,20 @@ pre.code {
 .badges:empty {
   display: none;
 }
+/* decision 163: what an app asks to be allowed, approved with its own checkbox */
+.permissions {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 8px 16px 12px;
+  margin: 16px 0;
+}
+.permissions legend {
+  font-weight: 600;
+  padding: 0 8px;
+}
+.permissions ul {
+  margin: 0 0 8px;
+}
 .facts-list > li {
   display: grid;
   grid-template-columns: 90px 1fr;

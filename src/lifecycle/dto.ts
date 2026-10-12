@@ -1,3 +1,4 @@
+import { permissionDto } from '../planner/permissions.js';
 import type { EventDto, InstanceSummary, OperationDto, PlanDto } from '../contracts/api.js';
 import { browserUrlFor } from '../config.js';
 import type { EventRow, ExposureRow, InstanceRow, OperationRow, PlanRow } from '../state/repo.js';
@@ -9,7 +10,7 @@ export function eventDto(e: EventRow): EventDto {
   return { cursor: String(e.cursor), at: e.at, phase: e.phase, message: e.message };
 }
 
-export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; hiddenFromHome?: boolean; apiOnly?: boolean } = { icon: null, category: 'other' }): InstanceSummary {
+export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; hiddenFromHome?: boolean; apiOnly?: boolean; ports?: InstanceSummary['ports'] } = { icon: null, category: 'other' }): InstanceSummary {
   return {
     id: i.id,
     name: i.name,
@@ -24,6 +25,7 @@ export function instanceSummary(i: InstanceRow, packageName: string, primaryEndp
     readiness: i.readiness,
     observedAt: i.observedAt,
     endpoints: i.endpoints.map((e) => ({ id: e.id, containerPort: e.containerPort, hostPort: e.hostPort, browserUrl: browserUrlFor(e.hostPort), urls: endpointUrls(e, exposures, look.lanHost ?? null, look.lanSecureHost ? { host: look.lanSecureHost } : null, i.primaryHost), primary: i.primaryExposure })),
+    ports: look.ports ?? [],
     primaryEndpoint,
     operationId: i.activeOperationId ?? i.lastOperationId,
     hasRetainedData: i.everInstalled || i.secrets.length > 0,
@@ -55,6 +57,8 @@ export function planDto(p: PlanRow, storageStates: Record<string, 'new' | 'exist
     changes: p.proposal.changes,
     // decision 157: the same LAN addresses an installed app gets, so the review matches the install page
     endpoints: p.proposal.endpoints.map((e) => ({ id: e.id, containerPort: e.containerPort, hostPort: e.hostPort, browserUrl: browserUrlFor(e.hostPort), urls: endpointUrls(e, [], look.lanHost ?? null, look.lanSecureHost ? { host: look.lanSecureHost } : null), primary: 'loopback' as const })),
+    ports: p.proposal.ports ?? [],
+    permissions: (p.proposal.permissions ?? []).map(permissionDto),
     storage: p.proposal.storage.map((s) => ({ id: s.id, mode: s.homePath ? ('home' as const) : s.hostPath ? ('external' as const) : ('managed' as const), volumeName: s.homePath ?? (s.hostPath ? null : s.volumeName), hostPath: s.hostPath ?? null, readOnly: s.readOnly ?? false, purpose: s.purpose, state: storageStates[s.id] ?? 'new' })),
     location: p.proposal.location ? { dir: p.proposal.location.dir, encrypted: true as const, onDrive: look.onDrive ?? false, defaultKey: p.proposal.location.defaultKey ?? false } : null,
     secrets: p.proposal.secrets.map((s) => ({ id: s.id, state: secretStates[s.id] ?? 'new', source: s.source === 'operator' ? ('operator' as const) : ('generated' as const), prompt: s.prompt ?? null, optional: s.optional ?? false, minLength: s.minLength ?? null, maxLength: s.maxLength ?? null, ask: s.ask ?? null })),

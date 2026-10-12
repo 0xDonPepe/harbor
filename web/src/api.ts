@@ -131,8 +131,9 @@ const realApi = {
   unexposeUi: () => call<void>('DELETE', '/v1/ui-exposure'),
   plan: (req: PlanRequest) => call<PlanDto>('POST', '/v1/plans', req),
   // Decision 125: operator-provided secret values travel only here, never in a plan.
-  submit: (planId: string, idempotencyKey: string, passphrase?: string, secrets?: Record<string, string>) =>
-    call<{ operationId: string; created: boolean; operation: OperationDto }>('POST', '/v1/operations', { planId, ...(passphrase ? { passphrase } : {}), ...(secrets && Object.keys(secrets).length ? { secrets } : {}) }, { 'idempotency-key': idempotencyKey }),
+  // Decision 163: acceptPermissions only when the person approving ticked the box.
+  submit: (planId: string, idempotencyKey: string, passphrase?: string, secrets?: Record<string, string>, acceptPermissions = false) =>
+    call<{ operationId: string; created: boolean; operation: OperationDto }>('POST', '/v1/operations', { planId, ...(passphrase ? { passphrase } : {}), ...(secrets && Object.keys(secrets).length ? { secrets } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }, { 'idempotency-key': idempotencyKey }),
   links: () => call<{ items: LinkDto[] }>('GET', '/v1/links').then((r) => r.items),
   foundApps: () => call<{ items: FoundAppDto[] }>('GET', '/v1/found-apps').then((r) => r.items),
   adoptFoundApp: (home: string, passphrase: string, name?: string) => call<InstanceSummary>('POST', '/v1/found-apps/adopt', name ? { home, passphrase, name } : { home, passphrase }),

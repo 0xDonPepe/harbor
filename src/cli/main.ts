@@ -287,8 +287,9 @@ catalogCmd
     const api = client();
     const before = await api.get<CatalogStatusDto>('/v1/catalog/status');
     const s = await api.post<CatalogStatusDto>('/v1/catalog/refresh', {});
-    const outcome = !s.source ? 'Catalog updates are off.' : s.error ? `Could not update the catalog: ${s.error}` : s.serial > before.serial ? 'New apps and updates loaded.' : 'Up to date.';
-    out(s, () => `${outcome}\n${catalogStatusText(s)}`);
+    // Updates off: the status text says so once; exit 0 (nothing failed, there is nothing to check).
+    const outcome = !s.source ? null : s.error ? `Could not update the catalog: ${s.error}` : s.serial > before.serial ? 'New apps and updates loaded.' : 'Up to date.';
+    out(s, () => (outcome ? `${outcome}\n` : '') + catalogStatusText(s));
     if (s.source && s.error) process.exitCode = 1;
   });
 
@@ -413,7 +414,7 @@ program
 
 program
   .command('update <instance>')
-  .description('update an installed app to the newest revision of its package (bundled after a Harbor upgrade, or uploaded); keeps data, ports and addresses; rolls back automatically if the new release does not start')
+  .description('update an installed app to the newest revision of its package (from the official catalog, which Harbor refreshes on its own, or your upload); keeps data, ports and addresses; rolls back automatically if the new release does not start')
   .option('--storage <claim=/host/path>', 'folder for a storage claim the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--secret <id=@file|id=->', 'a value for an operator-provided secret the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--link <id=app[/endpoint]>', 'provider for a link the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])

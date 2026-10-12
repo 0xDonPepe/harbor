@@ -281,6 +281,18 @@ Review fixes (daemon), local, fake adapter (`pnpm lint`, `pnpm typecheck` pass; 
   the same name and port); with a `minHarbor: 99.0.0` catalog the installed app's icon is still served;
   restore of a package gated by `minHarbor` answers 409 `INVALID_STATE` "needs Harbor 99.0.0 or newer".
 
+Review fixes (surface + tooling), local:
+- `pnpm test` 292 passed (new: release-tag helpers — `releases/latest` Location → `c<serial>`, refusing
+  another repo, a `v` tag, extra path segments; `pnpm package` now fetches all three files from
+  `releases/download/c<serial>/` and requires the signed serial to match the tag).
+- `pnpm test:e2e` 30 passed: the main e2e daemon now has catalog checks on (`HARBOR_DEV_CATALOG_URL`,
+  closed loopback port; fake mode answers 404). *Check for new apps* is visible and clickable, shows
+  *Checking…*, then the error in role=status; after a reload the line says "Last check failed: …" and
+  "· checked just now". The setup daemon (url null) covers "Catalog updates are off".
+- `pnpm dev:ui` `?catalog=error|new|off` viewed in Chromium: each state renders as described.
+- `scripts/vm/run-vm-tests.mjs`, `qualify-catalog.mjs`, `lib.mjs`: `node --check` only (they pin the
+  box to the seed and assert it; not run — they need the droplet).
+
 Not verified: the harbor-apps workflow on GitHub Actions, a signature by the real key, a download from
 GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
 seed. These need the first harbor-apps release and a live run on a test machine or a droplet.

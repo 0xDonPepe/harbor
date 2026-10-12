@@ -141,7 +141,7 @@ without a restart; each Harbor release ships the latest as the seed. Next:
 - [ ] **Key rotation procedure.** Config already takes several `publicKeys`: ship a Harbor release that
       trusts old + new, switch the `CATALOG_SIGNING_KEY` secret and `keys/harbor-apps.pub`, then drop the
       old key in a later release. Write it down (and what to do if the key leaks) before it is needed.
-- [ ] **Download by tag, not `releases/latest`.** A release published between the `catalog.json` and
+- [ ] **Daemon: download by tag, not `releases/latest`** (`pnpm package` already does, via `catalogTagFromLocation`). A release published between the `catalog.json` and
       `catalog.zip` fetches mixes two bundles; the daemon now starts such a check over once (signature or
       checksum mismatch). Cleaner: resolve the `c<serial>` tag once and fetch all three files from
       `releases/download/c<serial>/`, requiring `meta.serial` to match.

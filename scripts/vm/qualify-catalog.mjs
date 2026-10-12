@@ -12,7 +12,7 @@ import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { Evidence, ROOT, cli, cliOk, fail, resolveTarget, sleep, waitFor } from './lib.mjs';
+import { Evidence, ROOT, assertSeedCatalog, cli, cliOk, fail, pinCatalogToSeed, resolveTarget, sleep, waitFor } from './lib.mjs';
 import { resolveCatalogDir } from '../catalog-dir.mjs';
 
 const args = process.argv.slice(2);
@@ -81,6 +81,8 @@ async function prepareHost() {
   const b = target.ssh(`cd /root && ./${ARCHIVE_DIR}/bin/harbor bootstrap --yes ${flags} 2>&1`, { input: fresh ? ADMIN.password + '\n' : undefined, timeoutMs: 1800_000 });
   ev.file('bootstrap.log', b.stdout + b.stderr);
   if (b.code !== 0) throw new Error(`bootstrap failed (exit ${b.code}); see bootstrap.log`);
+  // decision 158: results are recorded against the archive's seed revisions, so no downloaded catalog may take over
+  pinCatalogToSeed(target);
   await openTunnels();
   // Log in first: on a fresh host the CLI has no token and `doctor` reports system: null.
   const login = cli(target, ['login', '--username', ADMIN.username, '--password-stdin'], { input: ADMIN.password + '\n' });
@@ -88,6 +90,7 @@ async function prepareHost() {
   // wait for any operation a previous (interrupted) pass left running before touching state
   await waitFor(() => (cliOk(target, ['doctor']).system?.busyOperationId ? null : true), { timeoutMs: 1800_000, intervalMs: 10_000, what: 'no operation in flight' });
   const doctor = cliOk(target, ['doctor']);
+  const catalog = assertSeedCatalog(target);
   const versions = {
     node: ssh('/opt/harbor/node/bin/node --version').trim(),
     docker: ssh("docker version --format '{{.Server.Version}}'").trim(),
@@ -95,7 +98,7 @@ async function prepareHost() {
     ubuntu: ssh('lsb_release -ds').trim(),
     arch: ssh('uname -m').trim(),
   };
-  ev.record('HOST', 'Host prepared: Harbor bootstrapped from the release archive', 'pass', { versions, installationId: doctor.system.installationId, fresh, rebuilt: FRESH }, [`Docker ${versions.docker}, Compose ${versions.compose}, Node ${versions.node}, ${versions.ubuntu} ${versions.arch}`]);
+  ev.record('HOST', 'Host prepared: Harbor bootstrapped from the release archive', 'pass', { versions, installationId: doctor.system.installationId, fresh, rebuilt: FRESH, catalog }, [`Docker ${versions.docker}, Compose ${versions.compose}, Node ${versions.node}, ${versions.ubuntu} ${versions.arch}`, `app catalog pinned to the archive seed (serial ${catalog.serial}, updates off)`]);
   return versions;
 }
 
@@ -206,10 +209,19 @@ async function main() {
       }
     }
   }
+  // Still the seed the drift check compared? Otherwise the installs above ran other revisions: record nothing.
+  let seedHeld = true;
+  try {
+    assertSeedCatalog(target);
+  } catch (e) {
+    seedHeld = false;
+    ev.record('CATALOG', 'The box served the archive seed for the whole run', 'fail', { error: e.message }, [String(e.message)]);
+    console.log(`[FAIL] ${e.message}; nothing recorded into release.json`);
+  }
   ev.file('report.json', JSON.stringify({ runId, target: target.name, versions, results, results_detail: ev.results }, null, 2));
   const md = [`# Catalog qualification ${runId}`, '', `Host: ${versions.ubuntu} ${versions.arch}, Docker ${versions.docker}, Compose ${versions.compose}, Node ${versions.node}${FRESH ? ' (fresh VM)' : ''}`, '', '| Package | Result | Notes |', '|---|---|---|', ...ev.results.filter((r) => r.id !== 'HOST').map((r) => `| ${r.id} | ${r.status} | ${r.notes.join('; ').replace(/\|/g, '/')} |`), ''].join('\n');
   writeFileSync(path.join(ev.dir, 'report.md'), md);
-  if (RECORD) {
+  if (RECORD && seedHeld) {
     for (const [id, status] of Object.entries(results)) {
       const file = path.join(CATALOG, id, 'release.json');
       const rel = JSON.parse(readFileSync(file, 'utf8'));
@@ -234,7 +246,7 @@ async function main() {
   tunnel?.close();
   const failed = Object.values(results).filter((s) => s !== 'passed').length;
   console.log(`\n${Object.keys(results).length} packages, ${failed} blocked. Report: ${path.relative(ROOT, ev.dir)}/report.md`);
-  process.exit(failed ? 1 : 0);
+  process.exit(failed || !seedHeld ? 1 : 0);
 }
 
 main().catch(async (e) => {

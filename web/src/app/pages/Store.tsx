@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CatalogItemDto, CatalogStatusDto, PackageSourceDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
 import { StoreCard } from '../components';
-import { categoryLabel } from '../format';
+import { categoryLabel, fmtAgo } from '../format';
 import type { Console } from '../store';
 import { BackupPlaces } from './Backups';
 
@@ -112,13 +112,20 @@ function GitSources() {
 }
 
 // Decision 158: which official catalog this Harbor uses, and a quiet way to look for a newer one now
-// (Harbor also checks on its own every six hours). No button when updates are off.
+// (Harbor also checks on its own every six hours). No button when updates are off. A stored failure of
+// the automatic check shows on load, so a stuck catalog is never silent.
 function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
   const [st, setSt] = useState<CatalogStatusDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ text: string; error: boolean } | null>(null);
   useEffect(() => {
-    api.catalogStatus().then(setSt, () => setSt(null));
+    api.catalogStatus().then(
+      (s) => {
+        setSt(s);
+        if (s.source && s.error) setResult({ text: `Last check failed: ${s.error}`, error: true });
+      },
+      () => setSt(null),
+    );
   }, []);
   if (!st) return null;
   const from = st.createdAt ? new Date(st.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
@@ -142,6 +149,7 @@ function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
   return (
     <div className="catalog-line row wrap small muted">
       <span>{from ? `App catalog from ${from}` : 'App catalog bundled with this Harbor'}</span>
+      {st.source && st.checkedAt && <span title={new Date(st.checkedAt).toLocaleString()}>· checked {fmtAgo(st.checkedAt)}</span>}
       {st.source ? (
         <button className="btn ghost small" disabled={busy} onClick={() => void check()}>
           {busy ? 'Checking…' : 'Check for new apps'}

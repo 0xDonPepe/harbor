@@ -87,6 +87,43 @@ export function verifyBundleMeta(meta: Buffer, sig: string, publicKeys: readonly
   return parseBundleMeta(meta);
 }
 
+// Release tags: harbor-apps tags each bundle c<serial>. A build fetching three files from `releases/latest/download`
+// could mix two bundles when a release lands in between, so `pnpm package` resolves the tag once (the Location of
+// `<base>/latest`) and downloads every file from `<base>/download/c<serial>`.
+const LATEST_DOWNLOAD_SUFFIX = '/latest/download';
+
+// `https://host/owner/repo/releases/latest/download` → `https://host/owner/repo/releases`.
+export function catalogReleasesBase(latestDownloadUrl: string): string {
+  const u = latestDownloadUrl.replace(/\/+$/, '');
+  if (!u.endsWith(LATEST_DOWNLOAD_SUFFIX)) throw new Error(`${latestDownloadUrl} is not a .../releases/latest/download URL`);
+  return u.slice(0, -LATEST_DOWNLOAD_SUFFIX.length);
+}
+
+// The serial of the release a `<base>/latest` redirect points at (Location `<base>/tag/c<serial>`, absolute or not).
+export function catalogTagFromLocation(location: string | null | undefined, releasesBase: string): number {
+  const fail = (): never => {
+    throw new Error(`could not resolve the latest catalog release from ${releasesBase}/latest (Location: ${JSON.stringify(location ?? null)})`);
+  };
+  if (!location) return fail();
+  let target: URL;
+  try {
+    target = new URL(location, releasesBase + '/');
+  } catch {
+    return fail();
+  }
+  const base = new URL(releasesBase);
+  if (target.origin !== base.origin || target.search || target.hash) return fail();
+  const prefix = `${base.pathname.replace(/\/+$/, '')}/tag/c`;
+  if (!target.pathname.startsWith(prefix)) return fail();
+  const digits = target.pathname.slice(prefix.length);
+  if (!/^[1-9][0-9]{0,15}$/.test(digits)) return fail();
+  return Number(digits);
+}
+
+export function catalogDownloadBase(releasesBase: string, serial: number): string {
+  return `${releasesBase.replace(/\/+$/, '')}/download/c${serial}`;
+}
+
 // Verify a downloaded bundle end to end and return its files (catalog layout, index.json at the root).
 export function openBundle(input: { meta: Buffer; sig: string; zip: Buffer }, publicKeys: readonly string[]): { meta: CatalogBundleMeta; files: Map<string, Buffer> } {
   const meta = verifyBundleMeta(input.meta, input.sig, publicKeys);

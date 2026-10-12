@@ -47,4 +47,9 @@ test('first-run wizard: name the machine, create the account with the setup code
   await expect(rec).toContainText('Issued');
   await expect(rec.locator('code')).toHaveCount(0);
   await expect(rec.getByRole('button', { name: 'Replace the recovery key' })).toBeVisible();
+  // decision 158: this daemon runs with catalog updates off (catalog.url null): the Store says so, no button
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await expect(page.getByText(/^App catalog (from|bundled with this Harbor)/)).toBeVisible();
+  await expect(page.getByText('· Catalog updates are off', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check for new apps' })).toHaveCount(0);
 });

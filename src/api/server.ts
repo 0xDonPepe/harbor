@@ -223,14 +223,14 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
 
   // --- reads
   app.get('/v1/system', { preHandler: requireAuth, schema: { description: 'Daemon/Docker availability.' } }, async () => service.system());
-  app.get('/v1/catalog', { preHandler: requireAuth, schema: { description: 'Bundled packages.' } }, async () => ({ items: service.catalog() }));
+  app.get('/v1/catalog', { preHandler: requireAuth, schema: { description: 'The app catalog: the official catalog (bundled with this release or downloaded since) plus your own uploaded or git-source packages.' } }, async () => ({ items: service.catalog() }));
   app.get('/v1/catalog/status', { preHandler: requireAuth, schema: { description: 'The official app catalog in use (bundled with this release or downloaded since) and the last check for a newer signed one.', response: { 200: CATALOG_STATUS_SCHEMA } } }, async () => service.catalogStatus());
   app.post('/v1/catalog/refresh', { preHandler: requireAuth, schema: { description: 'Check the catalog repository now for a newer signed catalog and switch to it when it verifies. Never touches running apps; a failure leaves the catalog unchanged and is reported in `error`.', response: { 200: CATALOG_STATUS_SCHEMA } } }, async () => service.catalogRefresh());
   app.get(
     '/v1/catalog/:id/asset/:name',
     // Unauthenticated on purpose: <img src> cannot carry the bearer token, and the assets are static
-    // files of the bundled, hash-verified catalog (no instance or host data). Same-origin/Host guards still apply.
-    { schema: { description: 'Package presentation asset (icon/gallery) from the bundled package. Open (no session): static catalog content only.', security: [], params: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', pattern: ID_PATTERN }, name: { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,63}\\.(svg|png|jpg|jpeg|webp)$' } } } } },
+    // files of the official or uploaded, hash-verified package (no instance or host data). Same-origin/Host guards still apply.
+    { schema: { description: 'Package presentation asset (icon/gallery) from the official or uploaded package. Open (no session): static catalog content only.', security: [], params: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', pattern: ID_PATTERN }, name: { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,63}\\.(svg|png|jpg|jpeg|webp)$' } } } } },
     async (req, reply) => {
       const { id, name } = req.params as { id: string; name: string };
       const a = service.asset(id, name);

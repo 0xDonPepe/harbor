@@ -138,7 +138,12 @@ package's `release.json` qualification (`passed` or `blocked` with the reason).
 Since 0.28.0 (§9) the packages live in harbor-apps: pass `--catalog <dir>` (default `../harbor-apps/apps`)
 and the results are written into that checkout. The script refuses to record anything when the box's
 `harbor catalog` revisions differ from the checkout's, so build the archive from a bundle of the same
-checkout (`HARBOR_CATALOG_BUNDLE=<dir> pnpm package`) or narrow the run with `--only`.
+checkout (`HARBOR_CATALOG_BUNDLE=<dir> pnpm package`) or narrow the run with `--only`. Right after
+bootstrap, both the qualification and the VM suite (`run-vm-tests.mjs`, A01) pin the box to the archive's
+seed: `catalog: {url: null}` in `/etc/harbor/harbor.json` (root:harbor 0640), `/var/lib/harbor/catalog`
+removed, harbor restarted. They then assert `harbor catalog status` reports origin `bundled` with the
+seed's serial: in A02 before the tamper steps, and in qualification again just before results are
+recorded (a mismatch records nothing). Without that pin a downloaded catalog could take over mid-run.
 
 ## 6. Your own apps and updates (added 2026-09-15, v0.6.0)
 
@@ -211,7 +216,9 @@ the signed sha256 and size, and the index validates with every listed folder pre
 **On the box.**
 
 - Seed: `config.catalogDir` (`/opt/harbor/catalog`), extracted from the signed bundle by `pnpm package`
-  (which fails rather than ship an empty or unverified catalog), with `catalog.json` + `.sig` kept
+  (which resolves `releases/latest` to its `c<serial>` tag once, fetches all three files from
+  `releases/download/c<serial>/`, requires the signed serial to match the tag, and fails rather than ship
+  an empty or unverified catalog), with `catalog.json` + `.sig` kept
   verbatim. Without a `catalog.json` (dev, tests) the seed is serial 0. Read once at start.
 - Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
   (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
@@ -230,6 +237,8 @@ the signed sha256 and size, and the index validates with every listed folder pre
   mismatch (or a zip over its signed size) is what a release published between the fetches from
   `releases/latest` looks like, so such a check starts over once. Any failure leaves the active catalog
   as it was and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
+  The Store's catalog line shows a stored failure on load ("Last check failed: …", role=status) and
+  "· checked <relative time>", so a stuck automatic check is never silent.
 - Refresh is a direct route, not a plan: it never touches Docker. Installed apps see a higher revision
   on the next observer tick as an ordinary update — the notification, or an automatic `update` plan for
   instances with auto-update on. A plan made before a swap still pins its revision and hashes: if the
@@ -257,6 +266,6 @@ release job fails: no catalog yet) → write that commit's sha into `.harbor-ref
 `c<serial>`) → re-run Harbor's release job. Later Harbor changes reach the catalog tooling only through a
 reviewed `.harbor-ref` bump.
 
-**Not done yet** (docs/TODO.md): a key rotation procedure, downloading by tag instead of
-`releases/latest` (today a check that reads two releases starts over once), persisting `checkedAt`,
+**Not done yet** (docs/TODO.md): a key rotation procedure, the daemon downloading by tag instead of
+`releases/latest` (`pnpm package` already pins the tag; today a check that reads two releases starts over once), persisting `checkedAt`,
 and a review policy for community submissions.

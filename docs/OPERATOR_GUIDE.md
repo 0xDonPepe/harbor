@@ -644,7 +644,11 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   the same id, yours stays in charge of that id. Remove your package to get the official one.
 - `harbor catalog status` prints the catalog's date, where it came from (*downloaded* or *bundled with
   this Harbor*), and the last check with its error, if any. The last check is forgotten when Harbor
-  restarts ("Not checked since the daemon started").
+  restarts ("Not checked since the daemon started"). The App Store line shows the same thing: when the
+  last check (automatic or yours) failed it says **Last check failed: …**, plus *· checked 5 min ago*.
+- Exit codes: `harbor catalog status` exits 0. `harbor catalog refresh` exits 0 for *Up to date*,
+  *New apps and updates loaded*, and when catalog updates are off (it prints the off line once; nothing
+  was checked — `--json` shows `"source": null`); it exits 1 when the check failed.
 
 ### Values an app asks you for, and apps that talk to each other
 
@@ -808,7 +812,7 @@ Notes:
 | `DOCKER_UNAVAILABLE` (503) | `systemctl status docker`. |
 | `http://harbor.local` stops resolving but `http://<ip>/` works | On the machine: `sudo systemctl restart avahi-daemon.socket avahi-daemon.service` (both — a service-only restart can leave avahi answering some queries and not others), then `avahi-resolve -n harbor.local` must print only the machine's LAN address; if it prints a `172.x` Docker address, re-run the installer (it pins avahi to the LAN interface). On a Mac that still fails: toggle Wi-Fi off/on, or `sudo launchctl kickstart -k system/com.apple.mDNSResponder`. `dig @224.0.0.251 -p 5353 harbor.local +short` from the client shows whether the box answers on the wire at all. |
 | Home stays on "Loading your apps…" and public sites time out | Caddy stopped answering (seen once after turning secure addresses on, before 0.25.2). On the machine: `curl --max-time 5 http://127.0.0.1:2019/config/` hangs → `sudo systemctl restart caddy` (it comes back with its last good configuration). |
-| *Check for new apps* shows an error, or `harbor catalog refresh` says "Could not update the catalog: …" (exit 1) | Nothing was changed: Harbor keeps the catalog it has. The message says why (no internet, the server answered an error, a signature or checksum that does not check out, "dated in the future" — check the machine's clock). When a new catalog is published during a check, Harbor checks again once by itself. Try again later, or check that the machine can reach `github.com`. |
+| *Check for new apps* shows an error, the App Store says "Last check failed: …", or `harbor catalog refresh` says "Could not update the catalog: …" (exit 1) | Nothing was changed: Harbor keeps the catalog it has. The message says why (no internet, the server answered an error, a signature or checksum that does not check out, "dated in the future" — check the machine's clock). When a new catalog is published during a check, Harbor checks again once by itself. Try again later, or check that the machine can reach `github.com`. |
 | Login 429 | Rate limited after repeated failures; wait ten minutes. |
 | UI says "session ended" after reload | Expected unless you ticked *Remember this browser*: short sessions live in memory only. Log in again; running operations continue. |
 | Public address stays `degraded` | Check `dig +short <hostname>` resolves to this host and that 80/443 are open in your cloud firewall; `journalctl -u caddy` shows certificate attempts. |

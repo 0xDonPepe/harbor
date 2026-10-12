@@ -428,8 +428,9 @@ The serial is the commit's committer time in unix seconds. Boxes only ever move 
 - a commit older than the latest release is skipped when `main` has moved on (the newer commit
   publishes), and fails as clock skew when it is still `main`'s tip.
 
-Harbor releases ship the latest catalog too: `pnpm package` downloads it and refuses to build an
-archive whose catalog does not verify against the pinned key.
+Harbor releases ship the latest catalog too: `pnpm package` resolves the latest `c<serial>` tag once,
+downloads all three files from that tag, and refuses to build an archive whose catalog does not verify
+against the pinned key or whose signed serial differs from the tag.
 
 **Ids.** Official ids are reserved: uploading or importing a package with one is refused ("the id …
 belongs to a built-in app"), unless you already had your own package with that id before the official

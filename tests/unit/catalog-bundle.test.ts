@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { OFFICIAL_CATALOG_PUBLIC_KEY, openBundle, parseBundleMeta, verifyBundleMeta, verifyBundleSignature } from '../../src/packages/catalog-bundle.js';
+import { OFFICIAL_CATALOG_PUBLIC_KEY, OFFICIAL_CATALOG_URL, catalogDownloadBase, catalogReleasesBase, catalogTagFromLocation, openBundle, parseBundleMeta, verifyBundleMeta, verifyBundleSignature } from '../../src/packages/catalog-bundle.js';
 import { writeZip } from '../../src/packages/zip.js';
 import { buildBundle, testSigner } from './bundle-helpers.js';
 
@@ -66,5 +66,24 @@ describe('official catalog bundles (decision 158)', () => {
     expect(() => parseBundleMeta(Buffer.alloc(70 * 1024, 32))).toThrow(/exceeds/);
     const noIndex = buildBundle({ 'demo/README.md': '# demo\n', 'other/README.md': 'x' }, signer, { serial: 9 });
     expect(() => openBundle(noIndex, keys)).toThrow(/no index\.json/);
+  });
+});
+
+// pnpm package resolves "latest" once and downloads all three files from that fixed tag (no mixed bundle).
+describe('catalog release tags', () => {
+  const base = 'https://github.com/carlosalaniz/harbor-apps/releases';
+  it('derives the releases base from a .../releases/latest/download URL', () => {
+    expect(catalogReleasesBase(OFFICIAL_CATALOG_URL)).toBe(base);
+    expect(catalogReleasesBase(`${base}/latest/download/`)).toBe(base);
+    expect(() => catalogReleasesBase('https://example.test/catalog')).toThrow(/releases\/latest\/download/);
+  });
+
+  it('reads c<serial> from the Location of releases/latest and pins the download URL', () => {
+    expect(catalogTagFromLocation(`${base}/tag/c1791000000`, base)).toBe(1_791_000_000);
+    expect(catalogTagFromLocation('/carlosalaniz/harbor-apps/releases/tag/c42', base)).toBe(42); // relative Location
+    expect(catalogDownloadBase(base, 42)).toBe(`${base}/download/c42`);
+    for (const bad of [null, '', `${base}/tag/v0.28.0`, `${base}/tag/c`, `${base}/tag/c0`, `${base}/tag/c12x`, base, 'https://github.com/someone-else/harbor-apps/releases/tag/c42', `${base}/tag/c42/extra`]) {
+      expect(() => catalogTagFromLocation(bad, base)).toThrow(/latest catalog release/);
+    }
   });
 });

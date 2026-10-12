@@ -7,6 +7,7 @@
 // No npm/pnpm/compilation happens on the destination host.
 // catalog/ is the offline seed (decision 158): the latest signed bundle published by carlosalaniz/harbor-apps,
 // verified against the pinned key and extracted (index.json + package dirs + catalog.json + catalog.json.sig).
+// "Latest" is resolved once to its tag c<serial>; all three files come from releases/download/c<serial>.
 //   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json/catalog.json.sig from <dir> instead of downloading
 //   HARBOR_CATALOG_PUBLIC_KEY=<b64>  trust this SPKI key instead of the official one (local test builds only;
 //                                    recorded in release.json, never set in CI)
@@ -61,7 +62,18 @@ async function fetchAsset(url, max) {
   if (bytes.length > max) throw new Error(`${url}: ${bytes.length} bytes exceeds ${max}`);
   return bytes;
 }
-const catalogSource = process.env.HARBOR_CATALOG_BUNDLE ? path.resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARBOR_CATALOG_BUNDLE) : bundleLib.OFFICIAL_CATALOG_URL;
+// Resolve "latest" once (the Location of releases/latest names tag c<serial>) and fetch all three files from that
+// fixed tag: per-file `latest/download` requests could mix two bundles when harbor-apps publishes mid-download.
+async function resolveCatalogTag() {
+  const releases = bundleLib.catalogReleasesBase(bundleLib.OFFICIAL_CATALOG_URL);
+  console.log(`resolving ${releases}/latest`);
+  const res = await fetch(`${releases}/latest`, { redirect: 'manual', signal: globalThis.AbortSignal.timeout(60_000) });
+  if (res.status < 300 || res.status > 399) throw new Error(`${releases}/latest: HTTP ${res.status}, expected a redirect to the latest tag (is there a published catalog release on carlosalaniz/harbor-apps?)`);
+  const serial = bundleLib.catalogTagFromLocation(res.headers.get('location'), releases);
+  return { serial, url: bundleLib.catalogDownloadBase(releases, serial) };
+}
+const pinned = process.env.HARBOR_CATALOG_BUNDLE ? null : await resolveCatalogTag();
+const catalogSource = pinned ? pinned.url : path.resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARBOR_CATALOG_BUNDLE);
 const bundleRaw = {};
 for (const [k, name] of Object.entries(bundleLib.BUNDLE_FILES)) {
   const max = k === 'zip' ? bundleLib.MAX_BUNDLE_ZIP_BYTES : bundleLib.MAX_BUNDLE_META_BYTES;
@@ -70,6 +82,7 @@ for (const [k, name] of Object.entries(bundleLib.BUNDLE_FILES)) {
 let bundle;
 try {
   bundle = bundleLib.openBundle({ meta: bundleRaw.meta, sig: bundleRaw.sig.toString('utf8'), zip: bundleRaw.zip }, [catalogKey]);
+  if (pinned && bundle.meta.serial !== pinned.serial) throw new Error(`tag c${pinned.serial} carries a catalog with serial ${bundle.meta.serial}`);
 } catch (e) {
   console.error(`app catalog from ${catalogSource}: ${e.message}; no release archive was built`);
   process.exit(1);

@@ -34,7 +34,7 @@ const config = normalizeConfig(
   {
     stateDir,
     userDataDir: path.join(resolvedRoot, 'data'),
-    catalogDir: path.resolve('catalog'),
+    catalogDir: path.resolve(process.env['HARBOR_DEV_CATALOG'] ?? 'tests/fixtures/catalog'),
     uiDir: existsSync(path.resolve('web/dist/index.html')) ? path.resolve('web/dist') : null,
     listen: { host: '127.0.0.1', port },
     docker: socket ? { mode: 'socket', socketPath: socket, cliPluginDirs: [path.join(homedir(), '.docker', 'cli-plugins')].filter((d) => existsSync(d)) } : { mode: 'fake' },

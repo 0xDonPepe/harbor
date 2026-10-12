@@ -23,7 +23,9 @@ jobs:
       - run: pnpm test
       - run: pnpm test:integration
       - run: pnpm build
-      - run: pnpm catalog:verify
+      # the frozen test copies; the real catalog is verified by the carlosalaniz/harbor-apps CI (decision 158)
+      - run: pnpm catalog:verify tests/fixtures/catalog --quiet
+      - run: pnpm catalog:hash --catalog tests/fixtures/catalog --check
       - run: pnpm openapi -- --check
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e

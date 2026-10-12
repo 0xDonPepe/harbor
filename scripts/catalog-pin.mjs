@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Editorial helper: pin a package's images to immutable digests and write release.json.
-//   node scripts/catalog-pin.mjs <packageId> [--check]
+//   node scripts/catalog-pin.mjs [--catalog <dir>] <packageId> [--check]
+// The catalog dir resolves as in scripts/catalog-dir.mjs (HARBOR_CATALOG_DIR, then ../harbor-apps/apps).
 // Authoring form: compose.yaml may reference `image: repo:tag` (or an already pinned `repo@sha256:...`
 // together with `# tag: <tag>` on the same line). The script resolves each tag through the registry
 // HTTP API (scripts/registry.mjs, no Docker daemon), rewrites the image reference to `repo@<index digest>`,
@@ -10,10 +11,19 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { resolve } from './registry.mjs';
+import { HARBOR_ROOT, catalogArg } from './catalog-dir.mjs';
 
-const [id, flag] = process.argv.slice(2);
-if (!id) { console.error('usage: catalog-pin.mjs <packageId> [--check]'); process.exit(2); }
-const dir = path.resolve('catalog', id);
+let parsed;
+try {
+  parsed = catalogArg(process.argv.slice(2));
+} catch (e) {
+  console.error(e.message);
+  process.exit(2);
+}
+const [id, flag] = parsed.rest;
+if (!id) { console.error('usage: catalog-pin.mjs [--catalog <dir>] <packageId> [--check]'); process.exit(2); }
+const catalogDir = parsed.dir;
+const dir = path.resolve(catalogDir, id);
 const composePath = path.join(dir, 'compose.yaml');
 const releasePath = path.join(dir, 'release.json');
 let compose = readFileSync(composePath, 'utf8');
@@ -84,4 +94,4 @@ for (const svc of Object.keys(release.images)) if (!images[svc]) delete release.
 compose = lines.join('\n');
 writeFileSync(composePath, compose);
 writeFileSync(releasePath, JSON.stringify(release, null, 2) + '\n');
-execFileSync('pnpm', ['tsx', 'scripts/catalog-hash.ts', id], { stdio: 'inherit' });
+execFileSync('pnpm', ['tsx', 'scripts/catalog-hash.ts', '--catalog', catalogDir, id], { stdio: 'inherit', cwd: HARBOR_ROOT });

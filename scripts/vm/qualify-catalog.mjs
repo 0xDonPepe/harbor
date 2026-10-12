@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 // Live catalog qualification on the designated disposable VM:
-//   node scripts/vm/qualify-catalog.mjs [--fresh] [--only immich,jellyfin] [--archive <tar.gz>] [--no-record]
+//   node scripts/vm/qualify-catalog.mjs [--fresh] [--only immich,jellyfin] [--archive <tar.gz>] [--catalog <dir>] [--no-record]
 // For every bundled package (or --only): install with the CLI, wait for readiness, open the UI in a real
 // browser (screenshot + title + health probe), then remove. Packages with external storage claims are
 // additionally installed once with a host folder ("bring your own folder"). Results are written to
 // docs/evidence/catalog-<timestamp>/ and, unless --no-record, into each package's release.json qualification.
 // --fresh rebuilds the VM and bootstraps Harbor from the release archive first (recommended: clean host).
+// --catalog is the harbor-apps checkout (its apps/ folder; default as in scripts/catalog-dir.mjs) whose
+// release.json files get the result. The box must list the same revisions, or nothing is recorded.
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Evidence, ROOT, cli, cliOk, fail, resolveTarget, sleep, waitFor } from './lib.mjs';
+import { resolveCatalogDir } from '../catalog-dir.mjs';
 
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);
@@ -30,6 +33,12 @@ const EXT_ROOT = '/mnt/harbor-test-storage'; // inside harbor.service's writable
 const SUFFIX = 'q' + new Date().toISOString().slice(11, 16).replace(':', '');
 
 if (!existsSync(ARCHIVE)) fail(`release archive not found: ${ARCHIVE} (run pnpm package)`, 2);
+let CATALOG;
+try {
+  CATALOG = resolveCatalogDir(opt('--catalog', null));
+} catch (e) {
+  fail(e.message, 2);
+}
 const target = resolveTarget();
 const runId = `catalog-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
 const ev = new Evidence(path.join(ROOT, 'docs', 'evidence', runId));
@@ -37,9 +46,9 @@ const ssh = (cmd, o) => target.sshOk(cmd, o);
 const sshTry = (cmd, o) => target.ssh(cmd, o);
 console.log(`target: ${target.name}\nevidence: ${path.relative(ROOT, ev.dir)}\nfresh: ${FRESH}`);
 
-const index = JSON.parse(readFileSync(path.join(ROOT, 'catalog', 'index.json'), 'utf8'));
+const index = JSON.parse(readFileSync(path.join(CATALOG, 'index.json'), 'utf8'));
 const ids = Object.keys(index.packages).filter((id) => !ONLY || ONLY.includes(id));
-const manifests = Object.fromEntries(ids.map((id) => [id, readFileSync(path.join(ROOT, 'catalog', id, 'manifest.yaml'), 'utf8')]));
+const manifests = Object.fromEntries(ids.map((id) => [id, readFileSync(path.join(CATALOG, id, 'manifest.yaml'), 'utf8')]));
 const healthPathOf = (m) => /^\s*path:\s*(\S+)\s*$/m.exec(m.split('health:')[1] ?? '')?.[1] ?? '/';
 const expectedOf = (m) => (/expectedStatus:\s*\[([^\]]+)\]/.exec(m)?.[1] ?? '200').split(',').map((s) => Number(s.trim()));
 const externalClaims = (m) => [...m.matchAll(/^\s+- id: ([a-z0-9-]+)\n(?:.*\n){0,3}?\s+external:/gm)].map((x) => x[1]);
@@ -154,6 +163,10 @@ async function qualifyOne(id, variant, storageArgs) {
 
 async function main() {
   const versions = await prepareHost();
+  // A result is recorded against the checkout, so the box must be running the same package revisions.
+  const onBox = Object.fromEntries(cliOk(target, ['catalog']).map((c) => [c.id, c.revision]));
+  const drift = ids.filter((id) => onBox[id] !== index.packages[id].revision).map((id) => `${id} (box ${onBox[id] ?? 'missing'}, checkout ${index.packages[id].revision})`);
+  if (drift.length) fail(`the box's catalog differs from ${CATALOG}: ${drift.join(', ')}; package a bundle of this checkout (HARBOR_CATALOG_BUNDLE) or pass --only`, 2);
   ssh(`mkdir -p ${EXT_ROOT} && chmod 777 ${EXT_ROOT}`);
   const results = {};
   for (const id of ids) {
@@ -198,7 +211,7 @@ async function main() {
   writeFileSync(path.join(ev.dir, 'report.md'), md);
   if (RECORD) {
     for (const [id, status] of Object.entries(results)) {
-      const file = path.join(ROOT, 'catalog', id, 'release.json');
+      const file = path.join(CATALOG, id, 'release.json');
       const rel = JSON.parse(readFileSync(file, 'utf8'));
       const appVersions = Object.fromEntries(Object.entries(rel.images).map(([svc, img]) => [svc, img.appVersion ?? img.tag]));
       const r = ev.results.find((x) => x.id === id);

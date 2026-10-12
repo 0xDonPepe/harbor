@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 // Record a live qualification result in every bundled package's release.json.
-//   node scripts/catalog-qualify.mjs <run-dir> passed|blocked "note" ["note" ...]
+//   node scripts/catalog-qualify.mjs [--catalog <dir>] <run-dir> passed|blocked "note" ["note" ...]
+// The catalog dir resolves as in scripts/catalog-dir.mjs (HARBOR_CATALOG_DIR, then ../harbor-apps/apps).
 // Only run after `pnpm test:vm -- --fresh` produced the evidence in <run-dir>.
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { catalogArg } from './catalog-dir.mjs';
 
-const [runDir, status, ...notes] = process.argv.slice(2);
-if (!runDir || !['passed', 'blocked'].includes(status)) { console.error('usage: catalog-qualify.mjs <run-dir> passed|blocked [notes...]'); process.exit(2); }
+let parsed;
+try {
+  parsed = catalogArg(process.argv.slice(2));
+} catch (e) {
+  console.error(e.message);
+  process.exit(2);
+}
+const catalogDir = parsed.dir;
+const [runDir, status, ...notes] = parsed.rest;
+if (!runDir || !['passed', 'blocked'].includes(status)) { console.error('usage: catalog-qualify.mjs [--catalog <dir>] <run-dir> passed|blocked [notes...]'); process.exit(2); }
 const report = JSON.parse(readFileSync(path.join(runDir, 'report.json'), 'utf8'));
 const v = report.results.find((r) => r.id === 'A01')?.details?.versions ?? {};
-const index = JSON.parse(readFileSync('catalog/index.json', 'utf8'));
+const index = JSON.parse(readFileSync(path.join(catalogDir, 'index.json'), 'utf8'));
 for (const id of Object.keys(index.packages)) {
-  const file = path.join('catalog', id, 'release.json');
+  const file = path.join(catalogDir, id, 'release.json');
   const rel = JSON.parse(readFileSync(file, 'utf8'));
   const appVersions = Object.fromEntries(Object.entries(rel.images).map(([svc, img]) => [svc, img.appVersion ?? img.tag]));
   rel.qualification = {

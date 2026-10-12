@@ -9,7 +9,7 @@ import { validateManifestReferences, validateManifestShape } from '../../src/pac
 import { validateComposeSource } from '../../src/packages/compose-source.js';
 import { parseRestrictedYaml } from '../../src/packages/yaml.js';
 import { validatePackageFolder } from '../../src/packages/validate-folder.js';
-import { DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST } from './helpers.js';
+import { DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG } from './helpers.js';
 
 const y = (s: string) => parseRestrictedYaml(Buffer.from(s), 'x');
 const compose = validateComposeSource(y(MINIMAL_COMPOSE));
@@ -62,7 +62,7 @@ describe('compose command', () => {
 
 describe('harbor packages validate (decision 140)', () => {
   it('passes a bundled package and says what the import will still do', () => {
-    const r = validatePackageFolder(path.resolve(import.meta.dirname, '../../catalog/excalidraw'));
+    const r = validatePackageFolder(path.join(REPO_CATALOG, 'excalidraw'));
     expect(r.id).toBe('excalidraw');
     expect(r.notes.some((n) => /release\.json is replaced/.test(n))).toBe(true);
   });

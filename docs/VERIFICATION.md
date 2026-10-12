@@ -241,7 +241,7 @@ Local, fake adapter:
   config validation; `minHarbor`; an uploaded id keeps winning; the bundle builder and
   `catalog:hash --check`).
 - `pnpm test:integration` 213 passed + 3 live-Docker skipped (new `catalog-updates`: an installed app
-  gets the update-available notification and an auto-update app updates itself after a newer signed
+  gets the update-available notification and an auto-update app updates itself after a newer
   catalog swaps in, without a restart; a replay is a no-op and the download survives a daemon restart;
   a foreign key is refused; `minHarbor` lists as unavailable; `url: null` never fetches).
 - `pnpm test:e2e` 30 passed (the Store shows the catalog line and "Catalog updates are off", no button).

@@ -223,8 +223,9 @@ If the new release does not start or answer, Harbor puts the previous release ba
 the operation fails with a clear message and the app keeps running as before. Data migrations are the
 app's own business: Harbor never touches the contents of a volume.
 
-The same mechanism updates built-in apps: a new Harbor release ships a newer catalog revision, and every
-installed app from that package shows an update.
+The same mechanism updates built-in apps: a new official catalog (§10) carries a higher revision, and
+every installed app from that package shows an update (or updates itself, where the operator turned on
+automatic updates). This no longer waits for a Harbor release.
 
 ## 6. Handy commands
 
@@ -360,3 +361,65 @@ Rules the loader enforces (`src/backups/targets.ts`):
 - `obscure` and `rclone` only apply to rclone targets; a secret cannot have a default.
 - Any cloud rclone supports is a new package, not a Harbor release. One rclone does not support needs
   a new transport in the engine.
+
+## 10. Adding an app to the official catalog (harbor-apps)
+
+The built-in apps are not in this repository. They live in
+[carlosalaniz/harbor-apps](https://github.com/carlosalaniz/harbor-apps), one folder per app, in the same
+package format as above (decision 158). Every change merged there reaches Harbor boxes as a signed
+catalog within about 6 hours, without a Harbor release.
+
+```
+harbor-apps/
+  apps/index.json          id -> { revision, dir, optional minHarbor }
+  apps/<id>/manifest.yaml, compose.yaml, README.md, release.json (+ icon, screenshots)
+  keys/harbor-apps.pub     the public key Harbor pins
+  scripts/sign.mjs         signs a bundle in CI
+  .harbor-ref              the Harbor branch, tag or commit whose tools CI uses
+```
+
+**Contribution flow.** Clone both repositories side by side (`harbor/` and `harbor-apps/`) and run the
+tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; otherwise pass
+`--catalog <dir>` or set `HARBOR_CATALOG_DIR`.
+
+1. Edit `apps/<id>/`. Raise `release.revision` in the manifest **and** `revision` in `apps/index.json`
+   on every change that should reach boxes as an update.
+2. New or changed images: `node scripts/catalog-pin.mjs <id>` pins each `repo:tag` to its digest and
+   rewrites `release.json` (no Docker needed).
+3. `pnpm catalog:hash <id>` refreshes the file hashes (`--check` only reports stale ones);
+   `pnpm catalog:verify` loads every app exactly as the daemon does.
+4. Try it: `HARBOR_DEV_CATALOG=../harbor-apps/apps pnpm dev` shows the whole catalog in the dev console.
+5. Open a pull request on harbor-apps. Its CI runs `catalog:verify` and `catalog:hash --check` with
+   Harbor's own loader.
+
+**minHarbor.** An app that needs a newer Harbor feature sets `"minHarbor": "x.y.z"` on its entry in
+`apps/index.json`. An older Harbor lists it as unavailable ("needs Harbor x.y.z or newer"), refuses to
+install it, and offers no update to it. Scripts do not enforce it.
+
+**Qualification.** `"status": "passed"` in `release.json` only comes from a live run on a disposable
+droplet: `node scripts/vm/qualify-catalog.mjs --catalog <dir>` installs each app on a box running a
+Harbor archive, opens it in a real browser and writes the result into the checkout's `release.json`
+files. It refuses to record anything when the box's catalog revisions differ from the checkout (build
+the archive from a bundle of that checkout with `HARBOR_CATALOG_BUNDLE`, or use `--only`). Never set it
+by hand. A qualification change alone needs no revision bump.
+
+**Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `keys/`,
+`scripts/`, `.harbor-ref` or the workflow (or a manual run):
+
+1. verifies as above,
+2. `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` writes `catalog.zip`
+   (deterministic: index.json plus, per app, only the package files and the assets its manifest names)
+   and an unsigned `catalog.json` (zip sha256 + size, commit, serial, createdAt, package count),
+3. `scripts/sign.mjs` signs `catalog.json` with ed25519 (the `CATALOG_SIGNING_KEY` secret) and checks the
+   signature against `keys/harbor-apps.pub`; a key that does not match fails the job,
+4. `gh release create c<serial>` publishes the three files and marks the release latest.
+
+The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so a
+commit whose committer time is older than the latest release fails the job ("make a new commit"), and a
+commit in the same second as the previous one is skipped. Harbor releases ship the latest catalog too:
+`pnpm package` downloads it and refuses to build an archive whose catalog does not verify against the
+pinned key.
+
+**Ids.** Official ids are reserved: uploading or importing a package with one is refused ("the id …
+belongs to a built-in app"), unless you already had your own package with that id before the official
+catalog added it — then yours keeps the id on your box.

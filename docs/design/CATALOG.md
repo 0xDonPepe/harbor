@@ -135,10 +135,14 @@ droplet, waits for readiness, opens the UI in headless Chromium (title + screens
 inspects mounts and resources, removes the instance, and repeats once with host folders for every
 package that has external claims. Results land in `docs/evidence/catalog-<timestamp>/` and in each
 package's `release.json` qualification (`passed` or `blocked` with the reason).
+Since 0.28.0 (§9) the packages live in harbor-apps: pass `--catalog <dir>` (default `../harbor-apps/apps`)
+and the results are written into that checkout. The script refuses to record anything when the box's
+`harbor catalog` revisions differ from the checkout's, so build the archive from a bundle of the same
+checkout (`HARBOR_CATALOG_BUNDLE=<dir> pnpm package`) or narrow the run with `--only`.
 
 ## 6. Your own apps and updates (added 2026-09-15, v0.6.0)
 
-Two package roots behind one `PackageStore`: the bundled catalog (hash-verified, shipped with Harbor)
+Two package roots behind one `PackageStore`: the official catalog (hash-verified; shipped with Harbor, and since 0.28.0 also downloaded, §9)
 and `localPackagesDir` for packages the operator uploads as a zip. Uploads are validated exactly like
 bundled packages; Harbor writes `release.json` itself and pins tag images by digest through the registry
 API at upload (decision 61). The console shows them with a *Your app* badge and a *Your apps* filter.
@@ -167,3 +171,66 @@ when the new release does not start or answer. Developer guide: docs/DEVELOPER_P
 - Not in this round: links to platform tools, several providers per link, cross-machine links, and
   automatic restarts of a consumer when a provider's container port changes (an event says to Restart).
 
+## 9. The catalog moves to harbor-apps and updates itself (added 2026-10-11, v0.28.0, decision 158)
+
+**Where it lives.** carlosalaniz/harbor-apps: `apps/index.json` + `apps/<id>/`, same package format.
+Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its own tests, e2e and
+`pnpm dev`; `targets/` (backup place packages) stays in Harbor. Editorial scripts resolve the catalog as
+`--catalog <dir>` (or a positional dir), then `HARBOR_CATALOG_DIR`, then `../harbor-apps/apps`.
+
+**What is published.** One GitHub release `c<serial>` per change on harbor-apps `main`, three assets:
+
+| File | Content |
+|---|---|
+| `catalog.zip` | `index.json` at the root + per app only `manifest.yaml`, `compose.yaml`, `README.md`, `release.json` and the assets its manifest names; sorted, deterministic; ≤ 96 MiB, ≤ 4096 entries |
+| `catalog.json` | `{schemaVersion: 1, serial, commit, createdAt, zip: {sha256, bytes}, packages}`, ≤ 64 KiB — the only signed bytes |
+| `catalog.json.sig` | base64 ed25519 signature over the exact `catalog.json` bytes |
+
+`serial` = the commit's committer time (unix seconds). The release job refuses a serial that is not
+newer than the latest release and skips one that is already released.
+
+**Trust.** The public key (SPKI DER, base64) is pinned in `src/packages/catalog-bundle.ts`
+(`OFFICIAL_CATALOG_PUBLIC_KEY`) and in `keys/harbor-apps.pub`. The private key exists only as the
+harbor-apps `CATALOG_SIGNING_KEY` Actions secret plus an offline backup; `scripts/sign.mjs` verifies its
+own signature against the pinned key before anything is released. A box accepts a bundle only if the
+signature verifies against a configured key, the serial is strictly higher than the active one (no
+rollback, no replay), the zip matches the signed sha256 and size, and the index validates with every
+listed folder present.
+
+**On the box.**
+
+- Seed: `config.catalogDir` (`/opt/harbor/catalog`), extracted from the signed bundle by `pnpm package`
+  (which fails rather than ship an empty or unverified catalog), with `catalog.json` + `.sig` kept
+  verbatim. Without a `catalog.json` (dev, tests) the seed is serial 0. Read once at start.
+- Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
+  (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
+  pointer parses, its `index.json` exists and its serial beats the seed's; otherwise the seed. A Harbor
+  upgrade with a newer seed takes over by itself.
+- Check: a minute after start, then every 6 h, or on demand (`POST /v1/catalog/refresh`,
+  `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` and the
+  signature first (30 s each), stop if the serial is not newer, then `catalog.zip` (capped at the signed
+  size, 5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
+  prune all but the new folder and the one it replaced. Any failure leaves the active catalog as it was
+  and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
+- Refresh is a direct route, not a plan: it never touches Docker. Installed apps see a higher revision
+  on the next observer tick as an ordinary update — the notification, or an automatic `update` plan for
+  instances with auto-update on.
+- Config: `catalog: {url, publicKeys}` (1–8 keys). Default url
+  `https://github.com/carlosalaniz/harbor-apps/releases/latest/download`; https only (http just for
+  loopback); `url: null` means no timer and no fetch (dev, tests, openapi generation).
+
+**minHarbor.** Optional `"minHarbor": "x.y.z"` on an index entry. A Harbor older than that lists the app
+as unavailable ("needs Harbor x.y.z or newer"), install fails with INVALID_STATE and the next action
+"Update Harbor …", and the app offers no update. Not enforced by the scripts.
+
+**Id clashes.** An id the operator uploaded keeps winning after the official catalog adds the same id
+(the official duplicate is hidden and offers no update); removing the upload hands the id back. A new
+upload of an official id is still refused.
+
+**Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref`; Harbor's release job needs a
+published harbor-apps release. First publish: Harbor on a branch → `.harbor-ref` on that branch → push
+harbor-apps (first `c<serial>`) → merge Harbor to `main` → set `.harbor-ref` back to `main`.
+
+**Not done yet** (docs/TODO.md): a key rotation procedure, downloading by tag instead of
+`releases/latest` (a release published between the two fetches fails one check), persisting `checkedAt`,
+and a review policy for community submissions.

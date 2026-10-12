@@ -49,6 +49,9 @@ Reviewed the implementation against the four points; no code change was needed.
 
 ## Catalog and storage follow-ups (recorded 2026-09-14)
 
+- **Several catalogs** (community or third-party, each with its own key): not built. There is one
+  official catalog (harbor-apps, decision 158) with one URL; operators add their own apps as uploads or
+  git sources. `catalog.publicKeys` takes several keys only for key rotation.
 - **Umbrel catalog converter**: translate `umbrel-app.yml` + Compose into Harbor packages (bind
   mounts → storage claims, `APP_DATA_DIR` → managed volumes, `app_proxy` → endpoint). Roughly a third
   of Umbrel's apps fit the current subset; each still needs a live qualification.

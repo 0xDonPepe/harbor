@@ -128,3 +128,26 @@ another machine with the recovery key, console + CLI. Next:
 - [ ] **0.27 — `check` and prune on demand** from Settings → Backups (today: weekly prune, monthly 2 %
       check, when nothing else runs).
 - [ ] Live-verify Proton Drive with a real account (needs Carlos's credentials and a 2FA code).
+
+## Official catalog (decision 158): what 0.28.0 left
+
+Built in 0.28.0: the catalog lives in carlosalaniz/harbor-apps, published as signed bundles; boxes
+check every 6 hours (or on *Check for new apps* / `harbor catalog refresh`) and swap in a newer one
+without a restart; each Harbor release ships the latest as the seed. Next:
+
+- [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor on a branch,
+      `.harbor-ref` on it, first `c<serial>` release, then Harbor to `main`. Then on a test machine or a droplet: upgrade
+      from 0.27.x, watch the seed load, publish a revision bump in harbor-apps, see it arrive.
+- [ ] **Key rotation procedure.** Config already takes several `publicKeys`: ship a Harbor release that
+      trusts old + new, switch the `CATALOG_SIGNING_KEY` secret and `keys/harbor-apps.pub`, then drop the
+      old key in a later release. Write it down (and what to do if the key leaks) before it is needed.
+- [ ] **Download by tag, not `releases/latest`.** A release published between the `catalog.json` and
+      `catalog.zip` fetches fails that check with a checksum mismatch (the next check succeeds). Fetch the
+      zip from the tag the signed `catalog.json` names (e.g. `releases/download/c<serial>/`).
+- [ ] **Persist `checkedAt` / `error`.** Status forgets the last check on every restart ("Not checked
+      since the daemon started"); keep them in the `settings` table.
+- [ ] **Review policy for community submissions** to harbor-apps: who may merge, what a reviewer checks
+      (images, digests, health path, first run in the browser), and that qualification comes only from a
+      droplet run.
+- [ ] Small: the catalog fetch still sends the wallpaper fetcher's User-Agent; icons are cached for up to
+      5 minutes after a swap.

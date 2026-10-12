@@ -1,6 +1,6 @@
 # Verification report
 
-Harbor local preview, version 0.17.0. This report lists what actually ran, where, with which versions,
+Harbor local preview, now at 0.28.0; each section names the version it checked. This report lists what actually ran, where, with which versions,
 and the outcome. Nothing here is asserted without a recorded run. Live runs are stored under
 `docs/evidence/<run-id>/` (report.md, report.json, bootstrap logs, screenshots, exported files).
 
@@ -220,7 +220,46 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
-## 3o. Install page redesign (2026-10-11, Harbor 0.27.0, decision 156)
+## 3q. The app catalog moves to harbor-apps (2026-10-11, Harbor 0.28.0, decision 158)
+
+**No live run yet.** Nothing is pushed, no harbor-apps release exists, and no box has downloaded a
+catalog. Everything below ran on the developer host.
+
+Local, fake adapter:
+- `pnpm lint`, `pnpm typecheck` pass. `pnpm test` 290 passed (new: bundle open/refuse — wrong key,
+  bad signature, tampered metadata, checksum or size mismatch, no index.json; the update service — swap
+  without restart, equal or older serial never downloads the zip, prune, a newer seed wins, a corrupt
+  pointer falls back to the seed, failures leave the active catalog alone, single-flight, off, timer;
+  config validation; `minHarbor`; an uploaded id keeps winning; the bundle builder and
+  `catalog:hash --check`).
+- `pnpm test:integration` 213 passed + 3 live-Docker skipped (new `catalog-updates`: an installed app
+  gets the update-available notification and an auto-update app updates itself after a newer signed
+  catalog swaps in, without a restart; a replay is a no-op and the download survives a daemon restart;
+  a foreign key is refused; `minHarbor` lists as unavailable; `url: null` never fetches).
+- `pnpm test:e2e` 30 passed (the Store shows the catalog line and "Catalog updates are off", no button).
+- `pnpm catalog:verify tests/fixtures/catalog --quiet` (9 ok), `pnpm catalog:hash --catalog
+  tests/fixtures/catalog --check`, `pnpm openapi -- --check`.
+- Store catalog line viewed in `pnpm dev:ui` at 1280 and 400 px (no horizontal scroll), including the
+  off state.
+
+Bundle, sign and verify end to end, with a **throwaway** ed25519 key made outside both repositories and
+deleted afterwards (not the official key):
+- `pnpm catalog:bundle` on harbor-apps `apps/` (17 apps loaded; 85 files in the zip).
+- `scripts/sign.mjs`: with the throwaway key against the pinned `keys/harbor-apps.pub` it exits 1 and
+  leaves no signature; an empty or garbage secret exits 1; with `CATALOG_PUBLIC_KEY_FILE` set to the
+  throwaway public key it signs and verifies.
+- `openBundle` accepts the bundle with the throwaway key and refuses it with the official key, with one
+  flipped zip byte (checksum) and with edited metadata.
+- `pnpm package --skip-build` with `HARBOR_CATALOG_BUNDLE` + `HARBOR_CATALOG_PUBLIC_KEY=<throwaway>`
+  built an archive whose `catalog/` is byte-identical to harbor-apps `apps/` plus `catalog.json` and
+  `.sig`; `catalog:verify` on it: 17 ok. Without the key override it refuses ("the app catalog
+  signature does not verify; no release archive was built"); with no bundle it tries the official URL
+  and fails with HTTP 404 (no catalog release published yet).
+
+Not verified: the harbor-apps workflow on GitHub Actions, a signature by the real key, a download from
+GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
+seed. These need the first harbor-apps release and a live run on a test machine or a droplet.
+
 
 Console + presentation only; no engine, route or schema change. Local, fake adapter:
 - `pnpm test:e2e` 30 passed: the Excalidraw spec checks the Storage/Access summaries, *How?*, the

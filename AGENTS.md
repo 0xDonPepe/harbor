@@ -9,12 +9,15 @@ A self-hosted application manager ("a private cloud for humans", Umbrel/HexOS-li
 one Ubuntu 24.04 x86-64 machine, one administrator, apps installed from a catalog of **data-only
 packages** (manifest + Compose subset pinned by image digest), a React console (launcher home screen,
 App Store, Publishing, Platform, Settings), and a `harbor` CLI against the same local API.
+The official apps live in their own repo, **carlosalaniz/harbor-apps** (decision 158): its CI publishes
+a signed catalog bundle; the daemon downloads, verifies and swaps it in at runtime, and every Harbor
+release tarball ships the latest one as an offline seed.
 
 - Trust model: the `harbor` service user is in the `docker` group and is therefore
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **158**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **159**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -49,10 +52,13 @@ src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
   notify/       notifications engine + channels (ntfy/webhook/email; resolved rows delete fully)
 web/src/        React 19 + Vite, plain CSS tokens, strict CSP; App.tsx, app/pages/*, app/icons.tsx,
                 mock/ fixtures for `pnpm dev:ui`
-catalog/<id>/   one package = manifest.yaml + compose.yaml + README.md + release.json (+ icon)
+                (the app catalog is NOT here: carlosalaniz/harbor-apps, checked out beside this repo as
+                ../harbor-apps; apps/<id>/ = manifest.yaml + compose.yaml + README.md + release.json (+ icon))
 targets/<id>/   one backup place package = manifest.yaml (kind BackupTarget: a form + a transport) + README.md
-tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live suite, opt-in)
-scripts/        catalog-pin/hash/verify, openapi.ts, package.mjs, vm/ controllers
+tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live suite, opt-in);
+                fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store)
+scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_CATALOG_DIR, default
+                ../harbor-apps/apps), openapi.ts, package.mjs (downloads + verifies the signed seed), vm/ controllers
 docs/           OPERATOR_GUIDE.md (user manual), DEVELOPER_PACKAGES.md (package authoring),
                 VERIFICATION.md (evidence log), FUTURE.md (deliberately not built), TODO.md (wanted, not built yet),
                 design/ (UI, CATALOG, EXPOSURE, ROUND9, APP_HOMES, BACKUPS), openapi.json (GENERATED — never hand-edit)
@@ -115,14 +121,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (219)
-   pnpm test:integration        # 167 + 3 live-Docker skipped (~5 min)
-   pnpm build && pnpm test:e2e  # 29 Playwright (~2 min, ports 18500/18700)
-   pnpm catalog:verify && pnpm openapi -- --check
+   pnpm test                    # unit (290)
+   pnpm test:integration        # 213 + 3 live-Docker skipped (~5 min)
+   pnpm build && pnpm test:e2e  # 30 Playwright (~2 min, ports 18500/18700)
+   pnpm catalog:verify tests/fixtures/catalog --quiet
+   pnpm catalog:hash --catalog tests/fixtures/catalog --check
+   pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **158**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **159**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -148,6 +156,9 @@ The non-negotiable subset:
   (literals), `depends_on`, `healthcheck`, `volumes: type: volume`. NO `ports` (Harbor publishes
   endpoints itself), NO `entrypoint`, `privileged`, `cap_add`, `devices`, host networking, bind mounts. (`build:` allowed for
   git sources only.)
+- **Official apps live in carlosalaniz/harbor-apps** (`apps/<id>/`), not here. Edit them there, run
+  this repo's scripts against that checkout, and open a PR there; its CI verifies, bundles, signs and
+  publishes (decision 158). `tests/fixtures/catalog/` is frozen test data — do not "update" it to match.
 - **Identity**: `metadata.id` lowercase/dashes, must not collide with bundled ids;
   `release.revision` must rise on every upload (that is what triggers Updates).
 - **Secrets the operator types** (`source: operator` + `prompt`) and **links to another app**
@@ -156,10 +167,12 @@ The non-negotiable subset:
 - **Endpoints + health**: every service declared, every named volume claimed by exactly one
   `storage[]` entry, a health path that answers **before** any account exists, first run
   finishable in the browser (no CLI-only admin creation).
-- **After editing a bundled package**: `pnpm tsx scripts/catalog-hash.ts <id>` (refresh
-  `release.json` hashes) → `pnpm catalog:verify` (validates as the daemon does) →
-  `node scripts/registry.mjs digest <image:tag>` for new pins. Qualification (`passed`) only
-  comes from `scripts/vm/qualify-catalog.mjs` on a droplet — never stamp it by hand.
+- **After editing an official package** (in harbor-apps; the scripts find `../harbor-apps/apps` on their
+  own, or take `--catalog <dir>` / `HARBOR_CATALOG_DIR`): raise the revision in the manifest AND in
+  `apps/index.json` → `node scripts/catalog-pin.mjs <id>` for new image pins → `pnpm catalog:hash <id>`
+  (refresh `release.json` hashes) → `pnpm catalog:verify` (validates as the daemon does). A package that
+  needs a newer Harbor sets `minHarbor` on its index entry. Qualification (`passed`) only comes from
+  `scripts/vm/qualify-catalog.mjs --catalog <dir>` on a droplet — never stamp it by hand.
 - **Forbidden**: secrets in the package, interpolation/`$` tricks, symlinks/`..` paths,
   remote images in presentation, rendering package text as HTML (served sandboxed).
 

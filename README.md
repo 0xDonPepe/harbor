@@ -35,7 +35,10 @@ The installer takes the newest release. Do not use releases older than 0.17.0: t
 **17 apps, ready to install** — Excalidraw, BentoPDF, n8n, Open WebUI (with local Ollama models),
 AnythingLLM, Jellyfin, Immich, Nextcloud (files + office), Vaultwarden, Uptime Kuma, Forgejo,
 FreshRSS, Actual Budget, Audiobookshelf, Navidrome, Memos, Mealie. Every image pinned by digest
-and qualified on a real machine. Apps with big data (photos, media, files) can live in a folder
+and qualified on a real machine. The apps live in their own repository,
+[harbor-apps](https://github.com/carlosalaniz/harbor-apps): new apps and app updates reach your
+box as a signed catalog every few hours, without waiting for a Harbor release. Each Harbor release
+also ships the latest catalog, so a machine offline keeps working with the apps it came with. Apps with big data (photos, media, files) can live in a folder
 of yours instead of a Docker volume — on a removable drive if you like (Harbor mounts it,
 notices when it leaves, stops the app to protect its data, and starts it again when it returns).
 
@@ -63,12 +66,14 @@ actually use (password + two-factor, tailnet, domains, storage picker, appearanc
   installer, access (LAN / tailnet / public), lifecycle, troubleshooting, trust boundary.
 - **Build an app for Harbor:** [Developer guide](docs/DEVELOPER_PACKAGES.md) — package template,
   the Compose subset, uploads, git sources, updates.
+- **Add or fix an official app:** [harbor-apps](https://github.com/carlosalaniz/harbor-apps) —
+  the official catalog; open a pull request there.
 - **Work on Harbor:** [AGENTS.md](AGENTS.md) — rules of engagement for contributors and agents.
 - **All docs:** [docs/](docs/README.md) — the full map.
 
 ## Status
 
-Harbor is a **beta preview** (v0.27.1): one administrator, one daemon with Docker
+Harbor is a **beta preview** (v0.28.0): one administrator, one daemon with Docker
 authority. It is not a hardened multi-user service. Encrypted apps are sealed in the kernel
 (fscrypt, one key per app): while locked their data is ciphertext for every reader, root and
 Docker included. After a reboot they stay locked (and down) until the first console login — see

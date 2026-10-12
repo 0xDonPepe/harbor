@@ -156,6 +156,8 @@ CLI (`/opt/harbor/bin/harbor`, add it to PATH if you like):
 ```sh
 harbor login                      # prompts without echo; token stored 0600 in ~/.config/harbor
 harbor catalog
+harbor catalog status             # which app catalog is in use, when Harbor last looked for a newer one
+harbor catalog refresh            # look now (same as App Store → Check for new apps)
 harbor install excalidraw         # shows the plan (ports, storage, images) and asks to apply; sealed like the console's "Local"
 harbor install excalidraw --name whiteboard-2 --yes --no-wait
 harbor install excalidraw --unencrypted              # plain Docker volumes (says "Encrypted: no" in the plan)
@@ -608,8 +610,35 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
 ## 4d. Your own apps and updates
 
 - **Upload a package**: App Store → *+ Your own app* (or `harbor packages add my-app.zip`). A package is a zip with `manifest.yaml`, `compose.yaml`, optionally `README.md`, an icon and screenshots; see [DEVELOPER_PACKAGES.md](DEVELOPER_PACKAGES.md) for the template. Harbor validates it, pins the images by digest, and lists it under *Your apps*. Install it like any other app. Check a folder before you zip or push it with `harbor packages validate <folder>` (the daemon's own validators, offline, no login).
-- **Update an app**: when a newer revision of its package exists (you uploaded one, or a Harbor upgrade shipped a newer built-in catalog), Home shows an *updates available* card and the app's tile gets a blue ↑. Press **Update**, review the plan (which images change, what is added), approve. Data, ports and addresses stay. If the new version fails to start, Harbor rolls back to the previous one automatically and tells you. CLI: `harbor list` (UPDATE column), `harbor update <name>`.
+- **Update an app**: when a newer revision of its package exists (you uploaded one, or a newer official catalog arrived — see below), Home shows an *updates available* card and the app's tile gets a blue ↑. Press **Update**, review the plan (which images change, what is added), approve. Data, ports and addresses stay. If the new version fails to start, Harbor rolls back to the previous one automatically and tells you. CLI: `harbor list` (UPDATE column), `harbor update <name>`.
 - **Remove an uploaded package**: from its App Store page once no app installed from it exists (`harbor packages remove <id>`).
+
+### Where the built-in apps come from (the official catalog)
+
+- The built-in apps live in their own repository, [harbor-apps](https://github.com/carlosalaniz/harbor-apps).
+  Each change there is published as a **signed catalog**. Harbor only uses a catalog whose signature
+  checks out against the key built into Harbor, and only one newer than the one it has. Anything else is
+  ignored and the current catalog stays.
+- **New apps and app updates arrive on their own.** Harbor looks a minute after it starts and then every
+  6 hours. To look now: App Store → **Check for new apps** (bottom of the page), or `harbor catalog refresh`.
+  No restart is needed, and running apps are not touched.
+- **What happens to installed apps**: a newer version shows up like any update (the *updates available*
+  card and the blue ↑). If an app has *Update this app automatically* on, Harbor updates it by itself,
+  with the usual automatic rollback. Before 0.28.0 that only happened after a Harbor upgrade; now it can
+  happen any day a new catalog arrives. Leave it off for apps you want to update by hand.
+- **"needs Harbor x.y.z or newer"**: an app that needs a newer Harbor is listed but cannot be installed,
+  and offers no update, until you update Harbor (§4e).
+- **Offline machines**: every Harbor release ships the latest catalog, so a machine without internet
+  keeps the apps it came with. Updating Harbor brings a newer catalog too.
+- **"Catalog updates are off"** (in the App Store, with no button) means this Harbor never downloads a
+  catalog: the daemon config has `"catalog": { "url": null }`. To turn downloads off on purpose, add that
+  to `/etc/harbor/harbor.json` and restart Harbor (`sudo systemctl restart harbor`); remove it to turn
+  them back on. Upgrades keep your config file.
+- **Your own app with the same id**: if you uploaded an app and the official catalog later adds one with
+  the same id, yours stays in charge of that id. Remove your package to get the official one.
+- `harbor catalog status` prints the catalog's date, where it came from (*downloaded* or *bundled with
+  this Harbor*), and the last check with its error, if any. The last check is forgotten when Harbor
+  restarts ("Not checked since the daemon started").
 
 ### Values an app asks you for, and apps that talk to each other
 
@@ -772,6 +801,7 @@ Notes:
 | `DOCKER_UNAVAILABLE` (503) | `systemctl status docker`. |
 | `http://harbor.local` stops resolving but `http://<ip>/` works | On the machine: `sudo systemctl restart avahi-daemon.socket avahi-daemon.service` (both — a service-only restart can leave avahi answering some queries and not others), then `avahi-resolve -n harbor.local` must print only the machine's LAN address; if it prints a `172.x` Docker address, re-run the installer (it pins avahi to the LAN interface). On a Mac that still fails: toggle Wi-Fi off/on, or `sudo launchctl kickstart -k system/com.apple.mDNSResponder`. `dig @224.0.0.251 -p 5353 harbor.local +short` from the client shows whether the box answers on the wire at all. |
 | Home stays on "Loading your apps…" and public sites time out | Caddy stopped answering (seen once after turning secure addresses on, before 0.25.2). On the machine: `curl --max-time 5 http://127.0.0.1:2019/config/` hangs → `sudo systemctl restart caddy` (it comes back with its last good configuration). |
+| *Check for new apps* shows an error, or `harbor catalog refresh` says "Could not update the catalog: …" (exit 1) | Nothing was changed: Harbor keeps the catalog it has. The message says why (no internet, the server answered an error, a signature or checksum that does not check out). A checksum mismatch right after a new catalog was published usually clears on the next check. Try again later, or check that the machine can reach `github.com`. |
 | Login 429 | Rate limited after repeated failures; wait ten minutes. |
 | UI says "session ended" after reload | Expected unless you ticked *Remember this browser*: short sessions live in memory only. Log in again; running operations continue. |
 | Public address stays `degraded` | Check `dig +short <hostname>` resolves to this host and that 80/443 are open in your cloud firewall; `journalctl -u caddy` shows certificate attempts. |
@@ -789,7 +819,7 @@ disks, log tail; never secrets). File it at
   not a sandbox against anyone with Docker or root access.
 - Loopback by default; LAN mode, tailnet and public HTTPS are opt-in providers (section 6a).
   The console itself is loopback + tailnet only, never public.
-- Not included: backups of application data, multi-user roles/SSO, remote/community catalogs.
+- Not included: multi-user roles/SSO, community catalogs (there is one official catalog, §4d; your own apps come as uploads or git sources).
 
 ## 9. Uninstall
 
@@ -806,8 +836,10 @@ Cockpit/Tailscale/Caddy packages stay installed. Non-Harbor Docker objects are n
 
 ## 10. The catalog
 
-Seventeen packages ship in this release (see docs/design/CATALOG.md for the selection rules and the
-per-app first-run notes in each `catalog/<id>/README.md`):
+The built-in apps come from [harbor-apps](https://github.com/carlosalaniz/harbor-apps) and can change
+between Harbor releases (§4d). The seventeen below were in the catalog when 0.28.0 was written (see
+docs/design/CATALOG.md for the selection rules, and each app's `apps/<id>/README.md` in harbor-apps for
+first-run notes):
 
 | App | What it is | Notes |
 |---|---|---|

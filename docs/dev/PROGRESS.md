@@ -412,7 +412,7 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Console: review lists the port and permissions, Install waits for the box; drawer Ports section
 - [x] harbor-apps `wireguard` (wg-easy 15.3.0, minHarbor 0.29.0)
 - [x] Live: qualified, and a real WireGuard tunnel from a second droplet (VERIFICATION 3u)
-- [ ] OpenVPN package (pick an image with a web page)
+- [ ] OpenVPN package: parked until package config files + `entrypoint` exist (UMBREL_COMPAT §8)
 
 ## Phase 62 — porting the Umbrel store (2026-10-12, 0.28.4) ⏳ release
 - [x] `docs/design/UMBREL_COMPAT.md`: all 393 Umbrel apps classified; feature ladder to 100%; §7 the first port

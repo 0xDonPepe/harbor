@@ -304,3 +304,13 @@ The first slice of §2.2 (raw ports) and §3 (permissions), cut to what VPN serv
   load. Live: qualified, and a real tunnel from a second droplet (VERIFICATION 3u).
 
 Not yet: raw TCP ports (Git over SSH, MQTT), host networking, devices beyond `/dev/net/tun`, Docker-in-Docker.
+
+**OpenVPN is parked** (checked 2026-10-12; WireGuard covers the use for now):
+- *openvpn-ui* (d3vilh, MIT, has a login) is the candidate. Its UI uses the Docker socket only for its two Restart
+  buttons (`build/assets/restart.sh`), so it can run without the socket. But the server image (d3vilh/openvpn-server)
+  ships no config (`server.conf` and `config/easy-rsa.vars` are expected from host mounts), and its shell-form
+  ENTRYPOINT runs `sysctl -p` under `set -e`, which fails on the read-only `/proc/sys` of an unprivileged container.
+  It needs package config files (§2.3) and `entrypoint` (§2.6).
+- *ovpn-admin* (Palark, Apache-2.0): its admin page has no login, so in LAN mode anyone on the network could create
+  VPN users. Not packageable until Harbor can put a login in front of a LAN address.
+- *kylemanna/openvpn*: no web page (clients are made with `docker exec`), so first run is not finishable in a browser.

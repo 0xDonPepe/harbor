@@ -15,7 +15,7 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium } from '@playwright/test';
-import { Evidence, ROOT, cli, cliOk, fail, minimalPdf, resolveTarget, sleep, waitFor } from './lib.mjs';
+import { Evidence, ROOT, assertSeedCatalog, cli, cliOk, fail, minimalPdf, pinCatalogToSeed, resolveTarget, sleep, waitFor } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -165,6 +165,10 @@ const A01 = step('A01', 'Clean VM bootstrap without Node/npm; re-run preserves i
   if (b2.code !== 0) throw new Error(`bootstrap #2 (re-run, --with-tools) failed (exit ${b2.code}); see ${state.bootstrapLog2}`);
   const doctor2 = cliOk(target, ['doctor']);
   if (doctor2.system.installationId !== state.installationId) throw new Error('installation id changed on bootstrap re-run');
+  // decision 158: the A-steps edit the seed in /opt/harbor/catalog; never let a downloaded catalog take over
+  // (bootstrap writes no catalog section, so the box would check harbor-apps 60 s after every start)
+  pinCatalogToSeed(target);
+  notes.push('app catalog pinned to the archive seed for the run (catalog.url null, downloaded catalogs removed)');
   const login2 = cli(target, ['login', '--username', ADMIN.username, '--password-stdin'], { input: ADMIN.password + '\n' });
   if (login2.code !== 0) throw new Error('administrator credentials no longer valid after bootstrap re-run');
   const versions = {
@@ -187,6 +191,8 @@ const A01 = step('A01', 'Clean VM bootstrap without Node/npm; re-run preserves i
 
 // ---------------------------------------------------------------- A02 catalog + invalid package
 const A02 = step('A02', 'CLI and UI show the real pinned catalog (incl. the three demo packages); invalid package hash/schema rejected before effects', async () => {
+  // the daemon must be serving the seed the steps below edit (pinned in A01)
+  const catalogStatus = assertSeedCatalog(target);
   const catalog = cliOk(target, ['catalog']);
   const ids = catalog.map((c) => c.id).sort();
   for (const must of ['bentopdf', 'excalidraw', 'n8n']) if (!ids.includes(must)) throw new Error(`catalog is missing ${must}: ${ids}`);
@@ -216,7 +222,7 @@ const A02 = step('A02', 'CLI and UI show the real pinned catalog (incl. the thre
   const restored = cliOk(target, ['catalog']).find((c) => c.id === 'bentopdf');
   if (restored.availability !== 'available') throw new Error('package not available after restore');
   if (dockerPs().length !== before) throw new Error('tampered package produced Docker effects');
-  return { details: { catalog, digests, tampered: { availability: tampered.availability, reason: tampered.reason } }, notes: ['tampered compose.yaml -> catalog unavailable + plan 422 INVALID_PACKAGE, zero Docker effects'] };
+  return { details: { catalogStatus, catalog, digests, tampered: { availability: tampered.availability, reason: tampered.reason } }, notes: [`active catalog: the archive seed (serial ${catalogStatus.serial}, origin bundled, updates off)`, 'tampered compose.yaml -> catalog unavailable + plan 422 INVALID_PACKAGE, zero Docker effects'] };
 });
 
 // ---------------------------------------------------------------- A03 coexistence + browser actions

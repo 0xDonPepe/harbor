@@ -26,6 +26,20 @@ export function fmtWhen(s: string | null | undefined): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// How long ago, in quiet words: "just now", "5 min ago", "3 h ago", "2 days ago".
+export function fmtAgo(s: string | null | undefined, now = Date.now()): string {
+  if (!s) return '—';
+  const t = new Date(s).getTime();
+  if (Number.isNaN(t)) return s;
+  const min = Math.floor(Math.max(0, now - t) / 60_000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? '1 day ago' : `${d} days ago`;
+}
+
 export function fmtUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);

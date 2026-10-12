@@ -183,6 +183,44 @@ export function cliOk(target, args, opts = {}) {
   return r.json;
 }
 
+// ---------------- app catalog pin (decision 158)
+
+// Pin a test box to the catalog seed its release archive shipped (/opt/harbor/catalog): catalog checks off
+// (`catalog.url: null`, config kept root:harbor 0640) and no bundle an earlier run downloaded. The suite edits the
+// seed (tamper/injection steps) and qualification records results against its revisions; a downloaded catalog
+// taking over mid-run (60 s after every start, then every 6 h) would make both wrong. Restarts harbor and waits for
+// it on the box (no tunnel needed). Sessions survive the restart, but callers log in again anyway.
+// One line, no shell variables: the Vagrant target wraps commands in `bash -c "<json>"`.
+export function pinCatalogToSeed(target) {
+  const cfg = '/etc/harbor/harbor.json';
+  target.sshOk(
+    [
+      'set -e',
+      `jq '.catalog = {url: null}' ${cfg} > ${cfg}.tmp`,
+      `chown root:harbor ${cfg}.tmp`,
+      `chmod 0640 ${cfg}.tmp`,
+      `mv ${cfg}.tmp ${cfg}`,
+      'systemctl stop harbor',
+      'rm -rf /var/lib/harbor/catalog',
+      'systemctl start harbor',
+      'for _ in $(seq 1 60); do curl -fsS --max-time 2 http://127.0.0.1:18000/healthz >/dev/null 2>&1 && exit 0; sleep 1; done',
+      "echo 'harbor did not answer /healthz within 60 s after pinning the catalog' >&2",
+      'exit 1',
+    ].join('; '),
+    { timeoutMs: 180_000 },
+  );
+}
+
+// Throws unless the daemon serves the seed: origin bundled, the seed's serial, updates off. Returns the status.
+export function assertSeedCatalog(target) {
+  const seed = JSON.parse(target.sshOk('cat /opt/harbor/catalog/catalog.json'));
+  const s = cliOk(target, ['catalog', 'status']);
+  if (s?.origin !== 'bundled' || s.serial !== seed.serial || s.source !== null) {
+    throw new Error(`the box's active app catalog is not the archive's seed: origin ${s?.origin}, serial ${s?.serial} (seed ${seed.serial}), source ${s?.source}`);
+  }
+  return s;
+}
+
 // ---------------- evidence
 
 // Strings that must never appear in committed evidence (the droplet's public IP, for one).

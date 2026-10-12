@@ -27,6 +27,7 @@ import type {
 import {
   mockAppearance,
   mockCatalog,
+  mockCatalogMode,
   mockCatalogStatus,
   mockChannels,
   mockDomains,
@@ -225,7 +226,9 @@ export const mockApi = {
   catalogStatus: async () => mockCatalogStatus(),
   catalogRefresh: async () => {
     await beat(600);
-    return { ...mockCatalogStatus(), checkedAt: new Date().toISOString() };
+    const st = { ...mockCatalogStatus(), checkedAt: new Date().toISOString() };
+    // ?catalog=new: a newer signed catalog was found and swapped in
+    return mockCatalogMode() === 'new' ? { ...st, serial: st.serial + 1, commit: '8a1d0e6c2f95', createdAt: new Date().toISOString() } : st;
   },
   instances: async (): Promise<InstanceSummary[]> => instances,
   instance: async (id: string): Promise<InstanceDetail> => {

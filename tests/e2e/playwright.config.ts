@@ -38,6 +38,9 @@ export default defineConfig({
         HARBOR_DEV_PORT_TO: String(PORT + 99),
         HARBOR_DEV_PASSWORD: 'e2e-fixture-password',
         HARBOR_DEV_LOG_LEVEL: 'warn',
+        // Catalog checks on, pointed at a closed loopback port: Store → Check for new apps fails and says why.
+        // (The setup daemon below keeps catalog updates off.)
+        HARBOR_DEV_CATALOG_URL: 'http://127.0.0.1:9/',
         // Fake removable hardware: macOS/CI have no lsblk, so inject one
         // unmounted USB stick for the Mount/Eject click test below.
         HARBOR_DEVICES_JSON: JSON.stringify({

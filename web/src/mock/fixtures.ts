@@ -497,8 +497,26 @@ export function mockDomains(): DomainsDto {
   };
 }
 
-// The official catalog line under the Store (decision 158). `?catalog=off` previews the updates-off look.
+// The official catalog line under the Store (decision 158). Preview switches:
+//   ?catalog=off    updates off (no button)
+//   ?catalog=error  the last automatic check failed (shown on load; Check for new apps fails again)
+//   ?catalog=new    Check for new apps finds a newer catalog ("New apps and updates loaded")
+export function mockCatalogMode(): 'off' | 'error' | 'new' | null {
+  const m = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('catalog') : null;
+  return m === 'off' || m === 'error' || m === 'new' ? m : null;
+}
+export const MOCK_CATALOG_ERROR = 'could not download catalog.json from the catalog server (getaddrinfo ENOTFOUND github.com)';
 export function mockCatalogStatus(): CatalogStatusDto {
-  const off = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('catalog') === 'off';
-  return { source: off ? null : 'https://github.com/carlosalaniz/harbor-apps/releases/latest/download', serial: 1_791_000_000, commit: '3f9c2a1b7d4e', createdAt: '2026-10-03T09:12:00Z', origin: off ? 'bundled' : 'downloaded', packages: mockCatalog().length, checkedAt: off ? null : now(), error: null };
+  const mode = mockCatalogMode();
+  const off = mode === 'off';
+  return {
+    source: off ? null : 'https://github.com/carlosalaniz/harbor-apps/releases/latest/download',
+    serial: 1_791_000_000,
+    commit: '3f9c2a1b7d4e',
+    createdAt: '2026-10-03T09:12:00Z',
+    origin: off ? 'bundled' : 'downloaded',
+    packages: mockCatalog().length,
+    checkedAt: off ? null : new Date(Date.now() - 42 * 60_000).toISOString(),
+    error: mode === 'error' ? MOCK_CATALOG_ERROR : null,
+  };
 }

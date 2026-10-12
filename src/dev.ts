@@ -40,8 +40,10 @@ const config = normalizeConfig(
     docker: socket ? { mode: 'socket', socketPath: socket, cliPluginDirs: [path.join(homedir(), '.docker', 'cli-plugins')].filter((d) => existsSync(d)) } : { mode: 'fake' },
     appPortRange: { from: Number(process.env['HARBOR_DEV_PORT_FROM'] ?? 18080), to: Number(process.env['HARBOR_DEV_PORT_TO'] ?? 18999) },
     logLevel: (process.env['HARBOR_DEV_LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error' | undefined) ?? 'info',
-    // never reach the network from a dev box: the Store shows "Catalog updates are off"
-    catalog: { url: null },
+    // Never reach the network from a dev box by default: the Store shows "Catalog updates are off".
+    // HARBOR_DEV_CATALOG_URL turns checks on (https://, or http:// on loopback); in fake mode the
+    // demo fetcher answers 404, so e2e uses it to drive the Store's failed-check line.
+    catalog: { url: process.env['HARBOR_DEV_CATALOG_URL'] ?? null },
   },
   root,
 );

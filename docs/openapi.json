@@ -322,7 +322,7 @@
     },
     "/v1/catalog": {
       "get": {
-        "description": "Bundled packages.",
+        "description": "The app catalog: the official catalog (bundled with this release or downloaded since) plus your own uploaded or git-source packages.",
         "responses": {
           "200": {
             "description": "Default Response"
@@ -478,7 +478,7 @@
     },
     "/v1/catalog/{id}/asset/{name}": {
       "get": {
-        "description": "Package presentation asset (icon/gallery) from the bundled package. Open (no session): static catalog content only.",
+        "description": "Package presentation asset (icon/gallery) from the official or uploaded package. Open (no session): static catalog content only.",
         "parameters": [
           {
             "schema": {

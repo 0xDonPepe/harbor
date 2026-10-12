@@ -417,8 +417,9 @@ by hand. A qualification change alone needs no revision bump.
 The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so a
 commit whose committer time is older than the latest release fails the job ("make a new commit"), and a
 commit in the same second as the previous one is skipped. Harbor releases ship the latest catalog too:
-`pnpm package` downloads it and refuses to build an archive whose catalog does not verify against the
-pinned key.
+`pnpm package` resolves the latest `c<serial>` tag once, downloads all three files from that tag, and
+refuses to build an archive whose catalog does not verify against the pinned key or whose signed serial
+differs from the tag.
 
 **Ids.** Official ids are reserved: uploading or importing a package with one is refused ("the id …
 belongs to a built-in app"), unless you already had your own package with that id before the official

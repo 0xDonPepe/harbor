@@ -79,10 +79,30 @@ test('home shows the system strip and an empty launcher; store lists real packag
   expect(res.status()).toBe(200);
   expect(res.headers()['content-type']).toContain('image/svg+xml');
   expect(res.headers()['content-security-policy']).toContain('sandbox');
-  // decision 158: one quiet catalog line under the Store; pnpm dev runs with catalog updates off, so no button
+  // decision 158: one quiet catalog line under the Store. This daemon's catalog URL has no server behind it
+  // (HARBOR_DEV_CATALOG_URL), so a check fails and says why; the setup daemon covers "updates are off".
   await expect(page.getByText(/^App catalog (from|bundled with this Harbor)/)).toBeVisible();
-  await expect(page.getByText('· Catalog updates are off', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Check for new apps' })).toHaveCount(0);
+  const checkBtn = page.getByRole('button', { name: 'Check for new apps', exact: true });
+  await expect(checkBtn).toBeVisible();
+  // hold the request briefly so the busy label is observable
+  await page.route('**/v1/catalog/refresh', async (route) => {
+    await new Promise((r) => setTimeout(r, 400));
+    await route.continue();
+  });
+  await checkBtn.click();
+  await expect(page.getByRole('button', { name: 'Checking…', exact: true })).toBeVisible();
+  const catalogStatus = page.locator('.catalog-line').getByRole('status');
+  await expect(catalogStatus).toContainText('catalog.json');
+  await expect(catalogStatus).toHaveClass(/error/);
+  await expect(checkBtn).toBeVisible();
+  await expect(checkBtn).toBeEnabled();
+  await page.unroute('**/v1/catalog/refresh');
+  // the stored failure is shown on load too (an automatic check that failed looks the same)
+  await page.reload();
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await expect(page.locator('.catalog-line').getByRole('status')).toContainText(/^Last check failed: .*catalog\.json/);
+  await expect(page.locator('.catalog-line')).toContainText(/· checked (just now|\d+ min ago)/);
   // category chips filter the grid
   const all = await page.locator('.tile.store').count();
   await page.getByRole('tab', { name: 'Productivity' }).click();

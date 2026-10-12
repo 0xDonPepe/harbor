@@ -135,8 +135,8 @@ Built in 0.28.0: the catalog lives in carlosalaniz/harbor-apps, published as sig
 check every 6 hours (or on *Check for new apps* / `harbor catalog refresh`) and swap in a newer one
 without a restart; each Harbor release ships the latest as the seed. Next:
 
-- [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor on a branch,
-      `.harbor-ref` on it, first `c<serial>` release, then Harbor to `main`. Then on a test machine or a droplet: upgrade
+- [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor to `main`,
+      its sha in `.harbor-ref`, first `c<serial>` release, then re-run Harbor's release job. Then on a test machine or a droplet: upgrade
       from 0.27.x, watch the seed load, publish a revision bump in harbor-apps, see it arrive.
 - [ ] **Key rotation procedure.** Config already takes several `publicKeys`: ship a Harbor release that
       trusts old + new, switch the `CATALOG_SIGNING_KEY` secret and `keys/harbor-apps.pub`, then drop the

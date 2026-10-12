@@ -374,8 +374,9 @@ harbor-apps/
   apps/index.json          id -> { revision, dir, optional minHarbor }
   apps/<id>/manifest.yaml, compose.yaml, README.md, release.json (+ icon, screenshots)
   keys/harbor-apps.pub     the public key Harbor pins
+  scripts/check-bundle.mjs re-checks the unsigned bundle in CI before it is signed
   scripts/sign.mjs         signs a bundle in CI
-  .harbor-ref              the Harbor branch, tag or commit whose tools CI uses
+  .harbor-ref              the Harbor commit (full 40-hex sha on Harbor's main) whose tools CI uses
 ```
 
 **Contribution flow.** Clone both repositories side by side (`harbor/` and `harbor-apps/`) and run the
@@ -406,19 +407,29 @@ by hand. A qualification change alone needs no revision bump.
 **Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `keys/`,
 `scripts/`, `.harbor-ref` or the workflow (or a manual run):
 
-1. verifies as above,
-2. `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` writes `catalog.zip`
-   (deterministic: index.json plus, per app, only the package files and the assets its manifest names)
-   and an unsigned `catalog.json` (zip sha256 + size, commit, serial, createdAt, package count),
-3. `scripts/sign.mjs` signs `catalog.json` with ed25519 (the `CATALOG_SIGNING_KEY` secret) and checks the
+1. **verify** checks as above, with Harbor checked out at the commit pinned in `.harbor-ref` (a full sha
+   on Harbor's `main`; branches and tags are refused, because the bundle is built by that code),
+2. **bundle** (read-only token, no secret) runs `pnpm catalog:bundle <apps> --out dist --commit <sha>
+   --serial <unix>`, which writes `catalog.zip` (deterministic: index.json plus, per app, only the package
+   files and the assets its manifest names) and an unsigned `catalog.json` (zip sha256 + size, commit,
+   serial, createdAt, package count), and hands them over as a workflow artifact,
+3. **sign** runs in the `catalog-signing` GitHub Environment (main only), the only place the
+   `CATALOG_SIGNING_KEY` secret exists. It checks out only harbor-apps and installs nothing.
+   `scripts/check-bundle.mjs` re-checks that `catalog.json` names this commit and serial and pins the
+   zip's exact sha256 and size. Then `scripts/sign.mjs` signs `catalog.json` with ed25519 and checks the
    signature against `keys/harbor-apps.pub`; a key that does not match fails the job,
-4. `gh release create c<serial>` publishes the three files and marks the release latest.
+4. **publish** (the only job with write access) runs `gh release create c<serial>` with the three files
+   and marks the release latest.
 
-The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so a
-commit whose committer time is older than the latest release fails the job ("make a new commit"), and a
-commit in the same second as the previous one is skipped. Harbor releases ship the latest catalog too:
-`pnpm package` downloads it and refuses to build an archive whose catalog does not verify against the
-pinned key.
+The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so:
+- a committer time more than 5 minutes in the future fails the bundle job,
+- a re-run for a commit that is already released does nothing,
+- a different commit in the same second as an existing release fails ("make a new commit"),
+- a commit older than the latest release is skipped when `main` has moved on (the newer commit
+  publishes), and fails as clock skew when it is still `main`'s tip.
+
+Harbor releases ship the latest catalog too: `pnpm package` downloads it and refuses to build an
+archive whose catalog does not verify against the pinned key.
 
 **Ids.** Official ids are reserved: uploading or importing a package with one is refused ("the id …
 belongs to a built-in app"), unless you already had your own package with that id before the official

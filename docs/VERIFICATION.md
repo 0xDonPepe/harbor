@@ -256,6 +256,16 @@ deleted afterwards (not the official key):
   signature does not verify; no release archive was built"); with no bundle it tries the official URL
   and fails with HTTP 404 (no catalog release published yet).
 
+harbor-apps CI hardening (review fixes; local only): the workflow is split into verify → bundle → sign
+→ publish. The YAML parses; every `run:` block passes `bash -n` and none interpolates `${{ }}`. The
+publish job's decision script, run against a stubbed `gh`, publishes when no release exists or the
+latest is older; skips a re-run of a released commit and an older commit after `main` moved on; and fails
+on a different commit with an existing serial, an incomplete release, clock skew, and a `catalog.json`
+that is not the signed one. `scripts/check-bundle.mjs` on a real bundle of `apps/` passes, and refuses a
+wrong serial, a wrong commit, a short sha, one appended zip byte, a mismatched `build.txt` and a missing
+`catalog.json`. `scripts/sign.mjs` on a missing `catalog.json` exits 1 with "did the bundle step fail?".
+actionlint was not available.
+
 Not verified: the harbor-apps workflow on GitHub Actions, a signature by the real key, a download from
 GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
 seed. These need the first harbor-apps release and a live run on a test machine or a droplet.

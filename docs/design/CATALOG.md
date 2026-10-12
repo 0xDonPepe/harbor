@@ -186,12 +186,22 @@ Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its ow
 | `catalog.json` | `{schemaVersion: 1, serial, commit, createdAt, zip: {sha256, bytes}, packages}`, ≤ 64 KiB — the only signed bytes |
 | `catalog.json.sig` | base64 ed25519 signature over the exact `catalog.json` bytes |
 
-`serial` = the commit's committer time (unix seconds). The release job refuses a serial that is not
-newer than the latest release and skips one that is already released.
+`serial` = the commit's committer time (unix seconds). The workflow refuses a committer time more than
+5 minutes in the future, skips a re-run of a commit that is already released, fails a different commit
+with the same serial as an existing release, and for a serial not newer than the latest release skips
+when `main` has moved on (the newer commit publishes) and fails otherwise (clock skew).
+
+**CI layout.** Four jobs, so the signing key never shares a runner with third-party code. *verify*
+(every push and PR) and *bundle* (main only, read-only token, no secret) run Harbor's tools at
+`.harbor-ref`, which must be a full commit sha on Harbor's `main`. *sign* runs in the `catalog-signing`
+GitHub Environment (main only): it checks out only harbor-apps, installs nothing, re-checks the bundle
+artifact (`scripts/check-bundle.mjs`: commit, serial, zip sha256 and size) and runs `scripts/sign.mjs`,
+with the secret on that one step. *publish* is the only job with `contents: write`, and its token is
+only on the steps that call `gh`.
 
 **Trust.** The public key (SPKI DER, base64) is pinned in `src/packages/catalog-bundle.ts`
 (`OFFICIAL_CATALOG_PUBLIC_KEY`) and in `keys/harbor-apps.pub`. The private key exists only as the
-harbor-apps `CATALOG_SIGNING_KEY` Actions secret plus an offline backup; `scripts/sign.mjs` verifies its
+`CATALOG_SIGNING_KEY` secret of the harbor-apps `catalog-signing` Environment plus an offline backup; `scripts/sign.mjs` verifies its
 own signature against the pinned key before anything is released. A box accepts a bundle only if the
 signature verifies against a configured key, the serial is strictly higher than the active one (no
 rollback, no replay), the zip matches the signed sha256 and size, and the index validates with every
@@ -227,9 +237,11 @@ as unavailable ("needs Harbor x.y.z or newer"), install fails with INVALID_STATE
 (the official duplicate is hidden and offers no update); removing the upload hands the id back. A new
 upload of an official id is still refused.
 
-**Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref`; Harbor's release job needs a
-published harbor-apps release. First publish: Harbor on a branch → `.harbor-ref` on that branch → push
-harbor-apps (first `c<serial>`) → merge Harbor to `main` → set `.harbor-ref` back to `main`.
+**Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref` (a commit on Harbor's `main`);
+Harbor's release job needs a published harbor-apps release. First publish: push Harbor to `main` (its
+release job fails: no catalog yet) → write that commit's sha into `.harbor-ref` → push harbor-apps (first
+`c<serial>`) → re-run Harbor's release job. Later Harbor changes reach the catalog tooling only through a
+reviewed `.harbor-ref` bump.
 
 **Not done yet** (docs/TODO.md): a key rotation procedure, downloading by tag instead of
 `releases/latest` (a release published between the two fetches fails one check), persisting `checkedAt`,

@@ -3,22 +3,20 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { json as fakeJson } from '../../src/appearance/fetcher.js';
 import type { CatalogItemDto, CatalogStatusDto, InstanceSummary, NotificationsDto, OperationDto } from '../../src/contracts/api.js';
-import { buildBundle, bumpRevision, catalogFiles, testSigner, type TestBundle } from '../unit/bundle-helpers.js';
+import { buildBundle, bumpRevision, catalogFiles, type TestBundle } from '../unit/bundle-helpers.js';
 import { REPO_CATALOG, startHarness, type Harness } from './harness.js';
 
-// Decision 158: the daemon swaps in a newer signed catalog from the catalog repository's releases.
-// The "server" is the harness's fake fetcher; the signing key is generated for this run and passed in
-// through config.catalog.publicKeys.
+// Decision 158: the daemon swaps in a newer catalog from the catalog repository's releases.
+// The "server" is the harness's fake fetcher. The config still lists a (deprecated, ignored) publicKeys
+// entry, like a hand-edited config from before signing was removed: the daemon starts and ignores it.
 
 const URL_BASE = 'https://catalog.example.test/releases/latest/download';
-const signer = testSigner();
 let bundle: TestBundle | null = null;
 let h: Harness;
 
 beforeAll(async () => {
-  h = await startHarness({ config: { catalog: { url: URL_BASE, publicKeys: [signer.publicKey] } } });
+  h = await startHarness({ config: { catalog: { url: URL_BASE, publicKeys: ['FIXTURE-IGNORED-KEY'] } } });
   const bin = (b: Buffer | string) => ({ status: 200, contentType: 'application/octet-stream', body: Buffer.from(b) });
-  h.fetcher.on(`${URL_BASE}/catalog.json.sig`, () => (bundle ? bin(bundle.sig) : fakeJson({}, 404)));
   h.fetcher.on(`${URL_BASE}/catalog.json`, () => (bundle ? bin(bundle.meta) : fakeJson({}, 404)));
   h.fetcher.on(`${URL_BASE}/catalog.zip`, () => (bundle ? bin(bundle.zip) : fakeJson({}, 404)));
 });
@@ -54,7 +52,7 @@ describe('official catalog updates (decision 158)', () => {
     expect(s.checkedAt).not.toBeNull();
   });
 
-  it('installed apps get an update from a newer signed catalog, without a restart', async () => {
+  it('installed apps get an update from a newer catalog, without a restart', async () => {
     expect((await h.api.run({ kind: 'install', packageId: 'excalidraw' })).op.state).toBe('succeeded');
     expect((await h.api.run({ kind: 'install', packageId: 'excalidraw' })).op.state).toBe('succeeded');
     const mine = (await h.api.instances()).filter((i) => i.packageId === 'excalidraw').sort((a, b) => a.name.localeCompare(b.name));
@@ -62,7 +60,7 @@ describe('official catalog updates (decision 158)', () => {
     await h.api.expect(200, 'PUT', `/v1/instances/${auto.id}/auto-update`, { enabled: true });
     expect(manual.revision).toBe('1');
 
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '2'), signer, { serial: 1_760_000_000, commit: '0123456789abcdef0123456789abcdef01234567' });
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '2'), { serial: 1_760_000_000, commit: '0123456789abcdef0123456789abcdef01234567' });
     const s = await refresh();
     expect(s).toMatchObject({ source: URL_BASE, serial: 1_760_000_000, origin: 'downloaded', commit: '0123456789abcdef0123456789abcdef01234567', error: null });
     expect(existsSync(path.join(h.stateDir, 'catalog', '1760000000', 'index.json'))).toBe(true);
@@ -87,7 +85,7 @@ describe('official catalog updates (decision 158)', () => {
 
   it('a replayed or older bundle is a no-op; the downloaded catalog survives a restart', async () => {
     expect(await refresh()).toMatchObject({ serial: 1_760_000_000, origin: 'downloaded', error: null });
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '9'), signer, { serial: 1_700_000_000 });
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '9'), { serial: 1_700_000_000 });
     expect(await refresh()).toMatchObject({ serial: 1_760_000_000, error: null });
     expect((await catalogItem('excalidraw'))?.revision).toBe('2');
     await h.restart();
@@ -95,15 +93,19 @@ describe('official catalog updates (decision 158)', () => {
     expect((await catalogItem('excalidraw'))?.revision).toBe('2');
   });
 
-  it('a bundle signed by another key is refused and changes nothing', async () => {
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), testSigner(), { serial: 1_780_000_000 });
-    expect(await refresh()).toMatchObject({ serial: 1_760_000_000, error: 'the app catalog signature does not verify' });
+  it('an archive that does not match its catalog.json is refused and changes nothing', async () => {
+    const good = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), { serial: 1_780_000_000 });
+    const zip = Buffer.from(good.zip);
+    zip[zip.length - 30] = zip[zip.length - 30]! ^ 0xff;
+    bundle = { meta: good.meta, zip };
+    expect(await refresh()).toMatchObject({ serial: 1_760_000_000, error: 'the app catalog archive does not match its catalog.json checksum' });
     expect((await catalogItem('excalidraw'))?.revision).toBe('2');
+    expect(existsSync(path.join(h.stateDir, 'catalog', '1780000000'))).toBe(false);
   });
 
   it('a plan the catalog moved past fails PLAN_STALE and leaves the app as it was (no needs_action)', async () => {
     const offerRevision = async (revision: string, serial: number) => {
-      bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', revision), signer, { serial });
+      bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', revision), { serial });
       expect(await refresh()).toMatchObject({ serial, error: null });
     };
     const failed = async (planId: string): Promise<OperationDto> => h.api.waitOperation((await h.api.submit(planId)).operationId);
@@ -141,7 +143,7 @@ describe('official catalog updates (decision 158)', () => {
   });
 
   it('a package that needs a newer Harbor lists as unavailable; installed copies keep their icon', async () => {
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '6', { minHarbor: '99.0.0' }), signer, { serial: 1_780_000_000 });
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '6', { minHarbor: '99.0.0' }), { serial: 1_780_000_000 });
     expect(await refresh()).toMatchObject({ serial: 1_780_000_000, error: null });
     expect(await catalogItem('excalidraw')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 99.0.0 or newer', name: 'Excalidraw' });
     // no update is offered for a revision this Harbor cannot run

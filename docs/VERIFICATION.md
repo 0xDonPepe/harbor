@@ -225,6 +225,14 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 **No live run yet.** Nothing is pushed, no harbor-apps release exists, and no box has downloaded a
 catalog. Everything below ran on the developer host.
 
+**Signing was removed before release** (decision 158). The signing proofs below no longer apply, because
+that code is gone: wrong key, bad signature and edited metadata refused by the signature, `sign.mjs`,
+`check-bundle.mjs`, the four-job CI with its `catalog-signing` Environment, the re-verification of stored
+folders against the configured keys, and the `HARBOR_CATALOG_PUBLIC_KEY` override of `pnpm package`. The
+integrity proofs still hold and were re-run (see *Signing removed* at the end of this section): zip
+checksum and size against `catalog.json`, no index.json, serial ordering (no rollback), the 24 h future
+refusal, the retry on a mixed release, the 240 s deadline, `PLAN_STALE`, `minHarbor`, `url: null`.
+
 Local, fake adapter:
 - `pnpm lint`, `pnpm typecheck` pass. `pnpm test` 290 passed (new: bundle open/refuse — wrong key,
   bad signature, tampered metadata, checksum or size mismatch, no index.json; the update service — swap
@@ -293,7 +301,29 @@ Review fixes (surface + tooling), local:
 - `scripts/vm/run-vm-tests.mjs`, `qualify-catalog.mjs`, `lib.mjs`: `node --check` only (they pin the
   box to the seed and assert it; not run — they need the droplet).
 
-Not verified: the harbor-apps workflow on GitHub Actions, a signature by the real key, a download from
+Signing removed (local, fake adapter):
+- `pnpm lint`, `pnpm typecheck` pass. `pnpm test` 299 passed: bundle tests now cover a zip that does not
+  match `catalog.json` (another zip, one flipped byte, one byte short, the `catalog.json` of another
+  release) and metadata that is not JSON or breaks the schema; catalog-updates (16) — a stored
+  `catalog.json` that no longer parses falls back to the seed (warned once as "damaged") and a bundle
+  with a lower serial than that folder replaces it; truncated, another serial, a broken schema or a
+  missing `catalog.json` all fall back to the seed and the original bytes back make the folder count
+  again; an edit that keeps it valid and naming the same serial still counts (integrity, not trust); a
+  bundle whose zip stays wrong is fetched twice and reported as "the app catalog archive does not match
+  its catalog.json checksum"; the deadline test now has two steps (`catalog.json` 30 s, `catalog.zip`
+  the rest); config — a leftover `catalog.publicKeys` loads and is ignored with a notice.
+- `pnpm test:integration` 214 passed + 3 live-Docker skipped (`catalog-updates` starts the daemon with
+  a leftover `publicKeys` in its config; a zip with one flipped byte is refused with the checksum
+  message, the catalog stays and no folder is written).
+- `pnpm catalog:verify tests/fixtures/catalog --quiet` (9 ok), `pnpm catalog:hash --catalog
+  tests/fixtures/catalog --check`. `pnpm package` was not re-run here: `scripts/package.mjs` (it still
+  fetched and verified the `.sig`) is changed in the same release by a separate edit.
+- `pnpm build && pnpm test:e2e` 30 passed. `pnpm openapi -- --check` current (two route descriptions
+  regenerated: "newer signed" → "newer").
+- harbor-apps (branch `nosign`): `scripts/sign.mjs`, `scripts/check-bundle.mjs` and `keys/` deleted;
+  `.github/workflows/ci.yml` is two jobs (verify, release) and parses as YAML; not run on GitHub Actions.
+
+Not verified: the harbor-apps workflow on GitHub Actions, a download from
 GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
 seed. These need the first harbor-apps release and a live run on a test machine or a droplet.
 

@@ -35,8 +35,9 @@ jobs:
       - run: pnpm openapi -- --check
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
-      # Downloads the latest signed app catalog from carlosalaniz/harbor-apps, verifies it against the pinned
-      # key and ships it as the offline seed (decision 158). Fails the release when none verifies.
+      # Downloads the latest app catalog from carlosalaniz/harbor-apps over HTTPS, checks the zip against its
+      # catalog.json and every app, and ships it as the offline seed (decision 158). Fails the release when
+      # there is none or it does not check out.
       - name: Build release archive
         run: pnpm package
       - name: Read version

@@ -3,26 +3,26 @@ import path from 'node:path';
 import type { CatalogStatusDto } from '../contracts/api.js';
 import type { Fetcher } from '../appearance/fetcher.js';
 import type { Logger } from '../lifecycle/context.js';
-import { BUNDLE_FILES, MAX_BUNDLE_META_BYTES, openBundle, parseBundleMeta, verifyBundleMeta, type CatalogBundleMeta } from '../packages/catalog-bundle.js';
+import { BUNDLE_FILES, MAX_BUNDLE_META_BYTES, openBundle, parseBundleMeta, type CatalogBundleMeta } from '../packages/catalog-bundle.js';
 import { readCatalogIndex } from '../packages/catalog.js';
 import { HarborError } from '../errors.js';
 import { rfc3339, type Clock } from '../util.js';
 
 // The official app catalog, kept current without a Harbor release (decision 158). Two places can hold it:
 //   seed        config.catalogDir (/opt/harbor/catalog): the bundle the Harbor release shipped with. A release
-//               build copies the bundle's catalog.json + catalog.json.sig next to it; without them (dev, tests)
-//               the seed is serial 0.
+//               build copies the bundle's catalog.json next to it; without it (dev, tests) the seed is serial 0.
 //   downloaded  <stateDir>/catalog/<serial>/ (same layout), the active one named by <stateDir>/catalog/current.json.
 // Whichever has the higher serial is the catalog; a missing or broken pointer or folder means the seed.
-// A downloaded folder counts only while its stored catalog.json verifies against the keys configured NOW
-// and names that folder's serial: after a key rotation (or a tampered folder) the seed is the catalog again,
-// and the next good bundle is compared with the seed, not with the folder that lost its trust.
-// A check downloads catalog.json + its signature first, and only fetches catalog.zip when the signed serial
-// is newer than the active one: an equal or older bundle (a replay, a rollback) never replaces it, and a
-// serial more than a day ahead of the clock is refused (it would block every honest bundle until then).
-// A check reads the three files one after another from …/latest; a release published in between mixes two
-// bundles (signature or checksum mismatch), so such a check starts over once. The whole check has one
-// deadline (CHECK_DEADLINE_MS) below the CLI's 300 s wait for response headers.
+// Trust is HTTPS to the catalog server (GitHub), like Harbor's self-update; catalog.json is an integrity
+// check, not a signature. A downloaded folder counts only while its stored catalog.json still parses and
+// names that folder's serial (= the pointer): a damaged folder falls back to the seed, and the next good
+// bundle is compared with the seed, not with the folder that broke.
+// A check downloads catalog.json first, and only fetches catalog.zip when its serial is newer than the
+// active one: an equal or older bundle (a rollback) never replaces it, and a serial more than a day ahead
+// of the clock is refused (it would block every newer bundle until then).
+// A check reads the two files one after another from …/latest; a release published in between mixes two
+// bundles (checksum mismatch), so such a check starts over once. The whole check has one deadline
+// (CHECK_DEADLINE_MS) below the CLI's 300 s wait for response headers.
 // Never touches Docker: installed apps see a new revision as an ordinary update.
 
 export const CATALOG_FIRST_CHECK_MS = 60_000;
@@ -30,7 +30,6 @@ export const CATALOG_CHECK_INTERVAL_MS = 6 * 3600_000;
 const META_TIMEOUT_MS = 30_000;
 const ZIP_TIMEOUT_MS = 5 * 60_000;
 export const CHECK_DEADLINE_MS = 240_000;
-const MAX_SIG_BYTES = 1024;
 const MAX_FUTURE_S = 24 * 3600;
 
 export interface CatalogUpdateDeps {
@@ -38,7 +37,6 @@ export interface CatalogUpdateDeps {
   stateDir: string;
   // release-asset base URL (…/releases/latest/download); null = updates off, never fetches
   url: string | null;
-  publicKeys: readonly string[];
   fetcher: Fetcher;
   clock: Clock;
   log: Logger;
@@ -52,18 +50,17 @@ interface ActiveCatalog {
   origin: CatalogStatusDto['origin'];
 }
 
-// A file over its signed size, or (from the fetcher) a response cut off at the limit.
+// A file over the size catalog.json gives it, or (from the fetcher) a response cut off at the limit.
 class TooLarge extends Error {
   constructor(readonly file: string, maxBytes: number) {
     super(`${file} is larger than ${maxBytes} bytes`);
   }
 }
 
-// What a release published halfway through a check looks like: one bundle's catalog.json with the other's
-// signature or archive.
+// What a release published halfway through a check looks like: one bundle's catalog.json with the other's archive.
 function mixedBundle(e: unknown): boolean {
   if (e instanceof TooLarge) return e.file === BUNDLE_FILES.zip;
-  return HarborError.is(e, 'INVALID_PACKAGE') && /signature does not verify|does not match its signed checksum/.test(e.message);
+  return HarborError.is(e, 'INVALID_PACKAGE') && /does not match its catalog\.json checksum/.test(e.message);
 }
 
 function readMetaIn(dir: string): CatalogBundleMeta | null {
@@ -83,8 +80,8 @@ export class CatalogUpdateService {
   private inflight: Promise<CatalogStatusDto> | null = null;
   private firstTimer: NodeJS.Timeout | null = null;
   private timer: NodeJS.Timeout | null = null;
-  // the last downloaded folder checked against the configured keys (activeDir() runs on every catalog read)
-  private verified: { key: string; ok: boolean } | null = null;
+  // the last downloaded folder checked for integrity (activeDir() runs on every catalog read)
+  private checked: { key: string; ok: boolean } | null = null;
   constructor(private readonly deps: CatalogUpdateDeps) {
     // The seed only changes with a Harbor upgrade, which restarts the daemon: read it once.
     const seed = readMetaIn(deps.seedDir);
@@ -111,38 +108,35 @@ export class CatalogUpdateService {
     }
   }
 
-  // True while <serial>/catalog.json verifies against the keys configured now and names that serial.
-  // Cached by serial + size/mtime of catalog.json and its signature; a folder that fails is warned about once.
-  private trusted(serial: number): boolean {
-    const dir = path.join(this.root, String(serial));
-    const metaFile = path.join(dir, BUNDLE_FILES.meta);
-    const sigFile = path.join(dir, BUNDLE_FILES.sig);
+  // True while <serial>/catalog.json parses and names that serial (the folder the pointer chose). An integrity
+  // check against a damaged or hand-edited folder, not a trust decision. Cached by serial + size/mtime of
+  // catalog.json; a folder that fails is warned about once.
+  private intact(serial: number): boolean {
+    const metaFile = path.join(this.root, String(serial), BUNDLE_FILES.meta);
     const m = statSync(metaFile, { throwIfNoEntry: false });
-    const s = statSync(sigFile, { throwIfNoEntry: false });
-    const key = `${serial}:${m ? `${m.size}:${m.mtimeMs}` : '-'}:${s ? `${s.size}:${s.mtimeMs}` : '-'}`;
-    if (this.verified?.key === key) return this.verified.ok;
+    const key = `${serial}:${m ? `${m.size}:${m.mtimeMs}` : '-'}`;
+    if (this.checked?.key === key) return this.checked.ok;
     let reason: string | null = null;
     try {
-      if (!m || !s) throw new Error(`it has no ${!m ? BUNDLE_FILES.meta : BUNDLE_FILES.sig}`);
-      if (s.size > MAX_SIG_BYTES) throw new Error(`${BUNDLE_FILES.sig} is larger than ${MAX_SIG_BYTES} bytes`);
-      const meta = verifyBundleMeta(readFileSync(metaFile), readFileSync(sigFile, 'utf8'), this.deps.publicKeys);
+      if (!m) throw new Error(`it has no ${BUNDLE_FILES.meta}`);
+      const meta = parseBundleMeta(readFileSync(metaFile));
       if (meta.serial !== serial) reason = `its ${BUNDLE_FILES.meta} names serial ${meta.serial}`;
     } catch (e) {
       reason = e instanceof Error ? e.message : String(e);
     }
-    this.verified = { key, ok: reason === null };
-    if (reason !== null) this.deps.log.warn(`the downloaded app catalog ${serial} is not trusted (${reason}); using the catalog bundled with Harbor`);
+    this.checked = { key, ok: reason === null };
+    if (reason !== null) this.deps.log.warn(`the downloaded app catalog ${serial} is damaged (${reason}); using the catalog bundled with Harbor`);
     return reason === null;
   }
 
   private active(): ActiveCatalog {
     const p = this.pointer();
-    if (p !== null && p > this.seedSerial && this.trusted(p)) return { dir: path.join(this.root, String(p)), serial: p, origin: 'downloaded' };
+    if (p !== null && p > this.seedSerial && this.intact(p)) return { dir: path.join(this.root, String(p)), serial: p, origin: 'downloaded' };
     return { dir: this.deps.seedDir, serial: this.seedSerial, origin: 'bundled' };
   }
 
-  // Called on every catalog read (PackageStore): current.json, two stats, and a signature check only when
-  // the folder or its signed files changed.
+  // Called on every catalog read (PackageStore): current.json, two stats, and a parse of catalog.json only
+  // when the folder or that file changed.
   activeDir(): string {
     return this.active().dir;
   }
@@ -211,9 +205,7 @@ export class CatalogUpdateService {
 
   private async download(url: string, deadline: number): Promise<void> {
     const metaBytes = await this.get(url, BUNDLE_FILES.meta, MAX_BUNDLE_META_BYTES, META_TIMEOUT_MS, deadline);
-    const sigBytes = await this.get(url, BUNDLE_FILES.sig, MAX_SIG_BYTES, META_TIMEOUT_MS, deadline);
-    const sig = sigBytes.toString('utf8');
-    const meta = verifyBundleMeta(metaBytes, sig, this.deps.publicKeys);
+    const meta = parseBundleMeta(metaBytes);
     const now = this.deps.clock.now();
     if (meta.serial > Math.floor(now.getTime() / 1000) + MAX_FUTURE_S) {
       throw new Error(`the app catalog is dated in the future (${rfc3339(new Date(meta.serial * 1000))}, this machine says ${rfc3339(now)}); Harbor keeps the catalog it has`);
@@ -226,7 +218,7 @@ export class CatalogUpdateService {
     let partial: string | null = null;
     try {
       const zip = await this.get(url, BUNDLE_FILES.zip, meta.zip.bytes, ZIP_TIMEOUT_MS, deadline);
-      const { files } = openBundle({ meta: metaBytes, sig, zip }, this.deps.publicKeys);
+      const { files } = openBundle({ meta: metaBytes, zip });
 
       // Stage next to the live folders, validate the way the store reads it, then swap in two renames.
       mkdirSync(this.root, { recursive: true, mode: 0o755 });
@@ -240,7 +232,6 @@ export class CatalogUpdateService {
         writeFileSync(file, bytes, { mode: 0o644 });
       }
       writeFileSync(path.join(partial, BUNDLE_FILES.meta), metaBytes, { mode: 0o644 });
-      writeFileSync(path.join(partial, BUNDLE_FILES.sig), sigBytes, { mode: 0o644 });
       const index = readCatalogIndex(partial);
       for (const [id, entry] of Object.entries(index.packages)) {
         const st = statSync(path.join(partial, entry.dir), { throwIfNoEntry: false });

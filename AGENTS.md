@@ -10,8 +10,9 @@ one Ubuntu 24.04 x86-64 machine, one administrator, apps installed from a catalo
 packages** (manifest + Compose subset pinned by image digest), a React console (launcher home screen,
 App Store, Publishing, Platform, Settings), and a `harbor` CLI against the same local API.
 The official apps live in their own repo, **carlosalaniz/harbor-apps** (decision 158): its CI publishes
-a signed catalog bundle; the daemon downloads, verifies and swaps it in at runtime, and every Harbor
-release tarball ships the latest one as an offline seed.
+a catalog bundle as a GitHub release; the daemon downloads it over HTTPS (no signature: the same trust as
+Harbor's self-update), checks its integrity and swaps it in at runtime, and every Harbor release tarball
+ships the latest one as an offline seed.
 
 - Trust model: the `harbor` service user is in the `docker` group and is therefore
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
@@ -58,7 +59,7 @@ targets/<id>/   one backup place package = manifest.yaml (kind BackupTarget: a f
 tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live suite, opt-in);
                 fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store)
 scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_CATALOG_DIR, default
-                ../harbor-apps/apps), openapi.ts, package.mjs (downloads + verifies the signed seed), vm/ controllers
+                ../harbor-apps/apps), openapi.ts, package.mjs (downloads + checks the catalog seed), vm/ controllers
 docs/           OPERATOR_GUIDE.md (user manual), DEVELOPER_PACKAGES.md (package authoring),
                 VERIFICATION.md (evidence log), FUTURE.md (deliberately not built), TODO.md (wanted, not built yet),
                 design/ (UI, CATALOG, EXPOSURE, ROUND9, APP_HOMES, BACKUPS), openapi.json (GENERATED — never hand-edit)
@@ -157,7 +158,7 @@ The non-negotiable subset:
   endpoints itself), NO `entrypoint`, `privileged`, `cap_add`, `devices`, host networking, bind mounts. (`build:` allowed for
   git sources only.)
 - **Official apps live in carlosalaniz/harbor-apps** (`apps/<id>/`), not here. Edit them there, run
-  this repo's scripts against that checkout, and open a PR there; its CI verifies, bundles, signs and
+  this repo's scripts against that checkout, and open a PR there; its CI verifies, bundles and
   publishes (decision 158). `tests/fixtures/catalog/` is frozen test data — do not "update" it to match.
 - **Identity**: `metadata.id` lowercase/dashes, must not collide with bundled ids;
   `release.revision` must rise on every upload (that is what triggers Updates).

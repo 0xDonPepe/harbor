@@ -332,7 +332,7 @@
     },
     "/v1/catalog/status": {
       "get": {
-        "description": "The official app catalog in use (bundled with this release or downloaded since) and the last check for a newer signed one.",
+        "description": "The official app catalog in use (bundled with this release or downloaded since) and the last check for a newer one.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -405,7 +405,7 @@
     },
     "/v1/catalog/refresh": {
       "post": {
-        "description": "Check the catalog repository now for a newer signed catalog and switch to it when it verifies. Never touches running apps; a failure leaves the catalog unchanged and is reported in `error`.",
+        "description": "Check the catalog repository now for a newer catalog and switch to it when it downloads intact and validates. Never touches running apps; a failure leaves the catalog unchanged and is reported in `error`.",
         "responses": {
           "200": {
             "description": "Default Response",

@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -8,14 +7,10 @@ import { openBundle, parseBundleMeta } from '../../src/packages/catalog-bundle.j
 import { readCatalogIndex } from '../../src/packages/catalog.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
 
-// Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and signs the
-// metadata. A throwaway key stands in for the CI secret here.
+// Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and publishes
+// catalog.zip + catalog.json as release assets (no signature).
 const SERIAL = 1_791_000_000;
 const COMMIT = 'abcdef0123456789abcdef0123456789abcdef01';
-function throwawayKey(): { publicKey: string; signMeta: (meta: Buffer) => string } {
-  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  return { publicKey: publicKey.export({ format: 'der', type: 'spki' }).toString('base64'), signMeta: (meta) => sign(null, meta, privateKey).toString('base64') };
-}
 const ROOT = path.resolve(import.meta.dirname, '../..');
 function runScript(script: string, args: string[]): { code: number | null; out: string } {
   const r = spawnSync(process.execPath, ['--import', 'tsx', path.join(ROOT, 'scripts', script), ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, INIT_CWD: ROOT } });
@@ -23,13 +18,12 @@ function runScript(script: string, args: string[]): { code: number | null; out: 
 }
 
 describe('catalog bundle build (decision 158)', () => {
-  it('bundles every index package; the signed result opens with the same bytes Harbor would load', () => {
+  it('bundles every index package; the result opens with the same bytes Harbor would load', () => {
     const built = buildCatalogBundle(REPO_CATALOG, { commit: COMMIT, serial: SERIAL });
     const ids = Object.keys(readCatalogIndex(REPO_CATALOG).packages).sort();
     expect(built.packages.map((p) => p.id)).toEqual(ids);
     expect(parseBundleMeta(built.meta)).toEqual({ schemaVersion: 1, serial: SERIAL, commit: COMMIT, createdAt: new Date(SERIAL * 1000).toISOString(), zip: { sha256: expect.stringMatching(/^[a-f0-9]{64}$/), bytes: built.zip.length }, packages: ids.length });
-    const key = throwawayKey();
-    const { files, meta } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const { files, meta } = openBundle({ meta: built.meta, zip: built.zip });
     expect(meta.serial).toBe(SERIAL);
     const names = [...files.keys()];
     expect(names).toEqual([...names].sort());
@@ -48,9 +42,8 @@ describe('catalog bundle build (decision 158)', () => {
     const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
     delete index.packages.demo;
     writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
-    const key = throwawayKey();
     const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL });
-    const { files } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const { files } = openBundle({ meta: built.meta, zip: built.zip });
     expect([...files.keys()].filter((n) => n.includes('notes.txt') || n.startsWith('demo/'))).toEqual([]);
   });
 
@@ -62,12 +55,10 @@ describe('catalog bundle build (decision 158)', () => {
     expect(() => buildCatalogBundle(REPO_CATALOG, { commit: 'not-a-sha', serial: SERIAL })).toThrow(/commit/);
   });
 
-  it('the CLI writes the zip and unsigned metadata, and drops a stale signature', () => {
+  it('the CLI writes the zip and its catalog.json', () => {
     const out = tempDir('harbor-bundle-');
-    writeFileSync(path.join(out, 'catalog.json.sig'), 'old');
     const r = runScript('catalog-bundle.ts', [REPO_CATALOG, '--out', out, '--commit', COMMIT, '--serial', String(SERIAL)]);
     expect(r.code, r.out).toBe(0);
-    expect(existsSync(path.join(out, 'catalog.json.sig'))).toBe(false);
     expect(parseBundleMeta(readFileSync(path.join(out, 'catalog.json'))).zip.bytes).toBe(readFileSync(path.join(out, 'catalog.zip')).length);
     rmSync(out, { recursive: true, force: true });
     const bad = cloneCatalog();

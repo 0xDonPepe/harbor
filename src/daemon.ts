@@ -106,6 +106,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     if (LOG_ORDER[lvl] >= LOG_ORDER[config.logLevel]) process.stderr.write(line + '\n');
     logBuffer.push(line);
   });
+  for (const n of config.notices) log.warn(n);
   const clock = overrides.clock ?? systemClock;
   const ids = overrides.ids ?? systemIds;
   let lock: ProcessLock | null = null;
@@ -142,9 +143,9 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     const registry = overrides.registry ?? (fakeMode ? demoRegistry() : new RegistryResolver());
     const fetcher = overrides.fetcher ?? (fakeMode ? demoFetcher() : new RealFetcher());
     const version = productVersion();
-    // The official catalog (decision 158): the bundled seed until a newer signed bundle is downloaded;
+    // The official catalog (decision 158): the bundled seed until a newer bundle is downloaded;
     // the store asks for the active folder on every read, so a swap needs no restart.
-    const catalogUpdates = new CatalogUpdateService({ seedDir: config.catalogDir, stateDir: config.stateDir, url: config.catalog.url, publicKeys: config.catalog.publicKeys, fetcher, clock, log });
+    const catalogUpdates = new CatalogUpdateService({ seedDir: config.catalogDir, stateDir: config.stateDir, url: config.catalog.url, fetcher, clock, log });
     const packages = new PackageStore(() => catalogUpdates.activeDir(), config.localPackagesDir, registry, clock, { harborVersion: version });
     const feed = overrides.releaseFeed ?? (fakeMode ? demoReleaseFeed(version) : config.updates.repo ? new GitHubReleaseFeed(fetcher, config.updates.repo) : null);
     const unitStarter = overrides.unitStarter ?? (fakeMode ? new FakeUnitStarter() : new SystemctlStarter());

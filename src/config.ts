@@ -1,7 +1,6 @@
-import { createPublicKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { OFFICIAL_CATALOG_PUBLIC_KEY, OFFICIAL_CATALOG_URL } from './packages/catalog-bundle.js';
+import { OFFICIAL_CATALOG_URL } from './packages/catalog-bundle.js';
 import { PRODUCT } from './naming.js';
 import { compile, formatErrors } from './contracts/validate.js';
 import { HarborError } from './errors.js';
@@ -22,9 +21,9 @@ export interface DaemonConfig {
   lan: { enabled: boolean; port: number };
   // where Harbor looks for newer releases of itself (GitHub owner/name); null disables the check
   updates: { repo: string | null };
-  // the official app catalog (decision 158): where signed bundles are published (release-asset base URL,
-  // no trailing slash) and the ed25519 keys (SPKI DER, base64) they must verify against; url null = off
-  catalog: { url: string | null; publicKeys: string[] };
+  // the official app catalog (decision 158): where bundles are published (release-asset base URL, https,
+  // no trailing slash); url null = off
+  catalog: { url: string | null };
   listen: { host: '127.0.0.1'; port: number };
   docker: DockerConfig;
   appPortRange: { from: number; to: number };
@@ -33,6 +32,8 @@ export interface DaemonConfig {
   sessionTtlSeconds: number;
   planTtlSeconds: number;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
+  // config keys that were accepted but no longer do anything; the daemon logs each once at start
+  notices: string[];
 }
 
 const CONFIG_SCHEMA = {
@@ -52,7 +53,8 @@ const CONFIG_SCHEMA = {
       additionalProperties: false,
       properties: {
         url: { type: ['string', 'null'], minLength: 1, maxLength: 2048 },
-        publicKeys: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 16, maxLength: 1024, pattern: '^[A-Za-z0-9+/]+={0,2}$' } },
+        // deprecated: catalog signing was removed before 0.28.0 shipped (decision 158); accepted and ignored
+        publicKeys: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 1024 } },
       },
     },
     listen: {
@@ -92,7 +94,7 @@ export const CONFIG_DEFAULTS = {
   userDataDir: '/srv/harbor',
   lan: { enabled: false, port: 80 },
   updates: { repo: 'carlosalaniz/harbor' },
-  catalog: { url: OFFICIAL_CATALOG_URL, publicKeys: [OFFICIAL_CATALOG_PUBLIC_KEY] },
+  catalog: { url: OFFICIAL_CATALOG_URL },
 } as const;
 
 // Configuration is always explicit: a JSON file path. No dotenv, no cwd discovery, no
@@ -112,6 +114,8 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
   if (!validate(raw)) {
     throw new HarborError('STATE_UNAVAILABLE', `invalid config: ${formatErrors(validate.errors).join('; ')}`);
   }
+  const notices: string[] = [];
+  if ((raw.catalog as { publicKeys?: unknown } | undefined)?.publicKeys !== undefined) notices.push('config catalog.publicKeys is ignored: the app catalog is no longer signed (trust is HTTPS to the catalog server); remove the key');
   const abs = (p: string) => (path.isAbsolute(p) ? p : path.resolve(baseDir, p));
   const cfg: DaemonConfig = {
     stateDir: abs(raw.stateDir),
@@ -123,7 +127,6 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
     updates: { repo: raw.updates === undefined ? CONFIG_DEFAULTS.updates.repo : (raw.updates.repo ?? null) },
     catalog: {
       url: raw.catalog === undefined || raw.catalog.url === undefined ? CONFIG_DEFAULTS.catalog.url : catalogUrl(raw.catalog.url),
-      publicKeys: raw.catalog?.publicKeys ? raw.catalog.publicKeys.map(catalogKey) : [...CONFIG_DEFAULTS.catalog.publicKeys],
     },
     listen: { host: '127.0.0.1', port: raw.listen?.port ?? CONFIG_DEFAULTS.listen.port },
     docker: raw.docker.mode === 'socket' ? { mode: 'socket', socketPath: raw.docker.socketPath, cliPluginDirs: (raw.docker as { cliPluginDirs?: string[] }).cliPluginDirs ?? [] } : { mode: 'fake' },
@@ -133,6 +136,7 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
     sessionTtlSeconds: raw.sessionTtlSeconds ?? CONFIG_DEFAULTS.sessionTtlSeconds,
     planTtlSeconds: raw.planTtlSeconds ?? CONFIG_DEFAULTS.planTtlSeconds,
     logLevel: raw.logLevel ?? CONFIG_DEFAULTS.logLevel,
+    notices,
   };
   if (cfg.appPortRange.from > cfg.appPortRange.to) throw new HarborError('STATE_UNAVAILABLE', 'invalid config: appPortRange.from > to');
   if (cfg.listen.port >= cfg.appPortRange.from && cfg.listen.port <= cfg.appPortRange.to) {
@@ -154,15 +158,6 @@ function catalogUrl(url: string | null): string | null {
   if (!(u.protocol === 'https:' || (u.protocol === 'http:' && loopback))) throw new HarborError('STATE_UNAVAILABLE', 'invalid config: catalog.url must be https:// (http:// only for 127.0.0.1 or localhost)');
   if (u.search || u.hash || u.username || u.password) throw new HarborError('STATE_UNAVAILABLE', 'invalid config: catalog.url must not carry a query, fragment or credentials');
   return url.replace(/\/+$/, '');
-}
-
-function catalogKey(key: string, i: number): string {
-  try {
-    if (createPublicKey({ key: Buffer.from(key, 'base64'), format: 'der', type: 'spki' }).asymmetricKeyType === 'ed25519') return key;
-  } catch {
-    /* reported below */
-  }
-  throw new HarborError('STATE_UNAVAILABLE', `invalid config: catalog.publicKeys[${i}] is not an ed25519 public key (SPKI DER, base64)`);
 }
 
 export function managementOrigin(cfg: DaemonConfig): string {

@@ -131,22 +131,25 @@ another machine with the recovery key, console + CLI. Next:
 
 ## Official catalog (decision 158): what 0.28.0 left
 
-Built in 0.28.0: the catalog lives in carlosalaniz/harbor-apps, published as signed bundles; boxes
+Built in 0.28.0: the catalog lives in carlosalaniz/harbor-apps, published as GitHub releases (HTTPS, no
+signature: signing was built and removed before release, decision 158); boxes
 check every 6 hours (or on *Check for new apps* / `harbor catalog refresh`) and swap in a newer one
 without a restart; each Harbor release ships the latest as the seed. Next:
 
 - [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor to `main`,
       its sha in `.harbor-ref`, first `c<serial>` release, then re-run Harbor's release job. Then on a test machine or a droplet: upgrade
       from 0.27.x, watch the seed load, publish a revision bump in harbor-apps, see it arrive.
-- [ ] **Key rotation procedure.** Config already takes several `publicKeys`: ship a Harbor release that
-      trusts old + new, switch the `CATALOG_SIGNING_KEY` secret and `keys/harbor-apps.pub`, then drop the
-      old key in a later release. Write it down (and what to do if the key leaks) before it is needed.
+- [ ] **Sign Harbor releases and the catalog together, with one key.** Today both trust GitHub over
+      HTTPS (self-update and catalog alike). Signing only the catalog was built and dropped (decision 158):
+      it guarded the catalog while the Harbor release on the same account stayed unsigned. Do both at once:
+      one key, its custody and rotation written down (and what to do if it leaks), the self-update and the
+      catalog download both refusing what it did not sign.
 - [ ] **Daemon: download by tag, not `releases/latest`** (`pnpm package` already does, via `catalogTagFromLocation`). A release published between the `catalog.json` and
-      `catalog.zip` fetches mixes two bundles; the daemon now starts such a check over once (signature or
-      checksum mismatch). Cleaner: resolve the `c<serial>` tag once and fetch all three files from
+      `catalog.zip` fetches mixes two bundles; the daemon now starts such a check over once (zip/`catalog.json`
+      checksum mismatch). Cleaner: resolve the `c<serial>` tag once and fetch both files from
       `releases/download/c<serial>/`, requiring `meta.serial` to match.
-- [ ] **Catalog reset.** A downloaded folder that no longer verifies against the configured keys already
-      falls back to the seed; there is still no operator action to drop the downloaded catalogs
+- [ ] **Catalog reset.** A downloaded folder whose stored `catalog.json` is damaged or names another serial
+      already falls back to the seed; there is still no operator action to drop the downloaded catalogs
       (today: `sudo rm -rf /var/lib/harbor/catalog` + restart).
 - [ ] **Persist `checkedAt` / `error`.** Status forgets the last check on every restart ("Not checked
       since the daemon started"); keep them in the `settings` table.

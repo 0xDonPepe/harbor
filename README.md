@@ -37,7 +37,8 @@ AnythingLLM, Jellyfin, Immich, Nextcloud (files + office), Vaultwarden, Uptime K
 FreshRSS, Actual Budget, Audiobookshelf, Navidrome, Memos, Mealie. Every image pinned by digest
 and qualified on a real machine. The apps live in their own repository,
 [harbor-apps](https://github.com/carlosalaniz/harbor-apps): new apps and app updates reach your
-box as a signed catalog every few hours, without waiting for a Harbor release. Each Harbor release
+box as a new catalog every few hours (over HTTPS from GitHub, like Harbor's own updates), without
+waiting for a Harbor release. Each Harbor release
 also ships the latest catalog, so a machine offline keeps working with the apps it came with. Apps with big data (photos, media, files) can live in a folder
 of yours instead of a Docker volume — on a removable drive if you like (Harbor mounts it,
 notices when it leaves, stops the app to protect its data, and starts it again when it returns).

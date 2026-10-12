@@ -1,4 +1,3 @@
-import { createPublicKey, verify } from 'node:crypto';
 import { compile, formatErrors } from '../contracts/validate.js';
 import { SHA256_HEX_PATTERN } from '../contracts/patterns.js';
 import { HarborError } from '../errors.js';
@@ -6,17 +5,16 @@ import { sha256Hex } from './inventory.js';
 import { readZip, type ZipLimits } from './zip.js';
 
 // The official app catalog (decision 158) lives in its own repository (carlosalaniz/harbor-apps). Its CI
-// publishes one bundle per change as three release assets:
-//   catalog.zip       index.json + <id>/{manifest.yaml,compose.yaml,README.md,release.json,assets}
-//   catalog.json      metadata below; the only signed bytes (it pins the zip by sha256 and size)
-//   catalog.json.sig  base64 ed25519 signature over the exact catalog.json bytes
-// Harbor trusts a bundle only when the signature verifies against a pinned public key. Pure: no I/O.
+// publishes one bundle per change as two release assets:
+//   catalog.zip   index.json + <id>/{manifest.yaml,compose.yaml,README.md,release.json,assets}
+//   catalog.json  metadata below; it pins the zip by sha256 and size
+// Trust is HTTPS to GitHub, exactly like Harbor's own self-update: there is no signature. catalog.json is an
+// INTEGRITY check (a truncated download, or a zip from one release with the metadata of another), not a trust
+// anchor: anyone who can change the release can change both files. Pure: no I/O.
 
 export const OFFICIAL_CATALOG_URL = 'https://github.com/carlosalaniz/harbor-apps/releases/latest/download';
-// SPKI DER (base64) of the harbor-apps signing key. The private half is a CI secret of that repository.
-export const OFFICIAL_CATALOG_PUBLIC_KEY = 'MCowBQYDK2VwAyEAOPBvp5o15hIL9coLYqT1I+FprDVBszRZuT8Sfx52HZM=';
 
-export const BUNDLE_FILES = { zip: 'catalog.zip', meta: 'catalog.json', sig: 'catalog.json.sig' } as const;
+export const BUNDLE_FILES = { zip: 'catalog.zip', meta: 'catalog.json' } as const;
 export const BUNDLE_ZIP_LIMITS: ZipLimits = { maxEntries: 4096, maxFileBytes: 4 * 1024 * 1024, maxTotalBytes: 96 * 1024 * 1024 };
 export const MAX_BUNDLE_ZIP_BYTES = 96 * 1024 * 1024;
 export const MAX_BUNDLE_META_BYTES = 64 * 1024;
@@ -63,31 +61,7 @@ export function parseBundleMeta(bytes: Buffer, label = BUNDLE_FILES.meta): Catal
   return value;
 }
 
-// True when `signature` (base64, surrounding whitespace ignored) is a valid ed25519 signature of `meta`
-// by any of `publicKeys` (SPKI DER, base64). Never throws on a malformed signature or key: that is "no".
-export function verifyBundleSignature(meta: Buffer, signature: string, publicKeys: readonly string[]): boolean {
-  const sig = Buffer.from(signature.trim(), 'base64');
-  if (sig.length !== 64) return false;
-  for (const k of publicKeys) {
-    try {
-      const key = createPublicKey({ key: Buffer.from(k, 'base64'), format: 'der', type: 'spki' });
-      if (key.asymmetricKeyType === 'ed25519' && verify(null, meta, key, sig)) return true;
-    } catch {
-      /* a bad key never verifies */
-    }
-  }
-  return false;
-}
-
-// Verify the signed metadata alone (before downloading the archive it pins) and return it.
-export function verifyBundleMeta(meta: Buffer, sig: string, publicKeys: readonly string[]): CatalogBundleMeta {
-  if (!verifyBundleSignature(meta, sig, publicKeys)) {
-    throw new HarborError('INVALID_PACKAGE', 'the app catalog signature does not verify', { nextAction: 'Nothing was changed. The catalog stays on the version already on this machine.' });
-  }
-  return parseBundleMeta(meta);
-}
-
-// Release tags: harbor-apps tags each bundle c<serial>. A build fetching three files from `releases/latest/download`
+// Release tags: harbor-apps tags each bundle c<serial>. A build fetching both files from `releases/latest/download`
 // could mix two bundles when a release lands in between, so `pnpm package` resolves the tag once (the Location of
 // `<base>/latest`) and downloads every file from `<base>/download/c<serial>`.
 const LATEST_DOWNLOAD_SUFFIX = '/latest/download';
@@ -124,11 +98,12 @@ export function catalogDownloadBase(releasesBase: string, serial: number): strin
   return `${releasesBase.replace(/\/+$/, '')}/download/c${serial}`;
 }
 
-// Verify a downloaded bundle end to end and return its files (catalog layout, index.json at the root).
-export function openBundle(input: { meta: Buffer; sig: string; zip: Buffer }, publicKeys: readonly string[]): { meta: CatalogBundleMeta; files: Map<string, Buffer> } {
-  const meta = verifyBundleMeta(input.meta, input.sig, publicKeys);
+// Check a downloaded bundle end to end (metadata schema, archive size + sha256 against catalog.json, safe
+// extraction under the zip limits) and return its files (catalog layout, index.json at the root).
+export function openBundle(input: { meta: Buffer; zip: Buffer }): { meta: CatalogBundleMeta; files: Map<string, Buffer> } {
+  const meta = parseBundleMeta(input.meta);
   if (input.zip.length !== meta.zip.bytes || sha256Hex(input.zip) !== meta.zip.sha256) {
-    throw new HarborError('INVALID_PACKAGE', 'the app catalog archive does not match its signed checksum', { nextAction: 'Nothing was changed. Harbor tries again at the next check.' });
+    throw new HarborError('INVALID_PACKAGE', `the app catalog archive does not match its ${BUNDLE_FILES.meta} checksum`, { nextAction: 'Nothing was changed. Harbor tries again at the next check.' });
   }
   const files = readZip(input.zip, BUNDLE_ZIP_LIMITS);
   if (!files.has('index.json')) throw new HarborError('INVALID_PACKAGE', 'the app catalog archive has no index.json at its root');

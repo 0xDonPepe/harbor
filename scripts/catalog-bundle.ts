@@ -1,9 +1,9 @@
 // Bundle an app catalog for publishing (decision 158; run by the harbor-apps CI):
 //   pnpm catalog:bundle <catalogDir> --out <dir> --commit <sha> --serial <unix-seconds>
-// Writes <out>/catalog.zip and an UNSIGNED <out>/catalog.json; signing is the next CI step. The serial is
+// Writes <out>/catalog.zip and <out>/catalog.json (the zip's sha256 + size: an integrity check). The serial is
 // the committer time of the catalog commit (git log -1 --format=%ct): Harbor only ever moves to a higher one.
 // Fails without writing anything when any package does not validate exactly as the daemon loads it.
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { BUNDLE_FILES } from '../src/packages/catalog-bundle.js';
 import { buildCatalogBundle } from './catalog-bundle-build.js';
@@ -30,13 +30,12 @@ try {
   const built = buildCatalogBundle(catalogDir, { commit, serial });
   const outDir = path.resolve(process.env['INIT_CWD'] ?? process.cwd(), out);
   mkdirSync(outDir, { recursive: true });
-  rmSync(path.join(outDir, BUNDLE_FILES.sig), { force: true }); // never leave an old signature beside new metadata
   writeFileSync(path.join(outDir, BUNDLE_FILES.zip), built.zip);
   writeFileSync(path.join(outDir, BUNDLE_FILES.meta), built.meta);
   // `ok   <id>@<revision>[ (<version>)][ minHarbor=<x.y.z>]`: the harbor-apps publish job parses these lines
   for (const p of built.packages) console.log(`ok   ${p.id}@${p.revision}${p.version ? ` (${p.version})` : ''}${p.minHarbor ? ` minHarbor=${p.minHarbor}` : ''}`);
   console.log(`${path.join(outDir, BUNDLE_FILES.zip)} ${built.parsed.zip.bytes} bytes sha256 ${built.parsed.zip.sha256}`);
-  console.log(`${path.join(outDir, BUNDLE_FILES.meta)} serial ${built.parsed.serial} (${built.parsed.createdAt}) commit ${commit}, ${built.parsed.packages} packages, unsigned`);
+  console.log(`${path.join(outDir, BUNDLE_FILES.meta)} serial ${built.parsed.serial} (${built.parsed.createdAt}) commit ${commit}, ${built.parsed.packages} packages`);
 } catch (e) {
   console.error((e as Error).message);
   process.exit(1);

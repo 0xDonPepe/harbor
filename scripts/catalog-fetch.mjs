@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Download the latest signed official app catalog (decision 158), verify it against the pinned key, and extract it.
-//   node scripts/catalog-fetch.mjs --out <dir>      (needs `pnpm build:server`: it uses the compiled verifier)
-// Writes <dir>/index.json + <dir>/<id>/... + catalog.json + catalog.json.sig, the layout `pnpm catalog:verify <dir>`
+// Download the latest official app catalog published by carlosalaniz/harbor-apps over HTTPS (decision 158: no
+// signature, trust is HTTPS to GitHub like the self-update), check the zip against its catalog.json (an integrity
+// check, not a trust anchor), and extract it.
+//   node scripts/catalog-fetch.mjs --out <dir>      (needs `pnpm build:server`: it uses the compiled bundle code)
+// Writes <dir>/index.json + <dir>/<id>/... + catalog.json, the layout `pnpm catalog:verify <dir>`
 // and the daemon read. Used by `pnpm package` (the offline seed) and by Harbor CI's official-catalog job, which
 // checks that THIS commit still loads every published app (decision 159).
-// "Latest" is resolved once to its tag c<serial>; all three files come from releases/download/c<serial>, so a
+// "Latest" is resolved once to its tag c<serial>; both files come from releases/download/c<serial>, so a
 // release landing mid-download can never mix two bundles.
-//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json/catalog.json.sig from <dir> instead of downloading
-//   HARBOR_CATALOG_PUBLIC_KEY=<b64>  trust this SPKI key instead of the official one (local tests only)
+//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json from <dir> instead of downloading
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,11 +50,10 @@ async function resolveCatalogTag(bundleLib) {
   return { serial, url: bundleLib.catalogDownloadBase(releases, serial) };
 }
 
-// Fetch (or read from HARBOR_CATALOG_BUNDLE) and verify one bundle end to end. Throws when nothing verifies.
-//   -> { bundle: { meta, files }, raw: { meta, sig, zip }, source, key, official }
+// Fetch (or read from HARBOR_CATALOG_BUNDLE) and check one bundle end to end (zip vs catalog.json, schema, zip
+// limits). Throws when the bundle does not check out.
+//   -> { bundle: { meta, files }, raw: { meta, zip }, source, official }   (official = downloaded, not a local dir)
 export async function fetchCatalogBundle(bundleLib, env = process.env) {
-  const key = env.HARBOR_CATALOG_PUBLIC_KEY ?? bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY;
-  if (key !== bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY) console.warn('WARNING: HARBOR_CATALOG_PUBLIC_KEY overrides the official catalog key; for local testing only');
   const local = env.HARBOR_CATALOG_BUNDLE;
   const pinned = local ? null : await resolveCatalogTag(bundleLib);
   const source = pinned ? pinned.url : path.resolve(env.INIT_CWD ?? process.cwd(), local);
@@ -64,17 +64,17 @@ export async function fetchCatalogBundle(bundleLib, env = process.env) {
   }
   let bundle;
   try {
-    bundle = bundleLib.openBundle({ meta: raw.meta, sig: raw.sig.toString('utf8'), zip: raw.zip }, [key]);
+    bundle = bundleLib.openBundle({ meta: raw.meta, zip: raw.zip });
     if (pinned && bundle.meta.serial !== pinned.serial) throw new Error(`tag c${pinned.serial} carries a catalog with serial ${bundle.meta.serial}`);
   } catch (e) {
     throw new Error(`app catalog from ${source}: ${e.message}`, { cause: e });
   }
-  console.log(`app catalog serial ${bundle.meta.serial} (${bundle.meta.createdAt}, commit ${bundle.meta.commit.slice(0, 12)}, ${bundle.meta.packages} packages) from ${source}: signature verified`);
-  return { bundle, raw, source, key, official: key === bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY };
+  console.log(`app catalog serial ${bundle.meta.serial} (${bundle.meta.createdAt}, commit ${bundle.meta.commit.slice(0, 12)}, ${bundle.meta.packages} packages) from ${source}: checksum verified`);
+  return { bundle, raw, source, official: !local };
 }
 
-// Extract a verified bundle into `dir` (catalog layout) and return its index. The metadata and signature are
-// written verbatim beside it: the daemon reads the seed serial from them.
+// Extract a checked bundle into `dir` (catalog layout) and return its index. catalog.json is written verbatim
+// beside it: the daemon reads the seed serial from it.
 export function extractCatalog(dir, fetched, libs) {
   const { bundle, raw } = fetched;
   for (const [name, bytes] of bundle.files) {
@@ -83,7 +83,6 @@ export function extractCatalog(dir, fetched, libs) {
     writeFileSync(path.join(dir, name), bytes);
   }
   writeFileSync(path.join(dir, libs.bundleLib.BUNDLE_FILES.meta), raw.meta);
-  writeFileSync(path.join(dir, libs.bundleLib.BUNDLE_FILES.sig), raw.sig);
   const index = libs.catalogLib.readCatalogIndex(dir);
   const ids = Object.keys(index.packages);
   if (!ids.length || ids.length !== bundle.meta.packages) throw new Error(`catalog.zip lists ${ids.length} packages, catalog.json says ${bundle.meta.packages}`);

@@ -282,7 +282,7 @@ catalogCmd
   });
 catalogCmd
   .command('refresh')
-  .description('check now for a newer signed catalog and switch to it (running apps are not touched; updates show up as usual)')
+  .description('check now for a newer catalog and switch to it (running apps are not touched; updates show up as usual)')
   .action(async () => {
     const api = client();
     const before = await api.get<CatalogStatusDto>('/v1/catalog/status');

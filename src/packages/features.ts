@@ -30,7 +30,7 @@ export interface HarborFeature {
 }
 
 // Everything the format accepted when the catalog moved out (0.28.0, decision 158) needs no minimum:
-// Harbor before 0.28 never fetches the signed catalog. Add new fields and values HERE, with the next
+// Harbor before 0.28 never fetches the published catalog. Add new fields and values HERE, with the next
 // release version; tests/unit/package-features.test.ts fails for a schema path that is in neither list.
 export const FEATURES: readonly HarborFeature[] = [];
 

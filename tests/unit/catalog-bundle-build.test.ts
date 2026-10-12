@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { generateKeyPairSync, sign } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -14,14 +13,10 @@ import { CATALOG_INDEX_SCHEMA } from '../../src/contracts/release.schema.js';
 import type { HarborFeature } from '../../src/packages/features.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
 
-// Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and signs the
-// metadata. A throwaway key stands in for the CI secret here.
+// Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and publishes
+// catalog.zip + catalog.json as release assets (no signature).
 const SERIAL = 1_791_000_000;
 const COMMIT = 'abcdef0123456789abcdef0123456789abcdef01';
-function throwawayKey(): { publicKey: string; signMeta: (meta: Buffer) => string } {
-  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  return { publicKey: publicKey.export({ format: 'der', type: 'spki' }).toString('base64'), signMeta: (meta) => sign(null, meta, privateKey).toString('base64') };
-}
 const ROOT = path.resolve(import.meta.dirname, '../..');
 function runScript(script: string, args: string[]): { code: number | null; out: string } {
   const r = spawnSync(process.execPath, ['--import', 'tsx', path.join(ROOT, 'scripts', script), ...args], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, INIT_CWD: ROOT } });
@@ -29,13 +24,12 @@ function runScript(script: string, args: string[]): { code: number | null; out: 
 }
 
 describe('catalog bundle build (decision 158)', () => {
-  it('bundles every index package; the signed result opens with the same bytes Harbor would load', () => {
+  it('bundles every index package; the result opens with the same bytes Harbor would load', () => {
     const built = buildCatalogBundle(REPO_CATALOG, { commit: COMMIT, serial: SERIAL });
     const ids = Object.keys(readCatalogIndex(REPO_CATALOG).packages).sort();
     expect(built.packages.map((p) => p.id)).toEqual(ids);
     expect(parseBundleMeta(built.meta)).toEqual({ schemaVersion: 1, serial: SERIAL, commit: COMMIT, createdAt: new Date(SERIAL * 1000).toISOString(), zip: { sha256: expect.stringMatching(/^[a-f0-9]{64}$/), bytes: built.zip.length }, packages: ids.length });
-    const key = throwawayKey();
-    const { files, meta } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const { files, meta } = openBundle({ meta: built.meta, zip: built.zip });
     expect(meta.serial).toBe(SERIAL);
     const names = [...files.keys()];
     expect(names).toEqual([...names].sort());
@@ -55,9 +49,8 @@ describe('catalog bundle build (decision 158)', () => {
     const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
     delete index.packages.demo;
     writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
-    const key = throwawayKey();
     const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL });
-    const { files } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const { files } = openBundle({ meta: built.meta, zip: built.zip });
     expect([...files.keys()].filter((n) => n.includes('notes.txt') || n.startsWith('demo/'))).toEqual([]);
   });
 
@@ -69,12 +62,10 @@ describe('catalog bundle build (decision 158)', () => {
     expect(() => buildCatalogBundle(REPO_CATALOG, { commit: 'not-a-sha', serial: SERIAL })).toThrow(/commit/);
   });
 
-  it('the CLI writes the zip and unsigned metadata, and drops a stale signature', () => {
+  it('the CLI writes the zip and its catalog.json', () => {
     const out = tempDir('harbor-bundle-');
-    writeFileSync(path.join(out, 'catalog.json.sig'), 'old');
     const r = runScript('catalog-bundle.ts', [REPO_CATALOG, '--out', out, '--commit', COMMIT, '--serial', String(SERIAL)]);
     expect(r.code, r.out).toBe(0);
-    expect(existsSync(path.join(out, 'catalog.json.sig'))).toBe(false);
     expect(parseBundleMeta(readFileSync(path.join(out, 'catalog.json'))).zip.bytes).toBe(readFileSync(path.join(out, 'catalog.zip')).length);
     rmSync(out, { recursive: true, force: true });
     const bad = cloneCatalog();
@@ -100,22 +91,27 @@ describe('catalog bundle build (decision 158)', () => {
     expect(runScript('catalog-hash.ts', ['--catalog', dir, '--check']).code).toBe(0);
   });
 
-  it('extracts a fetched bundle into a catalog that verifies (scripts/catalog-fetch.mjs, local bundle + test key)', async () => {
-    const key = throwawayKey();
+  it('extracts a fetched bundle into a catalog that verifies (scripts/catalog-fetch.mjs, local bundle)', async () => {
     const built = buildCatalogBundle(REPO_CATALOG, { commit: COMMIT, serial: SERIAL });
     const src = tempDir('harbor-fetch-src-');
     writeFileSync(path.join(src, 'catalog.zip'), built.zip);
     writeFileSync(path.join(src, 'catalog.json'), built.meta);
-    writeFileSync(path.join(src, 'catalog.json.sig'), key.signMeta(built.meta));
-    const fetched = await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src, HARBOR_CATALOG_PUBLIC_KEY: key.publicKey });
+    const fetched = await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src });
     expect(fetched.official).toBe(false);
     const out = tempDir('harbor-fetch-out-');
     const index = extractCatalog(out, fetched, { bundleLib, catalogLib });
     expect(index).toEqual(readCatalogIndex(REPO_CATALOG));
     expect(readFileSync(path.join(out, 'catalog.json'))).toEqual(built.meta);
+    expect(existsSync(path.join(out, 'catalog.json.sig'))).toBe(false);
     expect(verifyCatalog(out).failed).toBe(0);
-    // a bundle signed by any other key is refused before anything is extracted
-    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src, HARBOR_CATALOG_PUBLIC_KEY: throwawayKey().publicKey })).rejects.toThrow(/signature does not verify/);
+    // a zip that does not match its catalog.json (one flipped byte) is refused before anything is extracted
+    const bad = tempDir('harbor-fetch-bad-');
+    const flipped = Buffer.from(built.zip);
+    const mid = Math.floor(flipped.length / 2);
+    flipped[mid] = flipped[mid]! ^ 0xff;
+    writeFileSync(path.join(bad, 'catalog.zip'), flipped);
+    writeFileSync(path.join(bad, 'catalog.json'), built.meta);
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: bad })).rejects.toThrow(/does not match its catalog\.json checksum/);
   });
 });
 
@@ -137,8 +133,7 @@ describe('automatic minHarbor (decision 159)', () => {
     const built = buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE });
     expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.29.0');
     expect(built.packages.filter((p) => p.minHarbor).map((p) => p.id)).toEqual(['demo']);
-    const key = throwawayKey();
-    const { files } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const { files } = openBundle({ meta: built.meta, zip: built.zip });
     const index = JSON.parse(files.get('index.json')!.toString('utf8'));
     expect(index.packages.demo).toEqual({ revision: '1', dir: 'demo', minHarbor: '0.29.0' });
     expect(Object.keys(index.packages.demo)).toEqual(['dir', 'minHarbor', 'revision']); // sorted: deterministic bytes
@@ -162,8 +157,7 @@ describe('automatic minHarbor (decision 159)', () => {
     index.packages.memos = { minHarbor: '0.28.0', dir: index.packages.memos.dir, revision: index.packages.memos.revision };
     writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
     const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL, features: TABLE });
-    const key = throwawayKey();
-    const stamped = JSON.parse(openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]).files.get('index.json')!.toString('utf8'));
+    const stamped = JSON.parse(openBundle({ meta: built.meta, zip: built.zip }).files.get('index.json')!.toString('utf8'));
     const fields = Object.keys(CATALOG_INDEX_SCHEMA.properties.packages.additionalProperties.properties).sort();
     expect(Object.keys(stamped.packages.memos)).toEqual(fields); // every field the index format has makes it through
     expect(stamped.packages.memos).toEqual(index.packages.memos);

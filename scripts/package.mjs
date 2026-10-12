@@ -5,13 +5,12 @@
 // targets/, node/ (official Node.js linux-x64 runtime, checksum-verified), node_modules/ (production
 // deps, hoisted, with better-sqlite3's shipped linux-x64 prebuild), docs/, package.json, release.json.
 // No npm/pnpm/compilation happens on the destination host.
-// catalog/ is the offline seed (decision 158): the latest signed bundle published by carlosalaniz/harbor-apps,
-// verified against the pinned key and extracted (index.json + package dirs + catalog.json + catalog.json.sig).
-// "Latest" is resolved once to its tag c<serial>; all three files come from releases/download/c<serial>
-// (scripts/catalog-fetch.mjs, shared with CI's official-catalog job).
-//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json/catalog.json.sig from <dir> instead of downloading
-//   HARBOR_CATALOG_PUBLIC_KEY=<b64>  trust this SPKI key instead of the official one (local test builds only;
-//                                    recorded in release.json, never set in CI)
+// catalog/ is the offline seed (decision 158): the latest bundle published by carlosalaniz/harbor-apps,
+// downloaded over HTTPS (no signature), zip checked against its catalog.json, extracted (index.json + package
+// dirs + catalog.json). "Latest" is resolved once to its tag c<serial>; both files come from
+// releases/download/c<serial> (scripts/catalog-fetch.mjs, shared with CI's official-catalog job).
+//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json from <dir> instead of downloading
+//                                    (recorded in release.json as official: false)
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, lstatSync, unlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
@@ -51,7 +50,7 @@ for (const f of ['dist/daemon.js', 'dist/cli/main.js', 'dist/packages/catalog-bu
   if (!existsSync(path.join(ROOT, f))) throw new Error(`missing build output ${f}`);
 }
 
-// 1b. App catalog seed: the signed harbor-apps bundle, verified before anything is staged. No silent empty catalog.
+// 1b. App catalog seed: the harbor-apps bundle, checked before anything is staged. No silent empty catalog.
 const catalogLibs = await loadCatalogLibs();
 const { bundleLib, catalogLib } = catalogLibs;
 let fetched;
@@ -61,7 +60,7 @@ try {
   console.error(`${e.message}; no release archive was built`);
   process.exit(1);
 }
-const { bundle, source: catalogSource, key: catalogKey } = fetched;
+const { bundle, source: catalogSource } = fetched;
 
 // 2. Node runtime (official tarball, verified against the published SHASUMS256.txt)
 mkdirSync(cacheDir, { recursive: true });
@@ -140,7 +139,7 @@ writeFileSync(
       commit,
       node: { version: NODE_VERSION, tarball, sha256: actual, source: `https://nodejs.org/dist/${NODE_VERSION}/` },
       packages: Object.fromEntries(Object.entries(catalogIndex.packages).map(([id, e]) => [id, e.revision])),
-      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, publicKey: catalogKey, official: fetched.official },
+      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, official: fetched.official },
       dependencies: pkg.dependencies,
     },
     null,

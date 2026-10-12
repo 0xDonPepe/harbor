@@ -196,7 +196,7 @@ const A02 = step('A02', 'CLI and UI show the real pinned catalog (incl. the thre
   const catalog = cliOk(target, ['catalog']);
   const ids = catalog.map((c) => c.id).sort();
   for (const must of ['bentopdf', 'excalidraw', 'n8n']) if (!ids.includes(must)) throw new Error(`catalog is missing ${must}: ${ids}`);
-  // the seed catalog the release archive shipped (decision 158: it comes from the signed harbor-apps bundle)
+  // the seed catalog the release archive shipped (decision 158: it comes from the latest harbor-apps bundle, checked against its catalog.json)
   const expectedIds = Object.keys(JSON.parse(ssh('cat /opt/harbor/catalog/index.json')).packages).sort();
   if (ids.join(',') !== expectedIds.join(',')) throw new Error(`catalog ids ${ids} != bundled ${expectedIds}`);
   if (!catalog.every((c) => c.availability === 'available')) throw new Error('not all packages available');

@@ -1,5 +1,5 @@
-// Build the official catalog bundle (decision 158) from a catalog checkout: the zip and its UNSIGNED
-// metadata. Signing happens in the harbor-apps CI (scripts/sign.mjs there), never here.
+// Build the official catalog bundle (decision 158) from a catalog checkout: the zip and its catalog.json
+// (sha256 + size of the zip: an integrity check, no signature).
 // Every index-listed package must load exactly as the daemon loads it; one failure fails the bundle.
 // Only the files the loader reads go in (four package files + presentation assets named by the manifest),
 // so stray files and unlisted folders in the checkout never ship. No timestamps: the same checkout

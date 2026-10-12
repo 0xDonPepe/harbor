@@ -580,10 +580,10 @@ export interface SelfUpdateStatusDto {
   applying: { version: string; state: 'requested' | 'downloading' | 'installing' | 'succeeded' | 'failed' | 'rolled-back'; message: string; at: string } | null;
 }
 
-// ---- the official app catalog (decision 158): signed bundles from the catalog repository's releases
+// ---- the official app catalog (decision 158): bundles from the catalog repository's releases (HTTPS, no signature)
 export interface CatalogStatusDto {
   source: string | null; // release-asset base URL Harbor checks; null = catalog updates are off
-  serial: number; // the active catalog's serial (catalog commit time, unix seconds); 0 = an unsigned dev seed
+  serial: number; // the active catalog's serial (catalog commit time, unix seconds); 0 = a dev seed without catalog.json
   commit: string | null; // catalog repository commit of the active catalog
   createdAt: string | null; // when that bundle was built
   origin: 'bundled' | 'downloaded'; // shipped with this Harbor release, or downloaded since

@@ -366,16 +366,13 @@ Rules the loader enforces (`src/backups/targets.ts`):
 
 The built-in apps are not in this repository. They live in
 [carlosalaniz/harbor-apps](https://github.com/carlosalaniz/harbor-apps), one folder per app, in the same
-package format as above (decision 158). Every change merged there reaches Harbor boxes as a signed
+package format as above (decision 158). Every change merged there reaches Harbor boxes as a new
 catalog within about 6 hours, without a Harbor release.
 
 ```
 harbor-apps/
   apps/index.json          id -> { revision, dir, optional minHarbor }
   apps/<id>/manifest.yaml, compose.yaml, README.md, release.json (+ icon, screenshots)
-  keys/harbor-apps.pub     the public key Harbor pins
-  scripts/check-bundle.mjs re-checks the unsigned bundle in CI before it is signed
-  scripts/sign.mjs         signs a bundle in CI
   .harbor-ref              the Harbor commit (full 40-hex sha on Harbor's main) whose tools CI uses
 ```
 
@@ -427,33 +424,31 @@ files. It refuses to record anything when the box's catalog revisions differ fro
 the archive from a bundle of that checkout with `HARBOR_CATALOG_BUNDLE`, or use `--only`). Never set it
 by hand. A qualification change alone needs no revision bump.
 
-**Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `keys/`,
-`scripts/`, `.harbor-ref` or the workflow (or a manual run):
+**Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `.harbor-ref`
+or the workflow (or a manual run) runs two jobs:
 
 1. **verify** checks as above, with Harbor checked out at the commit pinned in `.harbor-ref` (a full sha
    on Harbor's `main`; branches and tags are refused, because the bundle is built by that code),
-2. **bundle** (read-only token, no secret) runs `pnpm catalog:bundle <apps> --out dist --commit <sha>
-   --serial <unix>`, which writes `catalog.zip` (deterministic: index.json with each app's computed
-   `minHarbor` stamped in, plus, per app, only the package files and the assets its manifest names) and an unsigned `catalog.json` (zip sha256 + size, commit,
-   serial, createdAt, package count), and hands them over as a workflow artifact,
-3. **sign** runs in the `catalog-signing` GitHub Environment (main only), the only place the
-   `CATALOG_SIGNING_KEY` secret exists. It checks out only harbor-apps and installs nothing.
-   `scripts/check-bundle.mjs` re-checks that `catalog.json` names this commit and serial and pins the
-   zip's exact sha256 and size. Then `scripts/sign.mjs` signs `catalog.json` with ed25519 and checks the
-   signature against `keys/harbor-apps.pub`; a key that does not match fails the job,
-4. **publish** (the only job with write access) runs `gh release create c<serial>` with the three files
-   and marks the release latest.
+2. **release** (the only job with write access; the token reaches only its `gh` steps) runs
+   `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` with Harbor at the same commit,
+   which writes `catalog.zip` (deterministic: index.json with each app's computed `minHarbor` stamped in,
+   plus, per app, only the package files and the assets its manifest names) and `catalog.json` (zip sha256 + size, commit, serial, createdAt, package
+   count), then runs `gh release create c<serial>` with the two files and marks the release latest.
+
+There is no signature. A box trusts the catalog because it comes over HTTPS from this GitHub repository,
+the same trust as Harbor's own self-update (decision 158). `catalog.json` is an integrity check against
+a truncated or mixed download, not a trust anchor.
 
 The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so:
-- a committer time more than 5 minutes in the future fails the bundle job,
+- a committer time more than 5 minutes in the future fails the release job,
 - a re-run for a commit that is already released does nothing,
 - a different commit in the same second as an existing release fails ("make a new commit"),
 - a commit older than the latest release is skipped when `main` has moved on (the newer commit
   publishes), and fails as clock skew when it is still `main`'s tip.
 
 Harbor releases ship the latest catalog too: `pnpm package` resolves the latest `c<serial>` tag once,
-downloads all three files from that tag, and refuses to build an archive whose catalog does not verify
-against the pinned key or whose signed serial differs from the tag.
+downloads both files from that tag, and refuses to build an archive whose zip does not match its
+`catalog.json` or whose serial differs from the tag.
 
 **Ids.** Official ids are reserved: uploading or importing a package with one is refused ("the id …
 belongs to a built-in app"), unless you already had your own package with that id before the official

@@ -52,7 +52,7 @@ jobs:
           node-version: 24.12.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # the fetch verifies the signature with the compiled verifier; catalog:verify then runs this commit's sources
+      # the fetch checks the zip against catalog.json with the compiled code; catalog:verify then runs this commit's sources
       - run: pnpm build:server
       - run: pnpm catalog:fetch --out "$RUNNER_TEMP/official-catalog"
       - run: pnpm catalog:verify "$RUNNER_TEMP/official-catalog" --quiet

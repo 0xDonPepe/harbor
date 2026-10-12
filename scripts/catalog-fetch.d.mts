@@ -8,9 +8,8 @@ export interface CatalogLibs {
 }
 export interface FetchedCatalog {
   bundle: { meta: BundleLib.CatalogBundleMeta; files: Map<string, Buffer> };
-  raw: { meta: Buffer; sig: Buffer; zip: Buffer };
+  raw: { meta: Buffer; zip: Buffer };
   source: string;
-  key: string;
   official: boolean;
 }
 export declare function loadCatalogLibs(): Promise<CatalogLibs>;

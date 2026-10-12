@@ -183,58 +183,55 @@ Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its ow
 `pnpm dev`; `targets/` (backup place packages) stays in Harbor. Editorial scripts resolve the catalog as
 `--catalog <dir>` (or a positional dir), then `HARBOR_CATALOG_DIR`, then `../harbor-apps/apps`.
 
-**What is published.** One GitHub release `c<serial>` per change on harbor-apps `main`, three assets:
+**What is published.** One GitHub release `c<serial>` per change on harbor-apps `main`, two assets:
 
 | File | Content |
 |---|---|
 | `catalog.zip` | `index.json` at the root + per app only `manifest.yaml`, `compose.yaml`, `README.md`, `release.json` and the assets its manifest names; sorted, deterministic; ≤ 96 MiB, ≤ 4096 entries |
-| `catalog.json` | `{schemaVersion: 1, serial, commit, createdAt, zip: {sha256, bytes}, packages}`, ≤ 64 KiB — the only signed bytes |
-| `catalog.json.sig` | base64 ed25519 signature over the exact `catalog.json` bytes |
+| `catalog.json` | `{schemaVersion: 1, serial, commit, createdAt, zip: {sha256, bytes}, packages}`, ≤ 64 KiB — an integrity check of the zip, not a trust anchor |
 
 `serial` = the commit's committer time (unix seconds). The workflow refuses a committer time more than
 5 minutes in the future, skips a re-run of a commit that is already released, fails a different commit
 with the same serial as an existing release, and for a serial not newer than the latest release skips
 when `main` has moved on (the newer commit publishes) and fails otherwise (clock skew).
 
-**CI layout.** Four jobs, so the signing key never shares a runner with third-party code. *verify*
-(every push and PR) and *bundle* (main only, read-only token, no secret) run Harbor's tools at
-`.harbor-ref`, which must be a full commit sha on Harbor's `main`. *sign* runs in the `catalog-signing`
-GitHub Environment (main only): it checks out only harbor-apps, installs nothing, re-checks the bundle
-artifact (`scripts/check-bundle.mjs`: commit, serial, zip sha256 and size) and runs `scripts/sign.mjs`,
-with the secret on that one step. *publish* is the only job with `contents: write`, and its token is
-only on the steps that call `gh`.
+**CI layout.** Two jobs. *verify* (every push, PR and manual run) runs Harbor's tools at `.harbor-ref`,
+which must be a full commit sha on Harbor's `main` (the release job re-checks that it is on `main`).
+*release* (main push or manual run only) bundles with Harbor's tools at the same commit and runs
+`gh release create c<serial> catalog.zip catalog.json --latest`; it is the only job with
+`contents: write`, and its token is only on the two steps that call `gh` (checkouts keep no credentials).
 
-**Trust.** The public key (SPKI DER, base64) is pinned in `src/packages/catalog-bundle.ts`
-(`OFFICIAL_CATALOG_PUBLIC_KEY`) and in `keys/harbor-apps.pub`. The private key exists only as the
-`CATALOG_SIGNING_KEY` secret of the harbor-apps `catalog-signing` Environment plus an offline backup; `scripts/sign.mjs` verifies its
-own signature against the pinned key before anything is released. A box accepts a bundle only if the
-signature verifies against a configured key, the serial is strictly higher than the active one (no
-rollback, no replay) and at most 24 h ahead of the box's clock ("the app catalog is dated in the
-future" otherwise: a far-future serial would block every honest bundle until then), the zip matches
-the signed sha256 and size, and the index validates with every listed folder present.
+**Trust.** HTTPS to GitHub, exactly like Harbor's self-update: whoever can publish a harbor-apps release
+is trusted, as whoever can publish a Harbor release already is. There is no signature (decision 158:
+built, then removed before release; signing Harbor releases and the catalog together with one key is in
+docs/TODO.md). `catalog.json` catches a truncated download or a zip from one release next to the
+metadata of another; it is not a trust anchor. A box accepts a bundle only if the catalog URL is https
+(plain http only for loopback), the serial is strictly higher than the active one (no rollback) and at
+most 24 h ahead of the box's clock ("the app catalog is dated in the future" otherwise: a far-future
+serial would block every newer bundle until then), the zip is within its caps and matches the sha256 and
+size in `catalog.json`, it extracts safely, and the index validates with every listed folder present.
 
 **On the box.**
 
-- Seed: `config.catalogDir` (`/opt/harbor/catalog`), extracted from the signed bundle by `pnpm package`
-  (which resolves `releases/latest` to its `c<serial>` tag once, fetches all three files from
-  `releases/download/c<serial>/`, requires the signed serial to match the tag, and fails rather than ship
-  an empty or unverified catalog), with `catalog.json` + `.sig` kept
-  verbatim. Without a `catalog.json` (dev, tests) the seed is serial 0. Read once at start.
+- Seed: `config.catalogDir` (`/opt/harbor/catalog`), extracted from the bundle by `pnpm package`
+  (which resolves `releases/latest` to its `c<serial>` tag once, fetches both files from
+  `releases/download/c<serial>/`, requires the serial in `catalog.json` to match the tag, and fails
+  rather than ship an empty or unchecked catalog), with `catalog.json` kept verbatim. Without a `catalog.json` (dev, tests) the seed is serial 0. Read once at start.
 - Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
   (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
   pointer parses, its `index.json` exists, its serial beats the seed's, and its stored `catalog.json`
-  still verifies against the keys configured **now** and names that folder's serial; otherwise the seed
-  (logged once as "not trusted"). The check is cached by serial + size/mtime of `catalog.json` and its
-  signature, so reads stay cheap. A key rotation therefore retires every folder the old key signed, and
-  the next bundle is compared with the seed, not with the folder that lost its trust. A Harbor upgrade
+  still parses and names that folder's serial (= the pointer); otherwise the seed (logged once as
+  "damaged"). This is an integrity re-check of the stored folder, not a trust check. It is cached by
+  serial + size/mtime of `catalog.json`, so reads stay cheap, and the next bundle is compared with the
+  seed, not with the damaged folder. A Harbor upgrade
   with a newer seed takes over by itself.
 - Check: a minute after start, then every 6 h, or on demand (`POST /v1/catalog/refresh`,
-  `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` and the
-  signature first (30 s each), stop if the serial is not newer, then `catalog.zip` (capped at the signed
-  size, 5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
+  `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` first
+  (30 s), stop if the serial is not newer, then `catalog.zip` (capped at the size `catalog.json` gives,
+  5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
   prune all but the new folder and the one it replaced. The whole check has one deadline of 240 s (each
-  step gets at most what is left), below the CLI's 300 s wait for the response. A signature or checksum
-  mismatch (or a zip over its signed size) is what a release published between the fetches from
+  step gets at most what is left), below the CLI's 300 s wait for the response. A zip/`catalog.json`
+  checksum mismatch (or a zip over its stated size) is what a release published between the fetches from
   `releases/latest` looks like, so such a check starts over once. Any failure leaves the active catalog
   as it was and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
   The Store's catalog line shows a stored failure on load ("Last check failed: …", role=status) and
@@ -245,7 +242,8 @@ the signed sha256 and size, and the index validates with every listed folder pre
   runner finds them changed when it starts (before anything is written), the operation fails
   `PLAN_STALE` ("Review the plan again"), the app keeps its install state and readiness, no
   notification is sent, and a stale install leaves no instance row or port claim behind.
-- Config: `catalog: {url, publicKeys}` (1–8 keys). Default url
+- Config: `catalog: {url}`. A leftover `publicKeys` (from a hand-edited config) is accepted and
+  ignored, with one warning in the log at start. Default url
   `https://github.com/carlosalaniz/harbor-apps/releases/latest/download`; https only (http just for
   loopback); `url: null` means no timer and no fetch (dev, tests, openapi generation).
 
@@ -266,7 +264,7 @@ release job and its `official-catalog` CI job fail: no catalog yet) → write th
 `c<serial>`) → re-run Harbor's release job. Later Harbor changes reach the catalog tooling only through a
 reviewed `.harbor-ref` bump.
 
-**Not done yet** (docs/TODO.md): a key rotation procedure, the daemon downloading by tag instead of
+**Not done yet** (docs/TODO.md): signing Harbor releases and the catalog together, the daemon downloading by tag instead of
 `releases/latest` (`pnpm package` already pins the tag; today a check that reads two releases starts over once), persisting `checkedAt`,
 and a review policy for community submissions.
 
@@ -290,7 +288,7 @@ values of manifest.yaml, compose.yaml and release.json to the Harbor that first 
 | `path` + `when(value)` | an existing field whose pattern, limit, type or required list was widened |
 | `manifest` + `when(doc)` | a root: a top-level field that became optional |
 
-Everything up to 0.28.0 is `BASELINE` (no requirement: older Harbors never fetch the signed catalog);
+Everything up to 0.28.0 is `BASELINE` (no requirement: older Harbors never fetch the published catalog);
 `FEATURES` holds later additions with `since`. `computeRequiredHarbor({ manifest, compose, release })` = the
 highest `since` over what a package uses. `pnpm catalog:bundle` re-writes the bundled index.json, each entry
 copied with `minHarbor` = max(declared, computed) (keys sorted, deterministic; no longer the checkout's bytes),
@@ -321,7 +319,7 @@ than what was reviewed), so old boxes get the explicit `minHarbor` gate instead 
 
 **New Harbor, live catalog.** Harbor CI job `official-catalog` (separate from `verify`, so it never
 changes that job's result) runs `pnpm catalog:fetch --out <dir>` (`scripts/catalog-fetch.mjs`, the same
-tag-resolving, signature-verifying download `pnpm package` uses) and then `pnpm catalog:verify <dir>`
+tag-resolving download, checked against catalog.json, `pnpm package` uses) and then `pnpm catalog:verify <dir>`
 with the commit's code. An engine change that would break a published app fails at push/PR time, not
 first at release. With no catalog release yet (bootstrap only) the fetch fails with "is there a
 published catalog release on carlosalaniz/harbor-apps?".

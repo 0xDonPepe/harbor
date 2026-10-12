@@ -195,9 +195,10 @@ Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its ow
 with the same serial as an existing release, and for a serial not newer than the latest release skips
 when `main` has moved on (the newer commit publishes) and fails otherwise (clock skew).
 
-**CI layout.** Two jobs. *verify* (every PR, manual run, and push to main touching `apps/`, `.harbor-ref` or the workflow) runs Harbor's tools at `.harbor-ref`,
-which must be a full commit sha on Harbor's `main` (the release job re-checks that it is on `main`).
-*release* (main push or manual run only) bundles with Harbor's tools at the same commit and runs
+**CI layout.** Two jobs. *verify* (every PR, manual run, and push to main touching the apps, the CI
+scripts or the workflow) runs the tools of published Harbor releases (decision 161, §10): the latest
+release on every app, and each declared `release.minHarbor` release on the apps declaring it.
+*release* (main push or manual run only) bundles with the latest Harbor release's tools and runs
 `gh release create c<serial> catalog.zip catalog.json --latest`; it is the only job with
 `contents: write`, and its token is only on the two steps that call `gh` (checkouts keep no credentials).
 
@@ -252,80 +253,72 @@ as unavailable ("needs Harbor x.y.z or newer"), install fails with INVALID_STATE
 "Update Harbor …", restore from a backup says the same (not "no package"), and the app offers no
 update. Presentation assets (`/v1/catalog/<id>/asset/<name>`) skip the gate, and fall back to an
 installed copy's release snapshot when the current revision cannot be read, so installed apps keep
-their icon. Since decision 159 it is computed, not typed: see §10.
+their icon. Since decision 161 the bundle copies it from the app's own manifest (`release.minHarbor`),
+and the daemon checks the manifest value too: see §10.
 
 **Id clashes.** An id the operator uploaded keeps winning after the official catalog adds the same id
 (the official duplicate is hidden and offers no update); removing the upload hands the id back. A new
 upload of an official id is still refused.
 
-**Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref` (a commit on Harbor's `main`);
-Harbor's release job needs a published harbor-apps release. First publish: push Harbor to `main` (its
-release job and its `official-catalog` CI job fail: no catalog yet) → write that commit's sha into `.harbor-ref` → push harbor-apps (first
-`c<serial>`) → re-run Harbor's failed jobs (release + official-catalog). Later Harbor changes reach the catalog tooling only through a
-reviewed `.harbor-ref` bump.
+**Bootstrap order.** Harbor's release job needs a published harbor-apps release (the first one,
+`c1791783123`, exists). harbor-apps CI uses published Harbor releases only (decision 161; the
+`.harbor-ref` commit pin of decision 158 is gone): Harbor changes reach the catalog tooling when they are
+released, and `pnpm catalog:plan`, which the per-version checks need, exists from 0.28.2 (0.28.1 was
+released without it, so harbor-apps CI fails until 0.28.2 is the latest release).
 
 **Not done yet** (docs/TODO.md): signing Harbor releases and the catalog together, the daemon downloading by tag instead of
 `releases/latest` (`pnpm package` already pins the tag; today a check that reads two releases starts over once), persisting `checkedAt`,
 and a review policy for community submissions.
 
-## 10. Compatibility: the format only grows (added 2026-10-11, v0.28.0, decision 159)
+## 10. Compatibility: the format only grows (added 2026-10-11, v0.28.0, decision 159; minHarbor reworked in v0.28.2, decision 161)
 
 Published apps are read by Harbors of every age, and a new Harbor reads apps written for old ones.
 Neither direction may break.
 
 **The rule.** The package format only grows: never remove, rename or narrow a field or value an
-official package may use. New fields and values are optional and get an entry in
-`src/packages/features.ts`. A breaking change needs a migration in the engine: Harbor adapts old
-packages (as Umbrel does), packages are never rewritten for it.
+official package may use. New fields and values are optional; limits and patterns only widen. A
+breaking change needs a migration in the engine: Harbor adapts old packages (as Umbrel does), packages
+are never rewritten for it. Release notes say which version first accepts a format change.
 
-**Automatic minHarbor (old Harbor, new app).** `features.ts` (pure) maps field paths and enum/const
-values of manifest.yaml, compose.yaml and release.json to the Harbor that first accepts them:
+**Declared minHarbor (old Harbor, new app).** Each app states the oldest Harbor it runs on in its own
+manifest, `release.minHarbor: "x.y.z"`. It is the app's contract.
 
-| Key | Meaning |
+| | |
 |---|---|
-| `compose.services.*.command` | a field (`*` = a key the author chooses, `[]` = an array item, `[0]` = a fixed position) |
-| `manifest.endpoints.*.kind=api` | one enum/const value of a field (matched by its string form) |
-| `path` + `when(value)` | an existing field whose pattern, limit, type or required list was widened |
-| `manifest` + `when(doc)` | a root: a top-level field that became optional |
+| absent | 0.28.0, the first Harbor that downloads catalogs |
+| present | canonical `x.y.z` (no leading zeros, so it is spelled like the release tag `v<x.y.z>`) and at least 0.28.2, the first release that ships the field (0.28.0 and 0.28.1 do not know it and would refuse the manifest); checked by `validateManifestShape` |
+| index.json | `pnpm catalog:bundle` copies it into the app's entry (left out when absent), so a 0.28.0 box, which reads only the index, lists the app as "needs Harbor x.y.z or newer". The repo's `apps/index.json` may omit it; when present it must equal the manifest's (verify, plan and bundle fail otherwise) |
+| daemon | gates on the index value before parsing (§9) **and** on the manifest value, read off the parsed YAML before the schema check (`src/packages/min-harbor.ts`), so a manifest written for a newer Harbor says what it needs instead of failing validation: catalog listing/load (unavailable), uploads and git sources (refused, 409 `INVALID_STATE`) |
 
-Everything up to 0.28.0 is `BASELINE` (no requirement: older Harbors never fetch the published catalog);
-`FEATURES` holds later additions with `since`. `computeRequiredHarbor({ manifest, compose, release })` = the
-highest `since` over what a package uses. `pnpm catalog:bundle` re-writes the bundled index.json, each entry
-copied with `minHarbor` = max(declared, computed) (keys sorted, deterministic; no longer the checkout's bytes),
-so authors normally never set it. Its log prints `ok   <id>@<revision>[ (<version>)][ minHarbor=<x.y.z>]` per
-app (the harbor-apps publish job reads these lines). `pnpm catalog:verify` prints `minHarbor declared=… computed=…` per app and fails
-when a declared value is lower than computed. The daemon checks the index `minHarbor` before parsing
-the package files (§9). Uploads and git sources are not gated: the running Harbor validates them itself.
-Not covered (set `minHarbor` by hand on the index entry; the bundle keeps the higher value): a relaxed
-cross-field rule in `validateManifestReferences` or `validateComposeSource`; a per-field check written inline
-in validation code instead of as a `CODE_CONSTRAINTS` constant (mount-target traversal), or a constant code
-starts or stops applying to a field; the file-size caps (manifest.yaml, compose.yaml, release.json and
-README.md 256 KiB, icon 256 KiB, screenshots 1 MiB, `MAX_YAML_BYTES`) and the YAML depth limit (32); the document-wide parser settings (Ajv options in
-`src/contracts/validate.ts`, the restricted YAML rules in `src/packages/yaml.ts`) — loosening those is a
-deliberate format change with its own decision.
+The bundle log prints `ok   <id>@<revision>[ (<version>)][ minHarbor=<x.y.z>]` per app, for people.
+Tools read `pnpm catalog:bundle … --summary <file>` instead: JSON
+`{serial, commit, packages:[{id, revision, version|null, minHarbor|null}]}`, sorted by id (the harbor-apps
+publish job builds its release notes from it with jq; `version` is free text, so the log line cannot be
+parsed safely). `pnpm catalog:verify` prints `minHarbor=<value>` or `minHarbor=0.28.0(default)`.
 
-**The guard.** `tests/unit/package-features.test.ts` walks `MANIFEST_SCHEMA`, `COMPOSE_SOURCE_SCHEMA`,
-`RELEASE_SCHEMA` and `CATALOG_INDEX_SCHEMA`:
-- a path or value that is neither baseline nor in `FEATURES` fails ("add it with the next version"), and so
-  does a baseline or recorded one that disappeared ("the format only grows");
-- the walker throws on a keyword it does not understand (anyOf/oneOf/allOf, if/then/else, not, `$ref`,
-  patternProperties, ...), so no field hides from it;
-- every node's own constraints (type, pattern, format, min*/max*, required, propertyNames, uniqueItems,
-  boolean additionalProperties/items, enum/const values with their JSON types) are compared with the committed
-  `src/packages/features-constraints.json`, and so are the per-field rules validation code enforces
-  (`CODE_CONSTRAINTS`: `HEALTHCHECK_BOUNDS` as `x-minimumMs`/`x-maximumMs`, `INTERPOLATION_RE` as `x-refuses`,
-  the secret template slot as `x-slotOnce`). A widened or changed one needs a `when` entry on that path; a
-  narrowed one fails ("the format only grows") unless `ACKNOWLEDGED_NARROWING` lists it with a decision number;
-  a new enum value needs a `value` entry of the same JSON type. A `when` or ACK entry carries `accepts` (the
-  node's constraints after the change, printed by the failure), so it covers that one change: a later change
-  on the path needs a new entry. An ACK clears only the narrowed part and never an index.json path. Once
-  recorded, regenerate the file with `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` and commit it;
-- the snapshot also pins every committed `FEATURES` and `ACKNOWLEDGED_NARROWING` entry: the tables are
-  append-only (a released Harbor's limits never move; an unreleased entry can be dropped from the snapshot's
-  `entries` by hand). `BASELINE` is the closed 0.28.0 format: the test pins its size and sha256, and new paths
-  go in `FEATURES`, never in `BASELINE`;
-- index.json has no `FEATURES`: an older Harbor refuses the whole index on one unknown entry key, so any
-  index format change fails with "needs a new index schemaVersion or must stay out of the index".
+**The proof (harbor-apps CI).** CI proves the claim instead of computing it:
+1. the declared version must be a real published Harbor release: GitHub release `v<x.y.z>` on
+   carlosalaniz/harbor, not draft or prerelease, its tag commit on `main`;
+2. the apps declaring it must validate with **that** release's own validator: resolve the tag to its
+   commit, check the commit is on `main`, check out that exact commit (never the tag name), set up the
+   toolchain that commit names (Node from `package.json` engines, pnpm from `packageManager`),
+   `pnpm install`, run its `pnpm catalog:verify` on a subset folder holding just those apps (copies plus
+   an index.json filtered to them, built by harbor-apps' dependency-free `scripts/subset.mjs`; an app's
+   folder must equal its id, which `readCatalogIndex` already enforces);
+3. every app also validates with the **latest** Harbor release, which also builds the bundle in a job
+   without write access; a separate publish job (`contents: write`, no Harbor checkout, no install)
+   downloads it and runs only the `gh` steps.
+
+Because the format only grows, passing on the minimum and on the latest release is the proof for every
+release in between. The groups come from `pnpm -s catalog:plan <dir>` (0.28.2+), one line of JSON on
+stdout: `{"groups":[{"minHarbor":"0.28.0","ids":[...]},...]}`, groups sorted by version, ids sorted. It
+validates every app with its own loader first and exits 1 with the reason (stderr) when an app does not
+load or declares an invalid minimum (not canonical x.y.z, below 0.28.2, or an index.json value that differs).
+
+Decision 159's computed table (`src/packages/features.ts`, its constraint snapshot and guard test) was
+removed: it had to name every schema path, value and constraint, and still could not see cross-field
+rules, inline checks, file caps or parser settings. Running the real old validator covers all of that
+by construction.
 
 **Strict validation stays.** Umbrel ignores unknown manifest keys; Harbor refuses them. An unknown
 Compose key is a security boundary (an old engine that silently dropped one could run something other

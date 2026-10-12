@@ -7,8 +7,8 @@ import { HarborError } from '../errors.js';
 import { validateComposeSource } from './compose-source.js';
 import { parseReleaseInventory, sha256Hex, verifyInventory } from './inventory.js';
 import { validateManifestReferences, validateManifestShape } from './manifest.js';
+import { isNeedsHarbor, missingHarbor, needsHarborError, peekMinHarbor } from './min-harbor.js';
 import { parseRestrictedYaml } from './yaml.js';
-import { compareVersions } from './versions.js';
 
 const MAX_README_BYTES = 256 * 1024;
 
@@ -45,15 +45,20 @@ function readBounded(file: string, max: number): Buffer {
 }
 
 // Load and fully validate the four fixed package files from one directory (a bundled
-// package directory or an instance's immutable release snapshot).
-export function loadPackageDir(dir: string, id: string, label = id): LoadedPackage {
+// package directory or an instance's immutable release snapshot). With a running Harbor version, the
+// manifest's own release.minHarbor (decision 161) is checked right after parsing, before the schema: a
+// manifest written for a newer Harbor says "needs Harbor x.y.z or newer" instead of failing validation.
+export function loadPackageDir(dir: string, id: string, label = id, opts: CatalogReadOptions = {}): LoadedPackage {
   const raw = {
     manifest: readBounded(containedPath(dir, 'manifest.yaml'), 256 * 1024),
     compose: readBounded(containedPath(dir, 'compose.yaml'), 256 * 1024),
     readme: readBounded(containedPath(dir, 'README.md'), MAX_README_BYTES),
     release: readBounded(containedPath(dir, 'release.json'), 256 * 1024),
   };
-  const manifest = validateManifestShape(parseRestrictedYaml(raw.manifest, `${label}/manifest.yaml`), `${label}/manifest.yaml`);
+  const doc = parseRestrictedYaml(raw.manifest, `${label}/manifest.yaml`);
+  const needs = missingHarbor(peekMinHarbor(doc), opts.harborVersion);
+  if (needs) throw needsHarborError(needs, `Update Harbor (Settings → Overview) to ${needs} or newer, then install ${id}.`);
+  const manifest = validateManifestShape(doc, `${label}/manifest.yaml`);
   const compose = validateComposeSource(parseRestrictedYaml(raw.compose, `${label}/compose.yaml`), `${label}/compose.yaml`);
   validateManifestReferences(manifest, compose, `${label}/manifest.yaml`);
   if (manifest.metadata.id !== id) throw new HarborError('INVALID_PACKAGE', `${label}: manifest id ${manifest.metadata.id} does not match ${id}`);
@@ -87,9 +92,9 @@ export interface CatalogReadOptions {
 
 // Decision 158: a catalog entry may name the oldest Harbor that runs it. Checked from the index alone,
 // before the package files are parsed, because a newer package may use manifest fields this Harbor rejects.
+// Since decision 161 the bundle copies it from the manifest's release.minHarbor, which loadPackageDir checks too.
 export function requiredHarbor(entry: CatalogIndex['packages'][string], opts: CatalogReadOptions): string | null {
-  if (!entry.minHarbor || opts.harborVersion === undefined) return null;
-  return compareVersions(opts.harborVersion, entry.minHarbor) < 0 ? entry.minHarbor : null;
+  return missingHarbor(entry.minHarbor, opts.harborVersion);
 }
 
 // Load one bundled package through the catalog index. Only the index's entry is trusted.
@@ -98,9 +103,9 @@ export function loadPackage(catalogDir: string, id: string, expectedRevision?: s
   const entry = index.packages[id];
   if (!entry) throw new HarborError('NOT_FOUND', `unknown package ${id}`);
   const needs = requiredHarbor(entry, opts);
-  if (needs) throw new HarborError('INVALID_STATE', `needs Harbor ${needs} or newer`, { nextAction: `Update Harbor (Settings → Overview) to ${needs} or newer, then install ${id}.` });
+  if (needs) throw needsHarborError(needs, `Update Harbor (Settings → Overview) to ${needs} or newer, then install ${id}.`);
   const dir = containedPath(catalogDir, entry.dir);
-  const pkg = loadPackageDir(dir, id);
+  const pkg = loadPackageDir(dir, id, id, opts);
   if (pkg.revision !== entry.revision) throw new HarborError('INVALID_PACKAGE', `${id}: manifest revision ${pkg.revision} does not match catalog index ${entry.revision}`);
   if (expectedRevision !== undefined && pkg.revision !== expectedRevision) {
     throw new HarborError('STATE_CHANGED', `${id}: bundled revision ${pkg.revision} differs from expected ${expectedRevision}`);
@@ -166,7 +171,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
     } catch (e) {
       // A package that needs a newer Harbor still shows its name and look when this Harbor can read them.
       let peek: LoadedPackage | null = null;
-      if (requiredHarbor(index.packages[id]!, opts)) {
+      if (isNeedsHarbor(e)) {
         try {
           peek = loadPackageDir(containedPath(catalogDir, index.packages[id]!.dir), id);
         } catch {

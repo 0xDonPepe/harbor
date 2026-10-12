@@ -67,6 +67,11 @@ describe('your own apps: upload, install, update, rollback, remove', () => {
     const icon = await fetch(`${h.baseUrl}/v1/catalog/hello/asset/icon.svg`);
     expect(icon.status).toBe(200);
     expect(icon.headers.get('content-type')).toContain('image/svg+xml');
+    // decision 161: a package declaring a newer Harbor than this one is refused by name (before its schema check)
+    const later = manifest('1').replace('id: hello', 'id: later').replace('  version:', '  minHarbor: "99.0.0"\n  version:');
+    const refused = await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/packages', { fileName: 'later.zip', dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': later + 'futureField: true\n', 'compose.yaml': compose('nginx:1.27-alpine'), 'icon.svg': ICON }).toString('base64')}` });
+    expect(refused.error.message).toBe('needs Harbor 99.0.0 or newer');
+    expect((await h.api.expect<{ items: CatalogItemDto[] }>(200, 'GET', '/v1/catalog')).items.some((i) => i.id === 'later')).toBe(false);
     // bad uploads are refused with a reason
     await h.api.expectError(422, 'INVALID_PACKAGE', 'POST', '/v1/packages', { fileName: 'x.zip', dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': manifest('1').replace('id: hello', 'id: excalidraw'), 'compose.yaml': compose('nginx:1.27-alpine'), 'icon.svg': ICON }).toString('base64')}` });
     await h.api.expectError(422, 'INVALID_PACKAGE', 'POST', '/v1/packages', { fileName: 'x.zip', dataUrl: `data:application/zip;base64,${Buffer.from('nope nope nope nope nope nope nope').toString('base64')}` });

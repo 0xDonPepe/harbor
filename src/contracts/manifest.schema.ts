@@ -1,5 +1,5 @@
 import { PRODUCT } from '../naming.js';
-import { ENV_KEY_PATTERN, ID_PATTERN, RELATIVE_PATH_PATTERN, REVISION_PATTERN } from './patterns.js';
+import { ENV_KEY_PATTERN, ID_PATTERN, MANIFEST_MIN_HARBOR_PATTERN, RELATIVE_PATH_PATTERN, REVISION_PATTERN } from './patterns.js';
 
 const idString = { type: 'string', pattern: ID_PATTERN } as const;
 const envKey = { type: 'string', pattern: ENV_KEY_PATTERN } as const;
@@ -76,8 +76,10 @@ export const MANIFEST_SCHEMA = {
       type: 'object',
       additionalProperties: false,
       required: ['revision'],
-      // `version` is the human app version shown in the console ("1.2.3"); `revision` orders package releases
-      properties: { revision: { type: 'string', pattern: REVISION_PATTERN }, version: plainText(64) },
+      // `version` is the human app version shown in the console ("1.2.3"); `revision` orders package releases;
+      // `minHarbor` (decision 161) is the oldest Harbor release this revision runs on: absent = 0.28.0, and when
+      // present canonical x.y.z and at least 0.28.2 (checked in validateManifestShape: 0.28.0 and 0.28.1 do not know the field)
+      properties: { revision: { type: 'string', pattern: REVISION_PATTERN }, version: plainText(64), minHarbor: { type: 'string', pattern: MANIFEST_MIN_HARBOR_PATTERN } },
     },
     deployment: {
       type: 'object',

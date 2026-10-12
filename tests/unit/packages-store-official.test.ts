@@ -89,6 +89,53 @@ describe('package store: the official catalog', () => {
     expect(store.list().find((i) => i.id === 'excalidraw')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 1.0.0 or newer', name: 'excalidraw' });
   });
 
+  // Decision 161: the manifest's own release.minHarbor gates too (the index copy is what a 0.28.0 box reads).
+  const declaring = (v: string, extra = '') => MINIMAL_MANIFEST.replace('  revision: "1"\n', `  revision: "1"\n  minHarbor: "${v}"\n${extra}`);
+  it('the manifest release.minHarbor gates catalog listing and load, before the schema check', () => {
+    const official = cloneCatalog();
+    writePackage(official, 'demo', { manifest: declaring('0.29.0'), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+    const old = new PackageStore(() => official, tempDir(), new FakeRegistry(), systemClock, { harborVersion: '0.28.2' });
+    expect(old.list().find((i) => i.id === 'demo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 0.29.0 or newer', name: 'Demo' });
+    expect(() => old.load('demo')).toThrow(/needs Harbor 0\.29\.0 or newer/);
+    expect(old.currentRevisions().has('demo')).toBe(false);
+    const fresh = new PackageStore(() => official, tempDir(), new FakeRegistry(), systemClock, { harborVersion: '0.29.0' });
+    expect(fresh.list().find((i) => i.id === 'demo')?.availability).toBe('available');
+    expect(fresh.load('demo').manifest.release.minHarbor).toBe('0.29.0');
+    // a manifest written for a newer Harbor (a field this one does not know) still says what it needs
+    writePackage(official, 'demo', { manifest: declaring('0.29.0', 'futureField: true\n'), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+    expect(old.list().find((i) => i.id === 'demo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 0.29.0 or newer', name: 'demo' });
+    expect(fresh.list().find((i) => i.id === 'demo')?.reason).toMatch(/must NOT have additional properties/);
+  });
+
+  it('a declared release.minHarbor must be canonical x.y.z and at least 0.28.2 (0.28.0 and 0.28.1 do not know the field)', () => {
+    const official = cloneCatalog();
+    const load = (v: string) => {
+      writePackage(official, 'demo', { manifest: declaring(v), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+      return () => loadPackage(official, 'demo');
+    };
+    expect(load('0.28.2')().manifest.release.minHarbor).toBe('0.28.2');
+    expect(load('1.0.0')().manifest.release.minHarbor).toBe('1.0.0');
+    expect(load('0.100.0')().manifest.release.minHarbor).toBe('0.100.0');
+    expect(load('0.28.1')).toThrow(/release\.minHarbor 0\.28\.1 must be 0\.28\.2 or newer: Harbor 0\.28\.0 and 0\.28\.1 do not know the field/);
+    expect(load('0.28.0')).toThrow(/release\.minHarbor 0\.28\.0 must be 0\.28\.2 or newer/);
+    expect(load('0.9.99')).toThrow(/must be 0\.28\.2 or newer/);
+    expect(load('0.29')).toThrow(/release\/minHarbor: must match pattern/);
+    expect(load('v0.29.0')).toThrow(/release\/minHarbor: must match pattern/);
+    // canonical only: spelled like the release tag the harbor-apps CI looks up (the index pattern stays as it was)
+    for (const v of ['0.028.2', '00.28.2', '0.28.02', '1.0.00', '01.0.0']) expect(load(v), v).toThrow(/release\/minHarbor: must match pattern/);
+  });
+
+  it('uploads (and git sources, the same import path) refuse a package that needs a newer Harbor', async () => {
+    const store = new PackageStore(() => cloneCatalog(), tempDir(), new FakeRegistry(), systemClock, { harborVersion: '0.28.2' });
+    const zip = (m: string) => writeZip({ 'manifest.yaml': m.replace('id: demo', 'id: hello'), 'compose.yaml': MINIMAL_COMPOSE });
+    await expect(store.importZip(zip(declaring('0.29.0')), { fileName: 'hello.zip', actor: 'admin' })).rejects.toThrow(/^needs Harbor 0\.29\.0 or newer$/);
+    await expect(store.importZip(zip(declaring('9.0.0', 'futureField: true\n')), { fileName: 'hello.zip', actor: 'admin' })).rejects.toMatchObject({ code: 'INVALID_STATE', message: 'needs Harbor 9.0.0 or newer' });
+    await expect(store.importZip(zip(declaring('0.28.1')), { fileName: 'hello.zip', actor: 'admin' })).rejects.toThrow(/must be 0\.28\.2 or newer: Harbor 0\.28\.0 and 0\.28\.1 do not know the field/);
+    const r = await store.importZip(zip(declaring('0.28.2')), { fileName: 'hello.zip', actor: 'admin' });
+    expect(r.item).toMatchObject({ id: 'hello', availability: 'available', origin: 'local' });
+    expect(store.load('hello').manifest.release.minHarbor).toBe('0.28.2');
+  });
+
   it('refuses a malformed minHarbor in the index', () => {
     const official = cloneCatalog();
     setMinHarbor(official, 'excalidraw', 'soon');

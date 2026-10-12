@@ -3,6 +3,7 @@ import { INTERPOLATION_RE, SECRET_TEMPLATE_SLOT } from '../contracts/patterns.js
 import type { ComposeSource, Manifest } from '../contracts/types.js';
 import { compile, formatErrors } from '../contracts/validate.js';
 import { HarborError } from '../errors.js';
+import { declaredMinHarborProblem } from './min-harbor.js';
 
 export function validateManifestShape(value: unknown, label = 'manifest.yaml'): Manifest {
   const validate = compile<Manifest>(MANIFEST_SCHEMA);
@@ -10,6 +11,8 @@ export function validateManifestShape(value: unknown, label = 'manifest.yaml'): 
     const details = formatErrors(validate.errors);
     throw new HarborError('INVALID_PACKAGE', `${label}: ${details[0] ?? 'invalid'}`, { details });
   }
+  const minHarbor = declaredMinHarborProblem(value.release.minHarbor);
+  if (minHarbor) throw new HarborError('INVALID_PACKAGE', `${label}: ${minHarbor}`);
   return value;
 }
 

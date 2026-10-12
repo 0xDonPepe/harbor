@@ -406,6 +406,15 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 61 — apps declare their minimum Harbor (2026-10-12, 0.28.2) ⏳ live
+- [x] Decision 161: manifest `release.minHarbor` (optional, canonical x.y.z, ≥ 0.28.2 because the published 0.28.1 does not know it; absent = 0.28.0); `pnpm catalog:bundle` copies it into the index entry; an index value must equal the manifest's; `pnpm catalog:plan <dir>` groups apps by it (JSON) for the harbor-apps CI, which proves each declaration with that real release's own `catalog:verify` plus the latest release
+- [x] Daemon: the manifest value gates catalog listing/load (peeked before the schema check, `src/packages/min-harbor.ts`) next to the index gate; uploads and git sources refuse "needs Harbor x.y.z or newer" (409 `INVALID_STATE`)
+- [x] Removed decision 159's table: `src/packages/features.ts`, `features-constraints.json`, `tests/unit/package-features.test.ts`; `catalog:verify` prints `minHarbor=<v>` instead of declared vs computed
+- [x] Tests: unit catalog-bundle-build (copy into index, mismatch, plan groups + CLI), packages-store-official (manifest gate, pre-schema gate, declaration rules, upload refusal); integration packages + git-sources refusals; unit 316, integration 215 + 3 skipped, e2e 30
+- [x] `pnpm catalog:bundle --summary <file>` (JSON for the harbor-apps release notes); release job refuses a `v<version>` tag that exists at another commit (`scripts/release-tag-guard.sh`, before the tests and before publishing)
+- [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
+- [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
+
 ## Phase 59 — LAN firewall (2026-10-12, 0.28.1)
 - [x] Decision 160: LAN bootstrap allows console, 443, app range + LAN HTTPS twin and mDNS in ufw from private networks only (comment `harbor`); uninstall deletes them
 - [x] Found live on the home server: ufw dropped every secure app address (`https://<hostname>.local:38xxx`); fixed there by hand first

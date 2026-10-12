@@ -23,6 +23,13 @@ jobs:
         with:
           node-version: 24.12.0
           cache: pnpm
+      - name: Read version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      # Never re-publish under an old tag: an existing v<version> must point at this very commit (a re-run).
+      # Checked first (fail fast) and again right before publishing (a tag pushed meanwhile).
+      - name: Refuse a version already released from another commit
+        run: bash scripts/release-tag-guard.sh "v${{ steps.version.outputs.version }}" "$GITHUB_SHA"
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
@@ -40,9 +47,6 @@ jobs:
       # there is none or it does not check out.
       - name: Build release archive
         run: pnpm package
-      - name: Read version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       # Hand-written notes live in docs/releases/v<version>.md (what to expect, what not to trust
       # yet). When the file exists it becomes the release body; the generated changelog is appended.
       - name: Pick release notes
@@ -50,6 +54,8 @@ jobs:
         run: |
           f="docs/releases/v${{ steps.version.outputs.version }}.md"
           if [ -f "$f" ]; then echo "path=$f" >> "$GITHUB_OUTPUT"; else echo "path=" >> "$GITHUB_OUTPUT"; fi
+      - name: Refuse a version already released from another commit (again, before publishing)
+        run: bash scripts/release-tag-guard.sh "v${{ steps.version.outputs.version }}" "$GITHUB_SHA"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

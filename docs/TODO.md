@@ -136,9 +136,12 @@ signature: signing was built and removed before release, decision 158); boxes
 check every 6 hours (or on *Check for new apps* / `harbor catalog refresh`) and swap in a newer one
 without a restart; each Harbor release ships the latest as the seed. Next:
 
-- [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor to `main`,
-      its sha in `.harbor-ref`, first `c<serial>` release, then re-run Harbor's failed jobs (release + official-catalog). Then on a test machine or a droplet: upgrade
-      from 0.27.x, watch the seed load, publish a revision bump in harbor-apps, see it arrive.
+- [x] **First publish + live run.** First catalog release `c1791783123`; 0.28.0 upgrade and a real catalog
+      download verified on harbor-old (VERIFICATION §3q).
+- [ ] **Declared minHarbor, end to end (decision 161).** Once 0.28.2 is released: harbor-apps CI runs
+      `pnpm -s catalog:plan` with the latest release and each declared version's own `catalog:verify`;
+      then publish an app declaring `release.minHarbor: "0.28.2"` and check that a 0.28.0 (or 0.28.1) box lists it as
+      "needs Harbor 0.28.2 or newer" and a 0.28.2 box installs it.
 - [ ] **Sign Harbor releases and the catalog together, with one key.** Today both trust GitHub over
       HTTPS (self-update and catalog alike). Signing only the catalog was built and dropped (decision 158):
       it guarded the catalog while the Harbor release on the same account stayed unsigned. Do both at once:

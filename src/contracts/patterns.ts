@@ -9,6 +9,12 @@ export const ABSOLUTE_CONTAINER_PATH_PATTERN = '^/[^\\0]*[^/\\0]$';
 export const DURATION_PATTERN = '^[0-9]{1,6}(ms|s|m|h)$';
 export const UUID_PATTERN = '^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
 export const SHA256_HEX_PATTERN = '^[a-f0-9]{64}$';
+// a Harbor release version ("0.28.2"): catalog index `minHarbor` (decision 158). Leading zeros pass; left as is
+// because the format only grows (decision 159).
+export const HARBOR_VERSION_PATTERN = '^\\d{1,4}\\.\\d{1,4}\\.\\d{1,6}$';
+// the manifest's `release.minHarbor` (decision 161), new in 0.28.2: canonical only (no leading zeros), so a
+// declared value is spelled exactly like the release tag the harbor-apps CI looks up (v<x.y.z>)
+export const MANIFEST_MIN_HARBOR_PATTERN = '^(0|[1-9]\\d{0,3})\\.(0|[1-9]\\d{0,3})\\.(0|[1-9]\\d{0,5})$';
 
 export const ID_RE = new RegExp(ID_PATTERN);
 export const ENV_KEY_RE = new RegExp(ENV_KEY_PATTERN);

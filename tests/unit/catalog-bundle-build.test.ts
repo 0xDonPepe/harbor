@@ -4,13 +4,12 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildCatalogBundle } from '../../scripts/catalog-bundle-build.js';
 import { extractCatalog, fetchCatalogBundle } from '../../scripts/catalog-fetch.mjs';
-import { verifyCatalog } from '../../scripts/catalog-verify-lib.js';
+import { planCatalog, verifyCatalog } from '../../scripts/catalog-verify-lib.js';
 import * as bundleLib from '../../src/packages/catalog-bundle.js';
 import { openBundle, parseBundleMeta } from '../../src/packages/catalog-bundle.js';
 import * as catalogLib from '../../src/packages/catalog.js';
 import { listCatalog, readCatalogIndex } from '../../src/packages/catalog.js';
 import { CATALOG_INDEX_SCHEMA } from '../../src/contracts/release.schema.js';
-import type { HarborFeature } from '../../src/packages/features.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
 
 // Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and publishes
@@ -33,7 +32,7 @@ describe('catalog bundle build (decision 158)', () => {
     expect(meta.serial).toBe(SERIAL);
     const names = [...files.keys()];
     expect(names).toEqual([...names].sort());
-    // re-written (decision 159: minHarbor is stamped), same entries; nothing in the fixtures needs a minimum
+    // re-written (decision 161: minHarbor comes from the manifest), same entries; no fixture declares a minimum
     expect(JSON.parse(files.get('index.json')!.toString('utf8'))).toEqual(readCatalogIndex(REPO_CATALOG));
     for (const id of ids) for (const f of ['manifest.yaml', 'compose.yaml', 'README.md', 'release.json']) expect(files.get(`${id}/${f}`), `${id}/${f}`).toEqual(readFileSync(path.join(REPO_CATALOG, id, f)));
     expect(files.get('excalidraw/icon.svg')).toEqual(readFileSync(path.join(REPO_CATALOG, 'excalidraw', 'icon.svg')));
@@ -115,27 +114,28 @@ describe('catalog bundle build (decision 158)', () => {
   });
 });
 
-// Decision 159 with an injected feature table: pretend `command` (decision 123) first arrived in 0.29.0.
-describe('automatic minHarbor (decision 159)', () => {
-  const TABLE: HarborFeature[] = [{ path: 'compose.services.*.command', since: '0.29.0', note: 'pretend' }];
-  function catalogWithCommand(declared?: string): string {
+// Decision 161: each app declares release.minHarbor in its manifest; the bundle copies it into index.json.
+describe('declared minHarbor (decision 161)', () => {
+  const withMin = (v: string) => MINIMAL_MANIFEST.replace('  revision: "1"\n', `  revision: "1"\n  minHarbor: "${v}"\n`);
+  const setIndexMin = (dir: string, id: string, v: string) => {
+    const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
+    index.packages[id].minHarbor = v;
+    writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
+  };
+  function catalogWith(declared?: string, extra: Record<string, string> = {}): string {
     const dir = cloneCatalog();
-    writePackage(dir, 'demo', { manifest: MINIMAL_MANIFEST, compose: MINIMAL_COMPOSE + '    command: ["serve"]\n', images: { web: `example/demo@${DIGEST_A}` } });
-    if (declared) {
-      const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
-      index.packages.demo.minHarbor = declared;
-      writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
-    }
+    writePackage(dir, 'demo', { manifest: declared ? withMin(declared) : MINIMAL_MANIFEST, compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+    for (const [id, v] of Object.entries(extra)) writePackage(dir, id, { manifest: withMin(v).replace('id: demo', `id: ${id}`), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
     return dir;
   }
 
-  it('the bundle stamps the computed minimum; an older Harbor lists the app as unavailable', () => {
-    const built = buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE });
-    expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.29.0');
+  it('the bundle copies the manifest value into the index entry; a 0.28.0 box lists the app as unavailable', () => {
+    const built = buildCatalogBundle(catalogWith('0.28.2'), { commit: COMMIT, serial: SERIAL });
+    expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.28.2');
     expect(built.packages.filter((p) => p.minHarbor).map((p) => p.id)).toEqual(['demo']);
     const { files } = openBundle({ meta: built.meta, zip: built.zip });
     const index = JSON.parse(files.get('index.json')!.toString('utf8'));
-    expect(index.packages.demo).toEqual({ revision: '1', dir: 'demo', minHarbor: '0.29.0' });
+    expect(index.packages.demo).toEqual({ revision: '1', dir: 'demo', minHarbor: '0.28.2' });
     expect(Object.keys(index.packages.demo)).toEqual(['dir', 'minHarbor', 'revision']); // sorted: deterministic bytes
     expect(index.packages.memos.minHarbor).toBeUndefined();
     const box = tempDir('harbor-box-catalog-');
@@ -143,62 +143,115 @@ describe('automatic minHarbor (decision 159)', () => {
       mkdirSync(path.dirname(path.join(box, name)), { recursive: true });
       writeFileSync(path.join(box, name), bytes);
     }
+    // 0.28.0 only reads the index entry (it would refuse the manifest field itself)
     const old = listCatalog(box, 'bundled', { harborVersion: '0.28.0' });
-    expect(old.find((i) => i.id === 'demo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 0.29.0 or newer', name: 'Demo' });
+    expect(old.find((i) => i.id === 'demo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 0.28.2 or newer' });
     expect(old.filter((i) => i.availability === 'unavailable').map((i) => i.id)).toEqual(['demo']);
-    expect(listCatalog(box, 'bundled', { harborVersion: '0.29.0' }).find((i) => i.id === 'demo')?.availability).toBe('available');
-    // the same checkout still gives the same bytes
-    expect(buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE }).zip.equals(built.zip)).toBe(true);
+    expect(listCatalog(box, 'bundled', { harborVersion: '0.28.1' }).find((i) => i.id === 'demo')?.reason).toBe('needs Harbor 0.28.2 or newer');
+    expect(listCatalog(box, 'bundled', { harborVersion: '0.28.2' }).find((i) => i.id === 'demo')?.availability).toBe('available');
+    expect(buildCatalogBundle(catalogWith('0.28.2'), { commit: COMMIT, serial: SERIAL }).zip.equals(built.zip)).toBe(true);
   });
 
-  it('copies every index entry field (sorted keys) instead of rebuilding the entry', () => {
-    const dir = catalogWithCommand('0.28.0');
+  it('copies every index entry field (sorted keys); an index minHarbor must equal the manifest\'s', () => {
+    const dir = catalogWith('0.29.0');
+    setIndexMin(dir, 'demo', '0.29.0');
     const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
-    index.packages.memos = { minHarbor: '0.28.0', dir: index.packages.memos.dir, revision: index.packages.memos.revision };
+    index.packages.memos = { minHarbor: '0.28.0', dir: index.packages.memos.dir, revision: index.packages.memos.revision }; // = the default
     writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
-    const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL, features: TABLE });
+    const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL });
     const stamped = JSON.parse(openBundle({ meta: built.meta, zip: built.zip }).files.get('index.json')!.toString('utf8'));
     const fields = Object.keys(CATALOG_INDEX_SCHEMA.properties.packages.additionalProperties.properties).sort();
-    expect(Object.keys(stamped.packages.memos)).toEqual(fields); // every field the index format has makes it through
-    expect(stamped.packages.memos).toEqual(index.packages.memos);
-    expect(Object.keys(stamped.packages.demo)).toEqual(fields);
+    expect(Object.keys(stamped.packages.demo)).toEqual(fields); // every field the index format has makes it through
     expect(stamped.packages.demo.minHarbor).toBe('0.29.0');
+    expect(stamped.packages.memos).toEqual({ dir: 'memos', revision: index.packages.memos.revision }); // the default is not written
+    setIndexMin(dir, 'demo', '0.30.0');
+    expect(() => buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL })).toThrow(/demo: index\.json minHarbor 0\.30\.0 does not match the manifest's release\.minHarbor 0\.29\.0/);
+    const noDecl = catalogWith();
+    setIndexMin(noDecl, 'demo', '0.29.0');
+    expect(() => buildCatalogBundle(noDecl, { commit: COMMIT, serial: SERIAL })).toThrow(/demo: index\.json minHarbor 0\.29\.0 does not match the manifest's release\.minHarbor \(none = 0\.28\.0\)/);
   });
 
-  it('release.json counts too: a release field or value newer than the baseline stamps minHarbor', () => {
-    const table: HarborFeature[] = [{ path: 'release.qualification.status', value: 'pending', since: '0.29.1', note: 'pretend pending is new' }];
-    const dir = catalogWithCommand();
-    expect(buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL, features: table }).packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.29.1');
-    expect(verifyCatalog(dir, { features: table }).lines.find((l) => l.includes(' demo@'))).toMatch(/minHarbor declared=none computed=0\.29\.1/);
-  });
-
-  it('the CLI prints one ok line per app: id@revision, then (version) and minHarbor=<v> when set', () => {
+  it('the CLI prints one ok line per app: id@revision, then (version) and minHarbor=<v> when declared', () => {
     const out = tempDir('harbor-bundle-');
-    const r = runScript('catalog-bundle.ts', [catalogWithCommand('0.28.0'), '--out', out, '--commit', COMMIT, '--serial', String(SERIAL)]);
+    const r = runScript('catalog-bundle.ts', [catalogWith('0.28.2'), '--out', out, '--commit', COMMIT, '--serial', String(SERIAL)]);
     expect(r.code, r.out).toBe(0);
-    expect(r.out).toMatch(/^ok {3}demo@1 minHarbor=0\.28\.0$/m);
+    expect(r.out).toMatch(/^ok {3}demo@1 minHarbor=0\.28\.2$/m);
     expect(r.out).toMatch(/^ok {3}memos@\S+( \(\S+\))?$/m); // no minHarbor token when there is none
   });
 
-  it('a higher declared minimum wins over the computed one', () => {
-    const built = buildCatalogBundle(catalogWithCommand('0.30.0'), { commit: COMMIT, serial: SERIAL, features: TABLE });
-    expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.30.0');
-  });
-
-  it('verify reports declared vs computed and fails a declared minimum below the computed one', () => {
-    const ok = verifyCatalog(catalogWithCommand(), { features: TABLE });
-    expect(ok.failed).toBe(0);
-    expect(ok.lines.find((l) => l.includes(' demo@'))).toMatch(/minHarbor declared=none computed=0\.29\.0/);
-    expect(verifyCatalog(catalogWithCommand('0.29.0'), { features: TABLE }).failed).toBe(0);
-    const low = verifyCatalog(catalogWithCommand('0.28.0'), { features: TABLE });
-    expect(low.failed).toBe(1);
-    expect(low.lines.find((l) => l.startsWith('FAIL'))).toMatch(/^FAIL demo: index.json declares minHarbor 0\.28\.0 but the package uses compose\.services\.\*\.command \(0\.29\.0\): raise it to 0\.29\.0/);
-    expect(verifyCatalog(catalogWithCommand('0.28.0')).failed).toBe(0); // the real table: command is baseline
-  });
-
-  it('the verify CLI prints declared vs computed (the real table: nothing beyond the baseline yet)', () => {
-    const r = runScript('catalog-verify.ts', [catalogWithCommand('0.28.0'), '--quiet']);
+  it('--summary writes {serial, commit, packages} as JSON, sorted by id, whatever the version text says', () => {
+    const dir = catalogWith(undefined, { zeta: '0.30.0' });
+    // release.version is free text: a log line could be misread, the JSON cannot
+    writePackage(dir, 'demo', { manifest: MINIMAL_MANIFEST.replace('  revision: "1"\n', '  revision: "1"\n  version: "1) minHarbor=0.30.0 (x"\n'), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+    const out = tempDir('harbor-bundle-');
+    const file = path.join(tempDir('harbor-summary-'), 'nested', 'summary.json');
+    const r = runScript('catalog-bundle.ts', [dir, '--out', out, '--commit', COMMIT, '--serial', String(SERIAL), '--summary', file]);
     expect(r.code, r.out).toBe(0);
-    expect(r.out).toMatch(/ok {3}demo@1 .*minHarbor declared=0\.28\.0 computed=none/);
+    expect(r.out).toMatch(/^ok {3}demo@1 \(1\) minHarbor=0\.30\.0 \(x\)$/m); // the human log stays as it was
+    const summary = JSON.parse(readFileSync(file, 'utf8')) as { serial: number; commit: string; packages: { id: string; revision: string; version: string | null; minHarbor: string | null }[] };
+    expect(summary.serial).toBe(SERIAL);
+    expect(summary.commit).toBe(COMMIT);
+    const ids = summary.packages.map((p) => p.id);
+    expect(ids).toEqual([...ids].sort());
+    expect(ids).toEqual([...Object.keys(readCatalogIndex(REPO_CATALOG).packages), 'demo', 'zeta'].sort());
+    expect(summary.packages.find((p) => p.id === 'demo')).toEqual({ id: 'demo', revision: '1', version: '1) minHarbor=0.30.0 (x', minHarbor: null });
+    expect(summary.packages.find((p) => p.id === 'zeta')).toEqual({ id: 'zeta', revision: '1', version: null, minHarbor: '0.30.0' });
+    for (const p of summary.packages) expect(Object.keys(p)).toEqual(['id', 'revision', 'version', 'minHarbor']);
+    // a typo or a missing value is a usage error, not a silently skipped summary
+    expect(runScript('catalog-bundle.ts', [dir, '--out', out, '--commit', COMMIT, '--serial', String(SERIAL), '--sumary', file]).code).toBe(2);
+    expect(runScript('catalog-bundle.ts', [dir, '--out', out, '--commit', COMMIT, '--serial', String(SERIAL), '--summary']).code).toBe(2);
+  });
+
+  it('verify prints the declared minimum and fails an invalid declaration', () => {
+    const ok = verifyCatalog(catalogWith('0.28.2'));
+    expect(ok.failed).toBe(0);
+    expect(ok.lines.find((l) => l.includes(' demo@'))).toMatch(/minHarbor=0\.28\.2 /);
+    expect(ok.lines.find((l) => l.includes(' memos@'))).toMatch(/minHarbor=0\.28\.0\(default\) /);
+    const low = verifyCatalog(catalogWith('0.28.0'));
+    expect(low.failed).toBe(1);
+    expect(low.lines.find((l) => l.startsWith('FAIL'))).toMatch(/^FAIL demo: .*release\.minHarbor 0\.28\.0 must be 0\.28\.2 or newer/);
+    expect(verifyCatalog(catalogWith('0.28')).lines.find((l) => l.startsWith('FAIL'))).toMatch(/^FAIL demo: .*minHarbor.*must match pattern/);
+    const mismatch = catalogWith('0.28.2');
+    setIndexMin(mismatch, 'demo', '0.28.3');
+    expect(verifyCatalog(mismatch).lines.find((l) => l.startsWith('FAIL'))).toMatch(/^FAIL demo: index\.json minHarbor 0\.28\.3 does not match/);
+    const r = runScript('catalog-verify.ts', [catalogWith('0.28.2'), '--quiet']);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/ok {3}demo@1 .*minHarbor=0\.28\.2 /);
+  });
+
+  it('plan groups the apps by declared minimum (absent = 0.28.0), versions and ids sorted', () => {
+    const dir = catalogWith('0.30.0', { zeta: '0.28.2', alpha: '0.30.0', beta: '0.100.0' });
+    const plan = planCatalog(dir);
+    const fixtures = Object.keys(readCatalogIndex(REPO_CATALOG).packages).sort();
+    expect(plan).toEqual({ groups: [
+      { minHarbor: '0.28.0', ids: fixtures },
+      { minHarbor: '0.28.2', ids: ['zeta'] },
+      { minHarbor: '0.30.0', ids: ['alpha', 'demo'] },
+      { minHarbor: '0.100.0', ids: ['beta'] }, // numeric, not string order
+    ] });
+  });
+
+  it('plan refuses an invalid declaration or a package that does not load', () => {
+    expect(() => planCatalog(catalogWith('0.28.0'))).toThrow(/demo: .*release\.minHarbor 0\.28\.0 must be 0\.28\.2 or newer/);
+    expect(() => planCatalog(catalogWith('1.2'))).toThrow(/demo: .*must match pattern/);
+    const mismatch = catalogWith('0.28.2');
+    setIndexMin(mismatch, 'demo', '0.28.0');
+    expect(() => planCatalog(mismatch)).toThrow(/demo: index\.json minHarbor 0\.28\.0 does not match/);
+    const broken = catalogWith('0.28.2');
+    writeFileSync(path.join(broken, 'memos', 'README.md'), 'edited\n');
+    expect(() => planCatalog(broken)).toThrow(/memos: .*README\.md hash mismatch/);
+  });
+
+  it('the plan CLI prints the JSON on stdout and exits 1 with the reason on stderr', () => {
+    const run = (dir: string) => spawnSync(process.execPath, ['--import', 'tsx', path.join(ROOT, 'scripts', 'catalog-plan.ts'), dir], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, INIT_CWD: ROOT } });
+    const ok = run(catalogWith('0.28.2'));
+    expect(ok.status, ok.stderr).toBe(0);
+    const plan = JSON.parse(ok.stdout) as { groups: { minHarbor: string; ids: string[] }[] };
+    expect(plan.groups.map((g) => g.minHarbor)).toEqual(['0.28.0', '0.28.2']);
+    expect(plan.groups[1]!.ids).toEqual(['demo']);
+    const bad = run(catalogWith('0.27.9'));
+    expect(bad.status).toBe(1);
+    expect(bad.stdout).toBe('');
+    expect(bad.stderr).toMatch(/demo: .*release\.minHarbor 0\.27\.9 must be 0\.28\.2 or newer/);
   });
 });

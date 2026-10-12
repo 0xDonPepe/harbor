@@ -636,8 +636,12 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   happen any day a new catalog arrives. Leave it off for apps you want to update by hand.
 - **"needs Harbor x.y.z or newer"**: an app that needs a newer Harbor is listed but cannot be installed,
   restored from a backup, or updated, until you update Harbor (§4e). Copies you already run keep working
-  and keep their icon. It means this version of the app uses a package feature that first came in Harbor
-  x.y.z (the catalog works this out from the app itself), so your Harbor would not understand it yet.
+  and keep their icon. It means the app's author says this version of the app needs Harbor x.y.z or
+  newer (each app states it in its own package, and the catalog's checks prove it against that real
+  Harbor release before publishing). Your Harbor would not understand the app yet.
+- **Uploading your own app** (or adding a git source) that states a newer Harbor than yours is refused
+  with the same "needs Harbor x.y.z or newer" message (Harbor 0.28.2 and newer; 0.28.0 and 0.28.1 refuse
+  such a package as invalid instead, because they do not know the field). Update Harbor, then add it again.
 - **An update or install you reviewed just before a new catalog arrived** fails with `PLAN_STALE`
   ("The app catalog changed since this plan was made"): nothing was changed. Review it again (§7).
 - **Offline machines**: every Harbor release ships the latest catalog, so a machine without internet

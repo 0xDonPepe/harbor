@@ -169,6 +169,15 @@ describe('git app sources: add, build from source, redeploy on commit (decision 
     expect(i.readiness).toBe('healthy');
   });
 
+  it('a repository whose package declares a newer Harbor is refused by name (decision 161)', async () => {
+    const url = 'https://github.com/carlos/later-app';
+    const later = MANIFEST.replace('id: my-notes', 'id: later-app').replace('  version: "0.1.0"', '  version: "0.1.0"\n  minHarbor: "99.0.0"');
+    h.git.setRepo(url, 'main', [{ commit: 'f'.repeat(40), committerDateUnix: 1_760_000_500, files: { ...commitFiles('later'), 'harbor/manifest.yaml': later } }]);
+    const refused = await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/package-sources', { url, ref: 'main' });
+    expect(refused.error.message).toBe('needs Harbor 99.0.0 or newer');
+    expect((await h.api.expect<{ items: PackageSourceDto[] }>(200, 'GET', '/v1/package-sources')).items.map((x) => x.url)).not.toContain(url);
+  });
+
   it('zip uploads may not declare build: (git sources only); removing the source keeps the app', async () => {
     const { writeZip } = await import('../../src/packages/zip.js');
     await h.api.expectError(422, 'INVALID_PACKAGE', 'POST', '/v1/packages', {

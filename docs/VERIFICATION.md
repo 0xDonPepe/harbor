@@ -220,6 +220,50 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3s. Apps declare their minimum Harbor (2026-10-12, Harbor 0.28.2, decision 161)
+
+**Local only** (developer host, fake adapter). No published app declares `release.minHarbor` yet, and the
+harbor-apps CI that proves declarations against real releases needs 0.28.2 to be released first (the
+published 0.28.1, 598c7f2, is the ufw change of decision 160 and has neither the field nor `catalog:plan`).
+
+- **Gate (re-run after the 0.28.2 renumbering):** `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 316 passed (43 files; `package-features` and its
+  table removed, new cases in `catalog-bundle-build` and `packages-store-official`); `pnpm test:integration`
+  215 passed + 3 live-Docker skipped (new: an upload declaring `minHarbor: "99.0.0"` plus an unknown field is
+  refused 409 `INVALID_STATE` "needs Harbor 99.0.0 or newer" and is not listed; a git source declaring it is
+  refused the same way and not recorded); `pnpm build && pnpm test:e2e` 30 passed; `pnpm catalog:verify
+  tests/fixtures/catalog --quiet` 9 ok; `pnpm catalog:hash --catalog tests/fixtures/catalog --check` ok;
+  `pnpm openapi -- --check` current (no route change).
+- **Unit proofs:** a manifest `release.minHarbor` must be canonical `x.y.z` and ≥ 0.28.2 (`0.28.1` refused
+  with "Harbor 0.28.0 and 0.28.1 do not know the field", also `0.28.0`, `0.9.99`, `0.29`, `v0.29.0`, and
+  leading zeros `0.028.2`, `00.28.2`, `0.28.02`, `1.0.00`, `01.0.0`; `0.100.0` accepted); the manifest value gates listing/load on its own (index without it) and before the
+  schema check (a manifest with an unknown field says "needs Harbor 0.29.0 or newer" on 0.28.2, the schema
+  error on 0.29.0); the bundle copies the manifest value into the index entry (sorted keys, deterministic) and a
+  0.28.0-style index-only read lists the app as unavailable; an index value that differs from the manifest's
+  (or names one the manifest lacks) fails bundle, verify and plan; `planCatalog` groups by version in numeric
+  order (`0.100.0` after `0.30.0`) with sorted ids; the plan CLI prints JSON on stdout and exits 1 with the
+  reason on stderr.
+- **Real catalog checkout:** `pnpm catalog:verify ../harbor-apps/apps` 17 packages ok, every line
+  `minHarbor=0.28.0(default)`; `pnpm -s catalog:plan ../harbor-apps/apps` →
+  `{"groups":[{"minHarbor":"0.28.0","ids":[<the 17 apps>]}]}`, exit 0. Plain `pnpm catalog:plan` also prints
+  pnpm's `> harbor@0.28.2 catalog:plan` header on stdout: CI must use `pnpm -s` (the JSON is the last line).
+- **`catalog:bundle --summary`:** unit test writes `{serial, commit, packages}` sorted by id with
+  `version`/`minHarbor` as string or null; an app whose free-text version is `1) minHarbor=0.30.0 (x` comes out
+  as that exact string with `minHarbor: null` (the human log line, unchanged, would mislead a parser);
+  `--sumary` (typo) or a valueless `--summary` exit 2. On `../harbor-apps/apps`: 17 entries, all
+  `version: null, minHarbor: null`.
+- **Release guard (`scripts/release-tag-guard.sh`, read-only `git ls-remote` against the real origin):**
+  `v0.28.1` with 598c7f2 → exit 0 (a re-run); `v0.28.1` with cca556d → exit 1 "already released from
+  598c7f2…: bump the version"; `v0.28.2` → "is new", exit 0. Annotated tag in a scratch repo: the `^{}` commit
+  is compared (match 0, other commit 1, missing argument 1).
+- **harbor-apps CI (local only, not run on GitHub):** YAML parses (4 jobs: plan, check, bundle with
+  `contents: read`, publish with `contents: write` + concurrency, GH_TOKEN only on Decide and Publish);
+  `bash -n` on all 15 run blocks; the plan step refuses 598c7f2's `package.json` with "the latest Harbor
+  release (v0.28.1) has no catalog:plan; release Harbor 0.28.2 or newer first" and passes this one; the plan
+  shape check refuses `0.028.2`; publish's artifact check refuses a wrong commit, serial, id, an empty or
+  missing summary, a leading-zero minHarbor; the jq notes on a sample with a hostile version
+  (`1) minHarbor=0.30.0 (x` → no "needs Harbor") and shell metacharacters print them literally; the same on a
+  real bundle of the 17 apps.
+
 ## 3r. LAN mode opens its ports in ufw (2026-10-12, Harbor 0.28.1, decision 160)
 
 - **Found live on the home server (0.27.1):** an app's secure LAN address (`https://<hostname>.local:38085`)

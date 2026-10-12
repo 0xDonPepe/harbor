@@ -36,6 +36,7 @@ metadata:
 release:
   revision: "1"                  # raise it (2, 3, …) for every new upload; this is what triggers updates
   version: "1.0.0"               # the app's own version, shown to people
+  # minHarbor: "0.28.2"          # optional: the oldest Harbor release this revision runs on (§10)
 deployment:
   compose: compose.yaml
   multiInstance: true            # false if only one copy may run
@@ -202,7 +203,8 @@ storage only for what is real data.
 
 ## 4. What Harbor does at upload
 
-1. Reads the zip (no symlinks, no `..`, CRC checked), validates `manifest.yaml` against the schema and
+1. Reads the zip (no symlinks, no `..`, CRC checked). A manifest whose `release.minHarbor` is newer than
+   this Harbor is refused first, with "needs Harbor x.y.z or newer". Then it validates `manifest.yaml` against the schema and
    `compose.yaml` against the subset, and cross-checks them (services, endpoints, volumes, bindings).
 2. Resolves every image that is not already `repository@sha256:…` at its registry (anonymous pull token,
    `linux/amd64`), rewrites `compose.yaml` to the digest, and records tag, digests and image creation
@@ -373,7 +375,7 @@ catalog within about 6 hours, without a Harbor release.
 harbor-apps/
   apps/index.json          id -> { revision, dir, optional minHarbor }
   apps/<id>/manifest.yaml, compose.yaml, README.md, release.json (+ icon, screenshots)
-  .harbor-ref              the Harbor commit (full 40-hex sha on Harbor's main) whose tools CI uses
+  scripts/subset.mjs       CI helper: copies a list of apps + a filtered index.json into a folder
 ```
 
 **Contribution flow.** Clone both repositories side by side (`harbor/` and `harbor-apps/`) and run the
@@ -388,28 +390,58 @@ tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; ot
    `pnpm catalog:verify` loads every app exactly as the daemon does.
 4. Try it: `HARBOR_DEV_CATALOG=../harbor-apps/apps pnpm dev` shows the whole catalog in the dev console.
 5. Open a pull request on harbor-apps. Its CI runs `catalog:verify` and `catalog:hash --check` with
-   Harbor's own loader.
+   published Harbor releases' own loaders (see *minHarbor* below).
 
-**minHarbor.** You normally do not set it. `pnpm catalog:bundle` computes which Harbor an app needs from
-the fields and values it uses in manifest.yaml, compose.yaml and release.json (`src/packages/features.ts`,
-decision 159) and stamps `"minHarbor":
-"x.y.z"` on its entry in the bundled `index.json`. An older Harbor lists the app as unavailable ("needs
-Harbor x.y.z or newer"), refuses to install it, and offers no update to it. If you do set it by hand in
-`apps/index.json` (say, for a behaviour the table cannot see), the bundle keeps the higher of yours and
-the computed one, and `pnpm catalog:verify` fails when yours is lower (it prints
-`minHarbor declared=… computed=…` for every app).
+**minHarbor (decision 161).** An app states the oldest Harbor release it runs on in its own manifest:
+
+```yaml
+release:
+  revision: "7"
+  minHarbor: "0.29.0"   # optional; "x.y.z" (no leading zeros), a published Harbor release
+```
+
+- Leave it out when the app works on Harbor 0.28.0 (the first Harbor that downloads catalogs): that is
+  the default. When you set it, it must be **0.28.2 or newer**, the first release that ships the field
+  (0.28.0 and 0.28.1 do not know it and would refuse the manifest), so `pnpm catalog:verify` and uploads
+  refuse `0.28.1` or lower. Write it the way the release is tagged: `0.28.2`, never `0.028.2` or
+  `0.28.02` (leading zeros are refused).
+- Set it when the app uses something a Harbor release added: a new manifest or Compose field, a new
+  value, a wider limit. The Harbor release notes say which version first accepts each change. Use that
+  version.
+- A Harbor older than the value lists the app as unavailable ("needs Harbor x.y.z or newer"), refuses to
+  install, restore or update to it, and refuses it as an upload or git source with the same message.
+- `pnpm catalog:bundle` copies the value into the app's entry of the bundled `index.json`, because a
+  0.28.0 box reads only the index. `apps/index.json` may leave it out; when it has one, it must equal the
+  manifest's (verify, plan and bundle fail otherwise).
+- `pnpm catalog:verify` prints `minHarbor=<value>` (or `minHarbor=0.28.0(default)`) for every app.
+  `pnpm -s catalog:plan <apps>` prints the apps grouped by it, as one line of JSON:
+  `{"groups":[{"minHarbor":"0.28.0","ids":["actual",...]},{"minHarbor":"0.28.2","ids":[...]}]}`
+  (versions sorted, ids sorted; exit 1 with the reason when a declaration is invalid).
+
+**What CI checks (the proof).** The value is your claim, and harbor-apps CI proves it instead of
+trusting it:
+1. the declared version must be a real published Harbor release: a GitHub release `v<x.y.z>` on
+   carlosalaniz/harbor, not a draft or prerelease, whose tag commit is on Harbor's `main`;
+2. the app must validate with **that** release's own validator: CI resolves the tag to its commit,
+   checks that the commit is on Harbor's `main`, and checks out that exact commit (never the tag name,
+   so a tag moved later cannot change what was checked). It installs that release's own toolchain
+   (Node from its `package.json` engines, pnpm from its `packageManager`), runs `pnpm install`, and runs
+   its `pnpm catalog:verify` on a folder holding just the apps that declare that version
+   (`scripts/subset.mjs`);
+3. every app also validates with the **latest** Harbor release (resolved and checked out the same way),
+   which also builds the bundle.
+An app's folder must be named exactly like its id (`apps/<id>/`, index entry `"dir": "<id>"`): Harbor's
+catalog loader already refuses an index entry whose `dir` differs from its id, and the subset copies rely
+on it.
+The format only grows (below), so an app that passes on its minimum and on the latest release passes on
+every release in between.
 
 **The format only grows** (for Harbor developers changing the format itself). Every published app is
 read by Harbors of every age, so:
 - never remove, rename or narrow a field or value an official package may use;
-- add new fields and values as optional, each with an entry in `FEATURES` in `src/packages/features.ts`
-  (`since` = the next Harbor release; `value` for one new enum value; `when` for a widened pattern, limit,
-  type or required list; a `when` on `manifest` for a top-level field that became optional).
-  `tests/unit/package-features.test.ts` fails until you do: it checks every field and value, and every
-  node's constraints against `src/packages/features-constraints.json` (regenerate it with
-  `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` once the change is recorded). It fails when a
-  field disappears or a constraint narrows ("the format only grows"), and on a schema keyword it cannot
-  walk (anyOf, `$ref`, ...);
+- add new fields and values as optional, and widen limits and patterns, never tighten them. Say in the
+  release notes which Harbor version first accepts the change, so app authors know what to put in
+  `release.minHarbor`;
 - index.json entry fields are not package fields: an older Harbor refuses the whole index on an unknown
   key, so a new one needs a new index schemaVersion or must stay out of the index;
 - a breaking change needs a migration in the engine: Harbor adapts old packages, like Umbrel;
@@ -424,14 +456,14 @@ files. It refuses to record anything when the box's catalog revisions differ fro
 the archive from a bundle of that checkout with `HARBOR_CATALOG_BUNDLE`, or use `--only`). Never set it
 by hand. A qualification change alone needs no revision bump.
 
-**Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `.harbor-ref`
+**Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `scripts/`
 or the workflow (or a manual run) runs two jobs:
 
-1. **verify** checks as above, with Harbor checked out at the commit pinned in `.harbor-ref` (a full sha
-   on Harbor's `main`; branches and tags are refused, because the bundle is built by that code),
+1. **verify** checks as above: the latest Harbor release for every app, and each declared
+   `release.minHarbor` release for the apps declaring it,
 2. **release** (the only job with write access; the token reaches only its `gh` steps) runs
-   `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` with Harbor at the same commit,
-   which writes `catalog.zip` (deterministic: index.json with each app's computed `minHarbor` stamped in,
+   `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` with the latest Harbor release,
+   which writes `catalog.zip` (deterministic: index.json with each app's declared `minHarbor` copied in,
    plus, per app, only the package files and the assets its manifest names) and `catalog.json` (zip sha256 + size, commit, serial, createdAt, package
    count), then runs `gh release create c<serial>` with the two files and marks the release latest.
 

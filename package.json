@@ -1,6 +1,6 @@
 {
   "name": "harbor",
-  "version": "0.28.1",
+  "version": "0.28.2",
   "private": true,
   "description": "Harbor — simple self-hosted application manager (local preview)",
   "type": "module",
@@ -30,6 +30,7 @@
     "catalog:verify": "tsx scripts/catalog-verify.ts",
     "catalog:hash": "tsx scripts/catalog-hash.ts",
     "catalog:bundle": "tsx scripts/catalog-bundle.ts",
+    "catalog:plan": "tsx scripts/catalog-plan.ts",
     "catalog:fetch": "node scripts/catalog-fetch.mjs",
     "openapi": "tsx scripts/openapi.ts"
   },

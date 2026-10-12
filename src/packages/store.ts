@@ -7,6 +7,7 @@ import { listCatalog, loadPackage, loadPackageDir, readCatalogIndex, type Catalo
 import { validateComposeSource } from './compose-source.js';
 import { sha256Hex } from './inventory.js';
 import { validateManifestReferences, validateManifestShape } from './manifest.js';
+import { missingHarbor, needsHarborError, peekMinHarbor } from './min-harbor.js';
 import { parseImageRef, type ImageResolver } from './registry.js';
 import { parseRestrictedYaml } from './yaml.js';
 import { readZip } from './zip.js';
@@ -151,7 +152,12 @@ export class PackageStore {
     const manifestRaw = need('manifest.yaml');
     const composeRaw0 = need('compose.yaml');
     if (manifestRaw.length > 256 * 1024 || composeRaw0.length > 256 * 1024) throw new HarborError('INVALID_PACKAGE', 'manifest.yaml and compose.yaml must each be under 256 KiB');
-    const manifest = validateManifestShape(parseRestrictedYaml(manifestRaw, 'manifest.yaml'), 'manifest.yaml');
+    const manifestDoc = parseRestrictedYaml(manifestRaw, 'manifest.yaml');
+    // Decision 161: a package written for a newer Harbor is refused by name before the schema check, which a
+    // newer manifest may fail here for fields this Harbor does not know yet.
+    const needs = missingHarbor(peekMinHarbor(manifestDoc), this.readOpts.harborVersion);
+    if (needs) throw needsHarborError(needs, `This package declares release.minHarbor ${needs}. Update Harbor (Settings → Overview) to ${needs} or newer, then add it again.`);
+    const manifest = validateManifestShape(manifestDoc, 'manifest.yaml');
     const id = manifest.metadata.id;
     // An id the operator already owns keeps taking uploads even if the official catalog added it since.
     if (readCatalogIndex(this.bundledDir).packages[id] && !this.localIndex().packages[id]) throw new HarborError('INVALID_PACKAGE', `the id "${id}" belongs to a built-in app`, { nextAction: 'Choose another metadata.id for your package.' });

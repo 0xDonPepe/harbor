@@ -142,8 +142,12 @@ without a restart; each Harbor release ships the latest as the seed. Next:
       trusts old + new, switch the `CATALOG_SIGNING_KEY` secret and `keys/harbor-apps.pub`, then drop the
       old key in a later release. Write it down (and what to do if the key leaks) before it is needed.
 - [ ] **Download by tag, not `releases/latest`.** A release published between the `catalog.json` and
-      `catalog.zip` fetches fails that check with a checksum mismatch (the next check succeeds). Fetch the
-      zip from the tag the signed `catalog.json` names (e.g. `releases/download/c<serial>/`).
+      `catalog.zip` fetches mixes two bundles; the daemon now starts such a check over once (signature or
+      checksum mismatch). Cleaner: resolve the `c<serial>` tag once and fetch all three files from
+      `releases/download/c<serial>/`, requiring `meta.serial` to match.
+- [ ] **Catalog reset.** A downloaded folder that no longer verifies against the configured keys already
+      falls back to the seed; there is still no operator action to drop the downloaded catalogs
+      (today: `sudo rm -rf /var/lib/harbor/catalog` + restart).
 - [ ] **Persist `checkedAt` / `error`.** Status forgets the last check on every restart ("Not checked
       since the daemon started"); keep them in the `settings` table.
 - [ ] **Review policy for community submissions** to harbor-apps: who may merge, what a reviewer checks

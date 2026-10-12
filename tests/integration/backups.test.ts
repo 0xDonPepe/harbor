@@ -179,7 +179,17 @@ describe('backup places (decision 152)', () => {
     const app = found.find((a) => a.instanceId === memos.id)!;
     expect(app).toMatchObject({ packageId: 'memos', installedHere: false });
     const point = app.points[0]!;
-    const plan = await h2.api.expect<PlanDto>(201, 'POST', '/v1/backups/restore', { targetId: r.target.id, instanceId: memos.id, runId: point.runId, location: { dir: path.join(h2.userDataDir, 'harbor-apps', 'memos') } });
+    const restoreReq = { targetId: r.target.id, instanceId: memos.id, runId: point.runId, location: { dir: path.join(h2.userDataDir, 'harbor-apps', 'memos') } };
+    // a package this Harbor is too old for says so (not "this Harbor has no package")
+    const indexFile = path.join(h2.catalogDir, 'index.json');
+    const index = readFileSync(indexFile);
+    const gated = JSON.parse(index.toString('utf8'));
+    gated.packages.memos.minHarbor = '99.0.0';
+    writeFileSync(indexFile, JSON.stringify(gated));
+    const tooOld = await h2.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/backups/restore', restoreReq);
+    expect(tooOld.error.message).toBe('needs Harbor 99.0.0 or newer');
+    writeFileSync(indexFile, index);
+    const plan = await h2.api.expect<PlanDto>(201, 'POST', '/v1/backups/restore', restoreReq);
     expect(plan.kind).toBe('install');
     const op = await h2.api.waitOperation((await h2.api.submit(plan.id)).operationId);
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');

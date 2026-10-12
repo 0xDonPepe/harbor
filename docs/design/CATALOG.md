@@ -194,8 +194,9 @@ newer than the latest release and skips one that is already released.
 harbor-apps `CATALOG_SIGNING_KEY` Actions secret plus an offline backup; `scripts/sign.mjs` verifies its
 own signature against the pinned key before anything is released. A box accepts a bundle only if the
 signature verifies against a configured key, the serial is strictly higher than the active one (no
-rollback, no replay), the zip matches the signed sha256 and size, and the index validates with every
-listed folder present.
+rollback, no replay) and at most 24 h ahead of the box's clock ("the app catalog is dated in the
+future" otherwise: a far-future serial would block every honest bundle until then), the zip matches
+the signed sha256 and size, and the index validates with every listed folder present.
 
 **On the box.**
 
@@ -204,24 +205,37 @@ listed folder present.
   verbatim. Without a `catalog.json` (dev, tests) the seed is serial 0. Read once at start.
 - Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
   (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
-  pointer parses, its `index.json` exists and its serial beats the seed's; otherwise the seed. A Harbor
-  upgrade with a newer seed takes over by itself.
+  pointer parses, its `index.json` exists, its serial beats the seed's, and its stored `catalog.json`
+  still verifies against the keys configured **now** and names that folder's serial; otherwise the seed
+  (logged once as "not trusted"). The check is cached by serial + size/mtime of `catalog.json` and its
+  signature, so reads stay cheap. A key rotation therefore retires every folder the old key signed, and
+  the next bundle is compared with the seed, not with the folder that lost its trust. A Harbor upgrade
+  with a newer seed takes over by itself.
 - Check: a minute after start, then every 6 h, or on demand (`POST /v1/catalog/refresh`,
   `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` and the
   signature first (30 s each), stop if the serial is not newer, then `catalog.zip` (capped at the signed
   size, 5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
-  prune all but the new folder and the one it replaced. Any failure leaves the active catalog as it was
-  and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
+  prune all but the new folder and the one it replaced. The whole check has one deadline of 240 s (each
+  step gets at most what is left), below the CLI's 300 s wait for the response. A signature or checksum
+  mismatch (or a zip over its signed size) is what a release published between the fetches from
+  `releases/latest` looks like, so such a check starts over once. Any failure leaves the active catalog
+  as it was and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
 - Refresh is a direct route, not a plan: it never touches Docker. Installed apps see a higher revision
   on the next observer tick as an ordinary update — the notification, or an automatic `update` plan for
-  instances with auto-update on.
+  instances with auto-update on. A plan made before a swap still pins its revision and hashes: if the
+  runner finds them changed when it starts (before anything is written), the operation fails
+  `PLAN_STALE` ("Review the plan again"), the app keeps its install state and readiness, no
+  notification is sent, and a stale install leaves no instance row or port claim behind.
 - Config: `catalog: {url, publicKeys}` (1–8 keys). Default url
   `https://github.com/carlosalaniz/harbor-apps/releases/latest/download`; https only (http just for
   loopback); `url: null` means no timer and no fetch (dev, tests, openapi generation).
 
 **minHarbor.** Optional `"minHarbor": "x.y.z"` on an index entry. A Harbor older than that lists the app
 as unavailable ("needs Harbor x.y.z or newer"), install fails with INVALID_STATE and the next action
-"Update Harbor …", and the app offers no update. Not enforced by the scripts.
+"Update Harbor …", restore from a backup says the same (not "no package"), and the app offers no
+update. Presentation assets (`/v1/catalog/<id>/asset/<name>`) skip the gate, and fall back to an
+installed copy's release snapshot when the current revision cannot be read, so installed apps keep
+their icon. Not enforced by the scripts.
 
 **Id clashes.** An id the operator uploaded keeps winning after the official catalog adds the same id
 (the official duplicate is hidden and offers no update); removing the upload hands the id back. A new
@@ -232,5 +246,5 @@ published harbor-apps release. First publish: Harbor on a branch → `.harbor-re
 harbor-apps (first `c<serial>`) → merge Harbor to `main` → set `.harbor-ref` back to `main`.
 
 **Not done yet** (docs/TODO.md): a key rotation procedure, downloading by tag instead of
-`releases/latest` (a release published between the two fetches fails one check), persisting `checkedAt`,
+`releases/latest` (today a check that reads two releases starts over once), persisting `checkedAt`,
 and a review policy for community submissions.

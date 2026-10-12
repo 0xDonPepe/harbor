@@ -760,11 +760,29 @@ export class ApplicationService {
     }
   }
 
-  // Package asset bytes for the console (icon/gallery), from the bundled or uploaded package.
+  // Package asset bytes for the console (icon/gallery), from the bundled or uploaded package, without its
+  // minHarbor gate. When the current revision cannot be read or no longer names the asset, an installed
+  // copy's release snapshot answers (the icon of an app that runs here never breaks with a catalog update).
   asset(packageId: string, name: string): { bytes: Buffer; contentType: string } {
-    const pkg = this.ctx.packages.load(packageId);
-    const bytes = pkg.assets[name];
-    if (!bytes) throw new HarborError('NOT_FOUND', `no asset ${name} in package ${packageId}`);
+    let bytes: Buffer | null = null;
+    let failure: unknown = null;
+    try {
+      bytes = this.ctx.packages.loadAsset(packageId, name);
+    } catch (e) {
+      failure = e;
+    }
+    for (const i of bytes ? [] : this.ctx.repo.listInstances().filter((x) => x.packageId === packageId)) {
+      try {
+        bytes = loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'release'), packageId).assets[name] ?? null;
+      } catch {
+        /* a missing or damaged snapshot: try the next copy */
+      }
+      if (bytes) break;
+    }
+    if (!bytes) {
+      if (failure && !HarborError.is(failure, 'NOT_FOUND')) throw failure;
+      throw new HarborError('NOT_FOUND', `no asset ${name} in package ${packageId}`);
+    }
     const ext = name.split('.').pop();
     const contentType = ext === 'svg' ? 'image/svg+xml' : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     return { bytes, contentType };
@@ -2188,7 +2206,9 @@ export class ApplicationService {
     let pkg: LoadedPackage;
     try {
       pkg = this.ctx.packages.load(pkgId);
-    } catch {
+    } catch (e) {
+      // only a missing package is "add it first"; "needs Harbor x.y.z" (or a broken package) says what it is
+      if (!HarborError.is(e, 'NOT_FOUND')) throw e;
       throw new HarborError('NOT_FOUND', `this Harbor has no package ${pkgId}`, { nextAction: 'Add that app\'s package first (App Store → Your apps → Upload, or its git source), then restore again.' });
     }
     const instances = repo.listInstances();

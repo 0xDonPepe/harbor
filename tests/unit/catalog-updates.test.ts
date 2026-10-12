@@ -1,10 +1,10 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FakeFetcher, type FetchResult } from '../../src/appearance/fetcher.js';
 import { PackageStore } from '../../src/packages/store.js';
 import { FakeRegistry } from '../../src/packages/registry.js';
-import { CatalogUpdateService } from '../../src/system/catalog-updates.js';
+import { CatalogUpdateService, CHECK_DEADLINE_MS, type CatalogUpdateDeps } from '../../src/system/catalog-updates.js';
 import { systemClock } from '../../src/util.js';
 import { buildBundle, bumpRevision, catalogFiles, testSigner, type TestBundle } from './bundle-helpers.js';
 import { cloneCatalog, REPO_CATALOG, tempDir } from './helpers.js';
@@ -28,12 +28,12 @@ class BundleServer {
   }
 }
 
-function setup(opts: { url?: string | null } = {}) {
+function setup(opts: { url?: string | null } & Partial<Pick<CatalogUpdateDeps, 'clock' | 'log' | 'monotonicMs' | 'fetcher'>> = {}) {
   const signer = testSigner();
   const seed = cloneCatalog();
   const stateDir = tempDir('harbor-catalog-state-');
   const server = new BundleServer();
-  const svc = new CatalogUpdateService({ seedDir: seed, stateDir, url: opts.url === undefined ? URL_BASE : opts.url, publicKeys: [signer.publicKey], fetcher: server.fetcher, clock: systemClock, log: quiet });
+  const svc = new CatalogUpdateService({ seedDir: seed, stateDir, url: opts.url === undefined ? URL_BASE : opts.url, publicKeys: [signer.publicKey], fetcher: opts.fetcher ?? server.fetcher, clock: opts.clock ?? systemClock, log: opts.log ?? quiet, ...(opts.monotonicMs ? { monotonicMs: opts.monotonicMs } : {}) });
   const store = new PackageStore(() => svc.activeDir(), tempDir('harbor-local-'), new FakeRegistry(), systemClock);
   const base = catalogFiles(REPO_CATALOG);
   const offer = (serial: number, revision: string, files = bumpRevision(base, 'excalidraw', revision)) => {
@@ -209,5 +209,137 @@ describe('official catalog updates (decision 158)', () => {
     await new Promise((r) => setTimeout(r, 60));
     expect(server.count('catalog.json')).toBe(seen);
     expect(existsSync(svc.activeDir())).toBe(true);
+  });
+});
+
+describe('a downloaded catalog is trusted only while it verifies (decision 158 review)', () => {
+  const recorder = () => {
+    const warns: string[] = [];
+    return { warns, log: { ...quiet, warn: (m: string) => void warns.push(m) } };
+  };
+
+  it('a folder signed by a key this Harbor no longer pins falls back to the seed, and the new key\'s bundle replaces it', async () => {
+    const { seed, stateDir, server, signer, offer, root } = setup();
+    const before = new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, publicKeys: [signer.publicKey], fetcher: server.fetcher, clock: systemClock, log: quiet });
+    offer(9_000_000, '2');
+    await before.refresh();
+    expect(before.status()).toMatchObject({ serial: 9_000_000, origin: 'downloaded' });
+
+    // a Harbor release rotates the key: the old folder no longer counts
+    const rotated = testSigner();
+    const { warns, log } = recorder();
+    const after = new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, publicKeys: [rotated.publicKey], fetcher: server.fetcher, clock: systemClock, log });
+    expect(after.activeDir()).toBe(seed);
+    expect(after.status()).toMatchObject({ serial: 0, origin: 'bundled' });
+    after.activeDir();
+    expect(warns.filter((w) => w.includes('not trusted'))).toHaveLength(1);
+    expect(warns[0]).toMatch(/downloaded app catalog 9000000 is not trusted \(the app catalog signature does not verify\)/);
+
+    // a bundle from the new key with a LOWER serial than the stale folder still wins: it is compared with the seed
+    server.bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), rotated, { serial: 5_000 });
+    expect(await after.refresh()).toMatchObject({ serial: 5_000, origin: 'downloaded', error: null });
+    expect(after.activeDir()).toBe(path.join(root, '5000'));
+    expect(numericDirs(root)).toEqual(['5000']);
+  });
+
+  it('a folder whose catalog.json names another serial falls back to the seed', async () => {
+    const { svc, seed, offer, root } = setup();
+    offer(100, '2');
+    await svc.refresh();
+    renameSync(path.join(root, '100'), path.join(root, '500'));
+    writeFileSync(path.join(root, 'current.json'), JSON.stringify({ serial: 500 }));
+    expect(svc.activeDir()).toBe(seed);
+    expect(svc.status()).toMatchObject({ origin: 'bundled', serial: 0 });
+  });
+
+  it('a tampered stored catalog.json falls back to the seed; the signed bytes back make it count again', async () => {
+    const { svc, seed, offer, root, store } = setup();
+    offer(100, '2');
+    await svc.refresh();
+    expect(store.load('excalidraw').revision).toBe('2');
+    const file = path.join(root, '100', 'catalog.json');
+    const signed = readFileSync(file);
+    const forged = JSON.parse(signed.toString('utf8'));
+    forged.commit = 'feedfacefeedfacefeedfacefeedfacefeedface';
+    writeFileSync(file, JSON.stringify(forged));
+    expect(svc.activeDir()).toBe(seed);
+    expect(store.load('excalidraw').revision).toBe('1');
+    writeFileSync(file, signed);
+    expect(svc.activeDir()).toBe(path.join(root, '100'));
+    // a missing signature is the same as a wrong one
+    renameSync(path.join(root, '100', 'catalog.json.sig'), path.join(root, '100', 'sig.bak'));
+    expect(svc.activeDir()).toBe(seed);
+  });
+
+  it('refuses a bundle dated more than a day ahead of the clock, without downloading its archive', async () => {
+    const nowS = 1_760_000_000;
+    const { svc, server, offer } = setup({ clock: { now: () => new Date(nowS * 1000) } });
+    offer(nowS + 2 * 86_400, '2');
+    const s = await svc.refresh();
+    expect(s.error).toMatch(/^the app catalog is dated in the future \(2025-10-11T/);
+    expect(s).toMatchObject({ origin: 'bundled', serial: 0 });
+    expect(server.count('catalog.zip')).toBe(0);
+    // a few hours ahead (a CI clock slightly off) is fine
+    offer(nowS + 3600, '2');
+    expect(await svc.refresh()).toMatchObject({ serial: nowS + 3600, origin: 'downloaded', error: null });
+  });
+
+  it('a release published halfway through a check (mixed files) is checked again once from the start', async () => {
+    const { svc, server, signer, base } = setup();
+    const older = buildBundle(bumpRevision(base, 'excalidraw', '2'), signer, { serial: 100 });
+    const newer = buildBundle(bumpRevision(base, 'excalidraw', '3'), signer, { serial: 200 });
+    // first round: old catalog.json, then the new release lands (new signature)
+    server.bundle = newer;
+    let metaCalls = 0;
+    server.fetcher.routes.unshift({ match: (u) => u === `${URL_BASE}/catalog.json` && metaCalls++ === 0, reply: () => bin(older.meta) });
+    expect(await svc.refresh()).toMatchObject({ serial: 200, origin: 'downloaded', error: null });
+    expect(server.count('catalog.json')).toBe(2);
+
+    // old catalog.json + signature, then the new archive: checksum mismatch, checked again
+    const { svc: svc2, server: server2, signer: signer2, base: base2 } = setup();
+    const a = buildBundle(bumpRevision(base2, 'excalidraw', '2'), signer2, { serial: 100 });
+    const b = buildBundle(bumpRevision(base2, 'excalidraw', '3'), signer2, { serial: 200 });
+    server2.bundle = a;
+    let zipCalls = 0;
+    server2.fetcher.routes.unshift({
+      match: (u) => u === `${URL_BASE}/catalog.zip` && zipCalls++ === 0,
+      reply: () => {
+        server2.bundle = b;
+        return bin(b.zip.subarray(0, Math.min(b.zip.length, a.zip.length)));
+      },
+    });
+    expect(await svc2.refresh()).toMatchObject({ serial: 200, error: null });
+    expect(server2.count('catalog.zip')).toBe(2);
+
+    // a bundle that stays wrong is checked twice, then reported
+    const { svc: svc3, server: server3, base: base3 } = setup();
+    server3.bundle = buildBundle(base3, testSigner(), { serial: 100 });
+    expect((await svc3.refresh()).error).toMatch(/signature does not verify/);
+    expect(server3.count('catalog.json')).toBe(2);
+  });
+
+  it('one deadline for the whole check: each step gets at most what is left of it', async () => {
+    let t = 0;
+    const timeouts: Record<string, number[]> = {};
+    const server = new BundleServer();
+    const fetcher = {
+      async fetch(url: string, opts: { timeoutMs?: number } = {}) {
+        const name = url.slice(URL_BASE.length + 1);
+        (timeouts[name] ??= []).push(opts.timeoutMs ?? -1);
+        t += 100_000; // every request takes 100 s
+        return server.fetcher.fetch(url);
+      },
+    };
+    const { svc, signer, base } = setup({ fetcher, monotonicMs: () => t });
+    server.bundle = buildBundle(bumpRevision(base, 'excalidraw', '2'), signer, { serial: 100 });
+    expect(await svc.refresh()).toMatchObject({ serial: 100, error: null });
+    expect(timeouts).toEqual({ 'catalog.json': [30_000], 'catalog.json.sig': [30_000], 'catalog.zip': [CHECK_DEADLINE_MS - 200_000] });
+
+    // no time left before the archive: the check stops with that reason (the CLI never waits past its own limit)
+    t = 0;
+    const slow = { async fetch(url: string) { t += 130_000; return server.fetcher.fetch(url); } };
+    const { svc: svc2, signer: signer2, base: base2 } = setup({ fetcher: slow, monotonicMs: () => t });
+    server.bundle = buildBundle(bumpRevision(base2, 'excalidraw', '2'), signer2, { serial: 100 });
+    expect((await svc2.refresh()).error).toBe(`the app catalog check took longer than ${CHECK_DEADLINE_MS / 1000} s (stopped before catalog.zip); Harbor tries again at the next check`);
   });
 });

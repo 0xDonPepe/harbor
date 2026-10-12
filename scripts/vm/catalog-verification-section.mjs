@@ -1,14 +1,24 @@
 #!/usr/bin/env node
 // Render the "Live catalog qualification" section of docs/VERIFICATION.md from one or more
 // docs/evidence/catalog-* run directories, plus the qualified-versions table from every release.json.
-//   node scripts/vm/catalog-verification-section.mjs docs/evidence/catalog-A [docs/evidence/catalog-B ...] [--write]
+//   node scripts/vm/catalog-verification-section.mjs [--catalog <dir>] docs/evidence/catalog-A [docs/evidence/catalog-B ...] [--write]
+// The release.json files come from the harbor-apps checkout (default as in scripts/catalog-dir.mjs).
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { catalogArg } from '../catalog-dir.mjs';
 
-const args = process.argv.slice(2);
+let parsed;
+try {
+  parsed = catalogArg(process.argv.slice(2));
+} catch (e) {
+  console.error(e.message);
+  process.exit(2);
+}
+const catalogDir = parsed.dir;
+const args = parsed.rest;
 const write = args.includes('--write');
 const dirs = args.filter((a) => !a.startsWith('--'));
-if (!dirs.length) { console.error('usage: catalog-verification-section.mjs <run-dir>... [--write]'); process.exit(2); }
+if (!dirs.length) { console.error('usage: catalog-verification-section.mjs [--catalog <dir>] <run-dir>... [--write]'); process.exit(2); }
 
 const rows = [];
 let versions = null;
@@ -23,10 +33,10 @@ for (const r of rows) latest.set(r.id, r);
 const table = ['| Step | Result | Run | Notes |', '|---|---|---|---|', ...[...latest.values()].sort((a, b) => a.id.localeCompare(b.id)).map((r) => `| ${r.id} | **${r.status.toUpperCase()}** | ${r.run} | ${r.notes.map((n) => String(n).split('\n')[0].slice(0, 300)).join('<br>').replace(/\|/g, '/')} |`)];
 const passed = [...latest.values()].filter((r) => r.status === 'pass').length;
 
-const index = JSON.parse(readFileSync('catalog/index.json', 'utf8'));
+const index = JSON.parse(readFileSync(path.join(catalogDir, 'index.json'), 'utf8'));
 const qual = ['| Package | Images (tag → index digest) | Qualification |', '|---|---|---|'];
 for (const id of Object.keys(index.packages).sort()) {
-  const rel = JSON.parse(readFileSync(path.join('catalog', id, 'release.json'), 'utf8'));
+  const rel = JSON.parse(readFileSync(path.join(catalogDir, id, 'release.json'), 'utf8'));
   const imgs = Object.entries(rel.images).map(([svc, i]) => `${svc}: \`${i.repository}:${i.tag}\` → \`${i.reference.split('@')[1].slice(0, 19)}…\``).join('<br>');
   qual.push(`| ${id} | ${imgs} | ${rel.qualification.status} (${rel.qualification.date}) |`);
 }
@@ -37,7 +47,7 @@ Every bundled package is installed with the CLI on the designated droplet (fresh
 
 ${table.join('\n')}
 `;
-const qualSection = `### Catalog images and qualification (from \`catalog/*/release.json\`)
+const qualSection = `### Catalog images and qualification (from harbor-apps \`apps/*/release.json\`)
 
 ${qual.join('\n')}
 `;

@@ -9,6 +9,7 @@ import { effectiveSchedule, fitsCap, isDue, isStale, lastWindowStart, nextWindow
 import { rcloneBinary } from '../../src/bootstrap/backup-tools.js';
 import { writeZip, readZip } from '../../src/packages/zip.js';
 import { backupUnit, checkRequestShape, isSafeStagePath, isStagePath, parseBackupSpec, stageDirFor } from '../../src/backups/step.js';
+import { REPO_CATALOG } from './helpers.js';
 
 const T = (transport: TargetRuntime['transport'], config: Record<string, string>, extra: Partial<TargetRuntime> = {}): TargetRuntime => ({ id: '11111111-1111-4111-8111-111111111111', transport, config, fields: [], ...extra });
 const dirs = { run: '/run/harbor-backup/r1', rcloneConf: '/var/lib/harbor-backup/t1/rclone.conf' };
@@ -97,7 +98,9 @@ describe('restic argv and output', () => {
 
 describe('target packages (decision 152)', () => {
   it('the bundled places validate as the daemon loads them', () => {
-    const pkgs = loadTargetPackages(targetsDirFor(path.resolve(import.meta.dirname, '../../catalog')));
+    // the test catalog has no targets/ beside it, so this resolves Harbor's own targets/ (as pnpm dev does)
+    expect(targetsDirFor(REPO_CATALOG)).toBe(path.resolve(import.meta.dirname, '../../targets'));
+    const pkgs = loadTargetPackages(targetsDirFor(REPO_CATALOG));
     expect(pkgs.map((p) => `${p.manifest.metadata.id}:${p.manifest.transport}`)).toEqual(['folder:local', 'protondrive:rclone', 's3:s3', 'sftp:sftp']);
   });
 
@@ -112,7 +115,7 @@ describe('target packages (decision 152)', () => {
   });
 
   it('splits answers into config and secrets; the redacted marker keeps a stored secret', () => {
-    const s3 = loadTargetPackages(targetsDirFor(path.resolve(import.meta.dirname, '../../catalog'))).find((p) => p.manifest.metadata.id === 's3')!.manifest;
+    const s3 = loadTargetPackages(targetsDirFor(REPO_CATALOG)).find((p) => p.manifest.metadata.id === 's3')!.manifest;
     const v = checkTargetValues(s3, { endpoint: ' s3.example.com ', bucket: 'b1', accessKeyId: 'k', secretAccessKey: 's' });
     expect(v).toEqual({ config: { endpoint: 's3.example.com', bucket: 'b1', path: 'harbor', accessKeyId: 'k' }, secrets: { secretAccessKey: 's' } });
     expect(checkTargetValues(s3, { endpoint: 'e', bucket: 'b1', accessKeyId: 'k', secretAccessKey: '••••' }, { secretAccessKey: 'kept' }).secrets).toEqual({ secretAccessKey: 'kept' });

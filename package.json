@@ -28,6 +28,8 @@
     "test:vm": "node scripts/vm/run-vm-tests.mjs",
     "package": "node scripts/package.mjs",
     "catalog:verify": "tsx scripts/catalog-verify.ts",
+    "catalog:hash": "tsx scripts/catalog-hash.ts",
+    "catalog:bundle": "tsx scripts/catalog-bundle.ts",
     "openapi": "tsx scripts/openapi.ts"
   },
   "dependencies": {

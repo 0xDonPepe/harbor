@@ -22,7 +22,7 @@ import { systemClock, systemIds, type Clock } from '../../src/util.js';
 import type { ApiErrorBody, InstanceSummary, OperationDto, PlanDto } from '../../src/contracts/api.js';
 
 export const ADMIN = { username: 'admin', password: 'correct-horse-battery-staple' };
-export const REPO_CATALOG = path.resolve(import.meta.dirname, '../../catalog');
+export const REPO_CATALOG = path.resolve(import.meta.dirname, '../fixtures/catalog');
 
 export async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {

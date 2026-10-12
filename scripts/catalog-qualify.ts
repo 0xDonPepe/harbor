@@ -1,24 +1,34 @@
 // Record a live qualification result in each package's release.json (editorial step after a
 // successful `pnpm test:vm -- --fresh` run). Usage:
-//   pnpm tsx scripts/catalog-qualify.ts <evidence-dir> passed|blocked
+//   pnpm tsx scripts/catalog-qualify.ts [--catalog <dir>] <evidence-dir> passed|blocked
+// The catalog dir resolves as in scripts/catalog-dir.mjs (HARBOR_CATALOG_DIR, then ../harbor-apps/apps).
 // Reads versions from the run's report.json and refreshes file hashes.
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { RELEASE_FILES } from '../src/contracts/release.schema.js';
 import { sha256Hex } from '../src/packages/inventory.js';
+import { catalogArg } from './catalog-dir.mjs';
 
-const [evidenceDir, status] = process.argv.slice(2);
+let parsed: { rest: string[]; dir: string };
+try {
+  parsed = catalogArg(process.argv.slice(2));
+} catch (e) {
+  console.error((e as Error).message);
+  process.exit(2);
+}
+const catalogDir = parsed.dir;
+const [evidenceDir, status] = parsed.rest;
 if (!evidenceDir || !['passed', 'blocked'].includes(status ?? '')) {
-  console.error('usage: catalog-qualify.ts <docs/evidence/vm-...> passed|blocked');
+  console.error('usage: catalog-qualify.ts [--catalog <dir>] <docs/evidence/vm-...> passed|blocked');
   process.exit(2);
 }
 const report = JSON.parse(readFileSync(path.join(evidenceDir, 'report.json'), 'utf8')) as { results: { id: string; status: string; details: Record<string, unknown> }[] };
 const a01 = report.results.find((r) => r.id === 'A01');
 const versions = (a01?.details['versions'] ?? {}) as Record<string, string>;
 const passed = report.results.filter((r) => r.status === 'pass').map((r) => r.id).sort();
-const index = JSON.parse(readFileSync('catalog/index.json', 'utf8')) as { packages: Record<string, { dir: string }> };
+const index = JSON.parse(readFileSync(path.join(catalogDir, 'index.json'), 'utf8')) as { packages: Record<string, { dir: string }> };
 for (const [id, entry] of Object.entries(index.packages)) {
-  const dir = path.join('catalog', entry.dir);
+  const dir = path.join(catalogDir, entry.dir);
   const releasePath = path.join(dir, 'release.json');
   const release = JSON.parse(readFileSync(releasePath, 'utf8'));
   release.qualification = {

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { sha256Hex } from '../../src/packages/inventory.js';
 
-export const REPO_CATALOG = path.resolve(import.meta.dirname, '../../catalog');
+export const REPO_CATALOG = path.resolve(import.meta.dirname, '../fixtures/catalog');
 
 export function tempDir(prefix = 'harbor-test-'): string {
   return mkdtempSync(path.join(tmpdir(), prefix));

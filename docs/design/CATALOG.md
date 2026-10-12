@@ -195,7 +195,7 @@ Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its ow
 with the same serial as an existing release, and for a serial not newer than the latest release skips
 when `main` has moved on (the newer commit publishes) and fails otherwise (clock skew).
 
-**CI layout.** Two jobs. *verify* (every push, PR and manual run) runs Harbor's tools at `.harbor-ref`,
+**CI layout.** Two jobs. *verify* (every PR, manual run, and push to main touching `apps/`, `.harbor-ref` or the workflow) runs Harbor's tools at `.harbor-ref`,
 which must be a full commit sha on Harbor's `main` (the release job re-checks that it is on `main`).
 *release* (main push or manual run only) bundles with Harbor's tools at the same commit and runs
 `gh release create c<serial> catalog.zip catalog.json --latest`; it is the only job with
@@ -261,7 +261,7 @@ upload of an official id is still refused.
 **Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref` (a commit on Harbor's `main`);
 Harbor's release job needs a published harbor-apps release. First publish: push Harbor to `main` (its
 release job and its `official-catalog` CI job fail: no catalog yet) → write that commit's sha into `.harbor-ref` → push harbor-apps (first
-`c<serial>`) → re-run Harbor's release job. Later Harbor changes reach the catalog tooling only through a
+`c<serial>`) → re-run Harbor's failed jobs (release + official-catalog). Later Harbor changes reach the catalog tooling only through a
 reviewed `.harbor-ref` bump.
 
 **Not done yet** (docs/TODO.md): signing Harbor releases and the catalog together, the daemon downloading by tag instead of

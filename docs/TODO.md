@@ -137,7 +137,7 @@ check every 6 hours (or on *Check for new apps* / `harbor catalog refresh`) and 
 without a restart; each Harbor release ships the latest as the seed. Next:
 
 - [ ] **First publish + live run.** Follow the bootstrap order (AI_CONTEXT §8): Harbor to `main`,
-      its sha in `.harbor-ref`, first `c<serial>` release, then re-run Harbor's release job. Then on a test machine or a droplet: upgrade
+      its sha in `.harbor-ref`, first `c<serial>` release, then re-run Harbor's failed jobs (release + official-catalog). Then on a test machine or a droplet: upgrade
       from 0.27.x, watch the seed load, publish a revision bump in harbor-apps, see it arrive.
 - [ ] **Sign Harbor releases and the catalog together, with one key.** Today both trust GitHub over
       HTTPS (self-update and catalog alike). Signing only the catalog was built and dropped (decision 158):

@@ -291,8 +291,8 @@ Review fixes (daemon), local, fake adapter (`pnpm lint`, `pnpm typecheck` pass; 
 
 Review fixes (surface + tooling), local:
 - `pnpm test` 292 passed (new: release-tag helpers — `releases/latest` Location → `c<serial>`, refusing
-  another repo, a `v` tag, extra path segments; `pnpm package` now fetches all three files from
-  `releases/download/c<serial>/` and requires the signed serial to match the tag).
+  another repo, a `v` tag, extra path segments; `pnpm package` now fetches both files from
+  `releases/download/c<serial>/` and requires the serial in `catalog.json` to match the tag).
 - `pnpm test:e2e` 30 passed: the main e2e daemon now has catalog checks on (`HARBOR_DEV_CATALOG_URL`,
   closed loopback port; fake mode answers 404). *Check for new apps* is visible and clickable, shows
   *Checking…*, then the error in role=status; after a reload the line says "Last check failed: …" and

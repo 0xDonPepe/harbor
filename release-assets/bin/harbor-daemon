@@ -1,5 +1,7 @@
 #!/bin/sh
 # Harbor daemon launcher (used by harbor.service). No product logic here.
 set -eu
-here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+# Follow symlinks: /usr/local/bin/harbor links here (0.28.2), and the runtime lives next to the real file.
+self=$(readlink -f -- "$0" 2>/dev/null || printf '%s' "$0")
+here=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)
 exec "$here/node/bin/node" "$here/dist/daemon.js" "$@"

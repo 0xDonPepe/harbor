@@ -264,6 +264,32 @@ published 0.28.1, 598c7f2, is the ufw change of decision 160 and has neither the
   (`1) minHarbor=0.30.0 (x` → no "needs Harbor") and shell metacharacters print them literally; the same on a
   real bundle of the 17 apps.
 
+**Live, GitHub + harbor-old (2026-10-12), 0.28.2 / 0.28.3:**
+- GitHub: Harbor v0.28.2 released (release + CI green, `official-catalog` job green). harbor-apps' new
+  CI ran for the first time: plan → *check with Harbor 0.28.0 (17 apps)* + *check with Harbor 0.28.2
+  (all 17 apps)* → bundle → publish, release `c1791820303`. Two throwaway PRs (closed, branches deleted):
+  memos declaring `minHarbor: "9.9.9"` failed plan with "memos declares release.minHarbor 9.9.9, but
+  Harbor 9.9.9 is newer than the latest Harbor release (0.28.2)…" on `apps/memos/manifest.yaml`;
+  memos declaring `"0.28.2"` passed (*check with Harbor 0.28.0 (16 apps)*, *check with Harbor 0.28.2
+  (all 17 apps)*; bundle/publish skipped on a PR).
+- harbor-old: `sudo harbor self-update apply --to 0.28.2`; the 12 containers stayed up. 60 s after start
+  the daemon itself downloaded `c1791820303` (published after the 0.28.2 tarball was built) and switched
+  to it (`harbor catalog status`: downloaded, serial 1791820303); `harbor catalog refresh` → "Up to date".
+- Update through a catalog, end to end: Excalidraw installed as `catalogtest` (unencrypted; an encrypted
+  install is refused until the operator logs in after a restart, as designed) at revision 1; a test
+  catalog (Excalidraw revision 1.9, serial newer than the official one) served on the box's
+  `127.0.0.1:8099` with `catalog.url` pointed at it; `harbor catalog refresh` → "New apps and updates
+  loaded"; `harbor list` → `-> 1.9`; an `update-available` notification "Revision 1 → 1.9" appeared 17 s
+  after the swap; `harbor update catalogtest --yes` → "catalogtest now runs revision 1.9", healthy, HTTP
+  200; the notification was gone afterwards. Cleanup: `harbor purge catalogtest`, the config restored
+  byte for byte, `/var/lib/harbor/catalog` removed; the next check downloaded `c1791820303` again; the
+  owner's three apps and 12 containers untouched, no error lines.
+- Found live: 0.28.2's `/usr/local/bin/harbor` link failed ("exec: /usr/local/node/bin/node: not found"):
+  the launchers resolved their runtime next to the link. Fixed in 0.28.3 (both launchers follow the link;
+  `tests/unit/launcher.test.ts` runs them through a symlink and fails on the old launcher).
+- Not exercised live: the Store's *Check for new apps* button in a browser (the same route the CLI
+  refresh uses), and the 6-hour timer.
+
 ## 3r. LAN mode opens its ports in ufw (2026-10-12, Harbor 0.28.1, decision 160)
 
 - **Found live on the home server (0.27.1):** an app's secure LAN address (`https://<hostname>.local:38085`)

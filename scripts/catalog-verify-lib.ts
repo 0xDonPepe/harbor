@@ -18,7 +18,7 @@ export function verifyCatalog(catalogDir: string, opts: { features?: readonly Ha
     try {
       const pkg = loadPackage(catalogDir, id);
       const declared = index.packages[id]!.minHarbor ?? null;
-      const need = harborRequirement(pkg.manifest, pkg.compose, opts.features ?? FEATURES);
+      const need = harborRequirement({ manifest: pkg.manifest, compose: pkg.compose, release: pkg.release }, opts.features ?? FEATURES);
       if (declaredTooLow(declared, need.minHarbor)) {
         throw new Error(
           `index.json declares minHarbor ${declared} but the package uses ${need.because.join(', ')}: ` +

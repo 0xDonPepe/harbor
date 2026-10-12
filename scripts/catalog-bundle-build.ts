@@ -5,12 +5,12 @@
 // so stray files and unlisted folders in the checkout never ship. No timestamps: the same checkout
 // always gives the same bytes.
 // Decision 159: index.json is re-written, not copied: each entry's minHarbor becomes max(declared, computed from
-// the fields the package uses, src/packages/features.ts), so authors normally never set it. Sorted keys, two-space
-// JSON: still deterministic.
+// the fields the package uses in manifest, compose and release.json, src/packages/features.ts), so authors normally
+// never set it. Every other entry field is copied as is. Sorted keys, two-space JSON: still deterministic.
 import type { CatalogIndex } from '../src/contracts/types.js';
 import { BUNDLE_ZIP_LIMITS, MAX_BUNDLE_ZIP_BYTES, parseBundleMeta, type CatalogBundleMeta } from '../src/packages/catalog-bundle.js';
 import { loadPackage, readCatalogIndex } from '../src/packages/catalog.js';
-import { FEATURES, maxHarbor, requiredHarbor, type HarborFeature } from '../src/packages/features.js';
+import { computeRequiredHarbor, FEATURES, maxHarbor, type HarborFeature } from '../src/packages/features.js';
 import { sha256Hex } from '../src/packages/inventory.js';
 import { readZip, writeZip } from '../src/packages/zip.js';
 
@@ -38,8 +38,10 @@ export function buildCatalogBundle(catalogDir: string, opts: { commit: string; s
       files[`${dir}/release.json`] = pkg.raw.release;
       for (const [name, bytes] of Object.entries(pkg.assets)) files[`${dir}/${name}`] = bytes;
       const entry = index.packages[id]!;
-      const minHarbor = maxHarbor(entry.minHarbor, requiredHarbor(pkg.manifest, pkg.compose, opts.features ?? FEATURES));
-      stamped[id] = { revision: entry.revision, dir: entry.dir, ...(minHarbor ? { minHarbor } : {}) };
+      const minHarbor = maxHarbor(entry.minHarbor, computeRequiredHarbor({ manifest: pkg.manifest, compose: pkg.compose, release: pkg.release }, opts.features ?? FEATURES));
+      // a copy, so an index field added later is never dropped; only minHarbor is overridden; sorted keys
+      const copy: Record<string, unknown> = { ...entry, ...(minHarbor ? { minHarbor } : {}) };
+      stamped[id] = Object.fromEntries(Object.keys(copy).sort().map((k) => [k, copy[k]])) as CatalogIndex['packages'][string];
       packages.push({ id, revision: pkg.revision, version: pkg.manifest.release.version ?? null, minHarbor });
     } catch (e) {
       failures.push(`${id}: ${(e as Error).message}`);

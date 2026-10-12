@@ -281,27 +281,39 @@ official package may use. New fields and values are optional and get an entry in
 packages (as Umbrel does), packages are never rewritten for it.
 
 **Automatic minHarbor (old Harbor, new app).** `features.ts` (pure) maps field paths and enum/const
-values to the Harbor that first accepts them:
+values of manifest.yaml, compose.yaml and release.json to the Harbor that first accepts them:
 
 | Key | Meaning |
 |---|---|
-| `compose.services.*.command` | a field (`*` = a key the author chooses, `[]` = an array item) |
-| `manifest.endpoints.*.kind=api` | one enum/const value of a field |
-| `path` + `when(value)` | an existing field whose pattern or limit was widened |
+| `compose.services.*.command` | a field (`*` = a key the author chooses, `[]` = an array item, `[0]` = a fixed position) |
+| `manifest.endpoints.*.kind=api` | one enum/const value of a field (matched by its string form) |
+| `path` + `when(value)` | an existing field whose pattern, limit, type or required list was widened |
+| `manifest` + `when(doc)` | a root: a top-level field that became optional |
 
 Everything up to 0.28.0 is `BASELINE` (no requirement: older Harbors never fetch the signed catalog);
-`FEATURES` holds later additions with `since`. `requiredHarbor(manifest, compose)` = the highest `since`
-over what a package uses. `pnpm catalog:bundle` re-writes the bundled index.json with each entry's
-`minHarbor` = max(declared, computed) (sorted, deterministic; no longer the checkout's bytes), so authors
-normally never set it. `pnpm catalog:verify` prints `minHarbor declared=… computed=…` per app and fails
+`FEATURES` holds later additions with `since`. `computeRequiredHarbor({ manifest, compose, release })` = the
+highest `since` over what a package uses. `pnpm catalog:bundle` re-writes the bundled index.json, each entry
+copied with `minHarbor` = max(declared, computed) (keys sorted, deterministic; no longer the checkout's bytes),
+so authors normally never set it. Its log prints `ok   <id>@<revision>[ (<version>)][ minHarbor=<x.y.z>]` per
+app (the harbor-apps publish job reads these lines). `pnpm catalog:verify` prints `minHarbor declared=… computed=…` per app and fails
 when a declared value is lower than computed. The daemon checks the index `minHarbor` before parsing
 the package files (§9). Uploads and git sources are not gated: the running Harbor validates them itself.
 Not expressible as a path: a relaxed cross-field rule in `validateManifestReferences` — set `minHarbor`
 by hand on the index entry.
 
-**The guard.** `tests/unit/package-features.test.ts` walks `MANIFEST_SCHEMA` and
-`COMPOSE_SOURCE_SCHEMA`: a path or value that is neither baseline nor in `FEATURES` fails ("add it with
-the next version"), and so does a baseline or recorded one that disappeared ("the format only grows").
+**The guard.** `tests/unit/package-features.test.ts` walks `MANIFEST_SCHEMA`, `COMPOSE_SOURCE_SCHEMA`,
+`RELEASE_SCHEMA` and `CATALOG_INDEX_SCHEMA`:
+- a path or value that is neither baseline nor in `FEATURES` fails ("add it with the next version"), and so
+  does a baseline or recorded one that disappeared ("the format only grows");
+- the walker throws on a keyword it does not understand (anyOf/oneOf/allOf, if/then/else, not, `$ref`,
+  patternProperties, ...), so no field hides from it;
+- every node's own constraints (type, pattern, format, min*/max*, required, propertyNames, uniqueItems,
+  boolean additionalProperties/items) are compared with the committed `src/packages/features-constraints.json`.
+  A widened or changed one needs a `when` entry on that path; a narrowed one fails ("the format only grows")
+  unless `ACKNOWLEDGED_NARROWING` lists it with a decision number. Once recorded, regenerate the file with
+  `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` and commit it;
+- index.json has no `FEATURES`: an older Harbor refuses the whole index on one unknown entry key, so any
+  index format change fails with "needs a new index schemaVersion or must stay out of the index".
 
 **Strict validation stays.** Umbrel ignores unknown manifest keys; Harbor refuses them. An unknown
 Compose key is a security boundary (an old engine that silently dropped one could run something other

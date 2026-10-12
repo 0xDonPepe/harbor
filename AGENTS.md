@@ -100,7 +100,10 @@ Key separations (do not blur them):
    release): the catalog bundle then stamps `minHarbor` and older boxes list the app as "needs Harbor
    x.y.z or newer" instead of failing on it. A breaking change needs a migration in the engine (Harbor
    adapts old packages, like Umbrel). `tests/unit/package-features.test.ts` fails on an unrecorded or
-   removed schema path; CI job `official-catalog` loads the latest published catalog with your commit.
+   removed schema path or value, a changed constraint without a `when` entry, a narrowed one, or a
+   keyword it cannot walk (snapshot: `src/packages/features-constraints.json`, regenerate with
+   `UPDATE_FEATURE_BASELINE=1 pnpm test package-features`); CI job `official-catalog` loads the latest
+   published catalog with your commit.
 
 ## 4. HOW to work here
 
@@ -185,9 +188,10 @@ The non-negotiable subset:
   `scripts/vm/qualify-catalog.mjs --catalog <dir>` on a droplet — never stamp it by hand.
 - **Forbidden**: secrets in the package, interpolation/`$` tricks, symlinks/`..` paths,
   remote images in presentation, rendering package text as HTML (served sandboxed).
-- **Changing the format itself** (a schema in `src/contracts/manifest.schema.ts` or
-  `compose.schema.ts`): it only grows (§3.6). New optional field or enum value → a `FEATURES` entry in
-  `src/packages/features.ts` with the next version; a widened pattern or limit → an entry with `when`.
+- **Changing the format itself** (a schema in `src/contracts/manifest.schema.ts`, `compose.schema.ts` or
+  `release.schema.ts`): it only grows (§3.6). New optional field or enum value → a `FEATURES` entry in
+  `src/packages/features.ts` with the next version; a widened pattern or limit → an entry with `when`, then
+  regenerate `features-constraints.json`. index.json entry fields need a new index schemaVersion instead.
   Unknown keys stay refused (they are a security boundary for the Compose subset).
 
 ### 4.3 UI/UX rules (the craft pass is the bar)

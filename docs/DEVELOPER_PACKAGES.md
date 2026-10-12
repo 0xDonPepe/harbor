@@ -394,7 +394,8 @@ tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; ot
    Harbor's own loader.
 
 **minHarbor.** You normally do not set it. `pnpm catalog:bundle` computes which Harbor an app needs from
-the fields and values it uses (`src/packages/features.ts`, decision 159) and stamps `"minHarbor":
+the fields and values it uses in manifest.yaml, compose.yaml and release.json (`src/packages/features.ts`,
+decision 159) and stamps `"minHarbor":
 "x.y.z"` on its entry in the bundled `index.json`. An older Harbor lists the app as unavailable ("needs
 Harbor x.y.z or newer"), refuses to install it, and offers no update to it. If you do set it by hand in
 `apps/index.json` (say, for a behaviour the table cannot see), the bundle keeps the higher of yours and
@@ -405,8 +406,15 @@ the computed one, and `pnpm catalog:verify` fails when yours is lower (it prints
 read by Harbors of every age, so:
 - never remove, rename or narrow a field or value an official package may use;
 - add new fields and values as optional, each with an entry in `FEATURES` in `src/packages/features.ts`
-  (`since` = the next Harbor release; `value` for one new enum value; `when` for a widened pattern or
-  limit). `tests/unit/package-features.test.ts` fails until you do, and fails when a field disappears;
+  (`since` = the next Harbor release; `value` for one new enum value; `when` for a widened pattern, limit,
+  type or required list; a `when` on `manifest` for a top-level field that became optional).
+  `tests/unit/package-features.test.ts` fails until you do: it checks every field and value, and every
+  node's constraints against `src/packages/features-constraints.json` (regenerate it with
+  `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` once the change is recorded). It fails when a
+  field disappears or a constraint narrows ("the format only grows"), and on a schema keyword it cannot
+  walk (anyOf, `$ref`, ...);
+- index.json entry fields are not package fields: an older Harbor refuses the whole index on an unknown
+  key, so a new one needs a new index schemaVersion or must stay out of the index;
 - a breaking change needs a migration in the engine: Harbor adapts old packages, like Umbrel;
 - unknown keys stay refused (an unknown Compose key is a security boundary).
 Harbor CI's `official-catalog` job loads the latest published catalog with every Harbor commit, so a

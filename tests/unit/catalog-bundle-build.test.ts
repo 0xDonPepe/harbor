@@ -10,6 +10,7 @@ import * as bundleLib from '../../src/packages/catalog-bundle.js';
 import { openBundle, parseBundleMeta } from '../../src/packages/catalog-bundle.js';
 import * as catalogLib from '../../src/packages/catalog.js';
 import { listCatalog, readCatalogIndex } from '../../src/packages/catalog.js';
+import { CATALOG_INDEX_SCHEMA } from '../../src/contracts/release.schema.js';
 import type { HarborFeature } from '../../src/packages/features.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
 
@@ -140,6 +141,7 @@ describe('automatic minHarbor (decision 159)', () => {
     const { files } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
     const index = JSON.parse(files.get('index.json')!.toString('utf8'));
     expect(index.packages.demo).toEqual({ revision: '1', dir: 'demo', minHarbor: '0.29.0' });
+    expect(Object.keys(index.packages.demo)).toEqual(['dir', 'minHarbor', 'revision']); // sorted: deterministic bytes
     expect(index.packages.memos.minHarbor).toBeUndefined();
     const box = tempDir('harbor-box-catalog-');
     for (const [name, bytes] of files) {
@@ -152,6 +154,36 @@ describe('automatic minHarbor (decision 159)', () => {
     expect(listCatalog(box, 'bundled', { harborVersion: '0.29.0' }).find((i) => i.id === 'demo')?.availability).toBe('available');
     // the same checkout still gives the same bytes
     expect(buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE }).zip.equals(built.zip)).toBe(true);
+  });
+
+  it('copies every index entry field (sorted keys) instead of rebuilding the entry', () => {
+    const dir = catalogWithCommand('0.28.0');
+    const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
+    index.packages.memos = { minHarbor: '0.28.0', dir: index.packages.memos.dir, revision: index.packages.memos.revision };
+    writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
+    const built = buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL, features: TABLE });
+    const key = throwawayKey();
+    const stamped = JSON.parse(openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]).files.get('index.json')!.toString('utf8'));
+    const fields = Object.keys(CATALOG_INDEX_SCHEMA.properties.packages.additionalProperties.properties).sort();
+    expect(Object.keys(stamped.packages.memos)).toEqual(fields); // every field the index format has makes it through
+    expect(stamped.packages.memos).toEqual(index.packages.memos);
+    expect(Object.keys(stamped.packages.demo)).toEqual(fields);
+    expect(stamped.packages.demo.minHarbor).toBe('0.29.0');
+  });
+
+  it('release.json counts too: a release field or value newer than the baseline stamps minHarbor', () => {
+    const table: HarborFeature[] = [{ path: 'release.qualification.status', value: 'pending', since: '0.29.1', note: 'pretend pending is new' }];
+    const dir = catalogWithCommand();
+    expect(buildCatalogBundle(dir, { commit: COMMIT, serial: SERIAL, features: table }).packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.29.1');
+    expect(verifyCatalog(dir, { features: table }).lines.find((l) => l.includes(' demo@'))).toMatch(/minHarbor declared=none computed=0\.29\.1/);
+  });
+
+  it('the CLI prints one ok line per app: id@revision, then (version) and minHarbor=<v> when set', () => {
+    const out = tempDir('harbor-bundle-');
+    const r = runScript('catalog-bundle.ts', [catalogWithCommand('0.28.0'), '--out', out, '--commit', COMMIT, '--serial', String(SERIAL)]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/^ok {3}demo@1 minHarbor=0\.28\.0$/m);
+    expect(r.out).toMatch(/^ok {3}memos@\S+( \(\S+\))?$/m); // no minHarbor token when there is none
   });
 
   it('a higher declared minimum wins over the computed one', () => {

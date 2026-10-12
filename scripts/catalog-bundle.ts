@@ -33,7 +33,8 @@ try {
   rmSync(path.join(outDir, BUNDLE_FILES.sig), { force: true }); // never leave an old signature beside new metadata
   writeFileSync(path.join(outDir, BUNDLE_FILES.zip), built.zip);
   writeFileSync(path.join(outDir, BUNDLE_FILES.meta), built.meta);
-  for (const p of built.packages) console.log(`ok   ${p.id}@${p.revision}${p.version ? ` (${p.version})` : ''}${p.minHarbor ? ` minHarbor ${p.minHarbor}` : ''}`);
+  // `ok   <id>@<revision>[ (<version>)][ minHarbor=<x.y.z>]`: the harbor-apps publish job parses these lines
+  for (const p of built.packages) console.log(`ok   ${p.id}@${p.revision}${p.version ? ` (${p.version})` : ''}${p.minHarbor ? ` minHarbor=${p.minHarbor}` : ''}`);
   console.log(`${path.join(outDir, BUNDLE_FILES.zip)} ${built.parsed.zip.bytes} bytes sha256 ${built.parsed.zip.sha256}`);
   console.log(`${path.join(outDir, BUNDLE_FILES.meta)} serial ${built.parsed.serial} (${built.parsed.createdAt}) commit ${commit}, ${built.parsed.packages} packages, unsigned`);
 } catch (e) {

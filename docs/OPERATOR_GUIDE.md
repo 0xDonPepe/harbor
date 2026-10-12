@@ -617,8 +617,11 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
 
 - The built-in apps live in their own repository, [harbor-apps](https://github.com/carlosalaniz/harbor-apps).
   Each change there is published as a **signed catalog**. Harbor only uses a catalog whose signature
-  checks out against the key built into Harbor, and only one newer than the one it has. Anything else is
-  ignored and the current catalog stays.
+  checks out against the key built into Harbor, and only one newer than the one it has (and not dated
+  more than a day ahead of the machine's clock). Anything else is ignored and the current catalog stays.
+  A downloaded catalog is checked again against the built-in key: one that no longer checks out (for
+  example after a Harbor release changed the key) is set aside, and Harbor uses the catalog it shipped
+  with until a good one arrives.
 - **New apps and app updates arrive on their own.** Harbor looks a minute after it starts and then every
   6 hours. To look now: App Store → **Check for new apps** (bottom of the page), or `harbor catalog refresh`.
   No restart is needed, and running apps are not touched.
@@ -627,7 +630,10 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   with the usual automatic rollback. Before 0.28.0 that only happened after a Harbor upgrade; now it can
   happen any day a new catalog arrives. Leave it off for apps you want to update by hand.
 - **"needs Harbor x.y.z or newer"**: an app that needs a newer Harbor is listed but cannot be installed,
-  and offers no update, until you update Harbor (§4e).
+  restored from a backup, or updated, until you update Harbor (§4e). Copies you already run keep working
+  and keep their icon.
+- **An update or install you reviewed just before a new catalog arrived** fails with `PLAN_STALE`
+  ("The app catalog changed since this plan was made"): nothing was changed. Review it again (§7).
 - **Offline machines**: every Harbor release ships the latest catalog, so a machine without internet
   keeps the apps it came with. Updating Harbor brings a newer catalog too.
 - **"Catalog updates are off"** (in the App Store, with no button) means this Harbor never downloads a
@@ -793,6 +799,7 @@ Notes:
 | `PORT_CONFLICT` at plan/submit | Another listener or a retained instance holds the port. `ss -ltnp`, or remove/reinstall retained instances. Harbor never stops the other listener. |
 | `NAME_CONFLICT` | Pick another `--name`. |
 | `PLAN_EXPIRED` (410) | Plans live 15 minutes. Create a new one. |
+| `PLAN_STALE` (409) | A newer app catalog (or a new upload of the package) arrived between the review and the moment Harbor started the change. Nothing was changed: the app runs as before (an install leaves nothing behind). Review the plan again; it now shows the new version. |
 | `IDEMPOTENCY_CONFLICT` | The key was used for another request, or the plan was already submitted; poll the returned operation id. |
 | `READINESS_TIMEOUT` | App did not answer within its manifest deadline. `harbor inspect`, `docker logs <container>`. Resources kept; `remove` to clean up. |
 | "Harbor restarted since your last login: log in again before installing an encrypted app" | After Harbor restarts (an update, a reboot) your remembered browser session still works, but the key that lets this machine reopen encrypted apps at login is loaded only by a password login. Log out, log in with your password, and install again. Harbor refuses rather than sealing an app that only your recovery key could reopen. |
@@ -801,7 +808,7 @@ Notes:
 | `DOCKER_UNAVAILABLE` (503) | `systemctl status docker`. |
 | `http://harbor.local` stops resolving but `http://<ip>/` works | On the machine: `sudo systemctl restart avahi-daemon.socket avahi-daemon.service` (both — a service-only restart can leave avahi answering some queries and not others), then `avahi-resolve -n harbor.local` must print only the machine's LAN address; if it prints a `172.x` Docker address, re-run the installer (it pins avahi to the LAN interface). On a Mac that still fails: toggle Wi-Fi off/on, or `sudo launchctl kickstart -k system/com.apple.mDNSResponder`. `dig @224.0.0.251 -p 5353 harbor.local +short` from the client shows whether the box answers on the wire at all. |
 | Home stays on "Loading your apps…" and public sites time out | Caddy stopped answering (seen once after turning secure addresses on, before 0.25.2). On the machine: `curl --max-time 5 http://127.0.0.1:2019/config/` hangs → `sudo systemctl restart caddy` (it comes back with its last good configuration). |
-| *Check for new apps* shows an error, or `harbor catalog refresh` says "Could not update the catalog: …" (exit 1) | Nothing was changed: Harbor keeps the catalog it has. The message says why (no internet, the server answered an error, a signature or checksum that does not check out). A checksum mismatch right after a new catalog was published usually clears on the next check. Try again later, or check that the machine can reach `github.com`. |
+| *Check for new apps* shows an error, or `harbor catalog refresh` says "Could not update the catalog: …" (exit 1) | Nothing was changed: Harbor keeps the catalog it has. The message says why (no internet, the server answered an error, a signature or checksum that does not check out, "dated in the future" — check the machine's clock). When a new catalog is published during a check, Harbor checks again once by itself. Try again later, or check that the machine can reach `github.com`. |
 | Login 429 | Rate limited after repeated failures; wait ten minutes. |
 | UI says "session ended" after reload | Expected unless you ticked *Remember this browser*: short sessions live in memory only. Log in again; running operations continue. |
 | Public address stays `degraded` | Check `dig +short <hostname>` resolves to this host and that 80/443 are open in your cloud firewall; `journalctl -u caddy` shows certificate attempts. |

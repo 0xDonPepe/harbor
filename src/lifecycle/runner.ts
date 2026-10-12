@@ -156,6 +156,11 @@ export class OperationRunner {
       const { code, message, nextAction, state } = classify(e, secretValues);
       // a failed update that was rolled back leaves the app installed and running on the previous release
       const rolledBack = (op.kind === 'update' || op.kind === 'seal' || op.kind === 'move' || op.kind === 'restore' || op.kind === 'backup') && this.opResult?.['rolledBack'] === true;
+      // A stale plan (the catalog moved on before the queue reached it) changed nothing: the app keeps its state,
+      // and an install that created nothing leaves no row behind (its name and ports are free again).
+      const stale = code === 'PLAN_STALE';
+      const dropInstall = stale && op.kind === 'install' && repo.resources(inst.id).length === 0;
+      if (stale && op.kind === 'install') this.ctx.service.takeInstallLocationSecret(plan.id);
       const result = rolledBack ? { instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) } : undefined;
       this.opResult = null;
       this.ctx.log.warn(`${op.kind} ${state}: ${message}`, { operationId: op.id, instanceId: inst.id, code });
@@ -164,15 +169,17 @@ export class OperationRunner {
         repo.updateInstance(inst.id, {
           activeOperationId: null,
           lastOperationId: op.id,
-          installState: rolledBack ? 'installed' : installStateAfterFailure(op.kind, repo.resources(inst.id).some((r) => r.kind === 'container'), inst.installState),
-          readiness: rolledBack ? 'healthy' : 'unknown',
+          installState: rolledBack ? 'installed' : stale && op.kind !== 'install' ? inst.installState : installStateAfterFailure(op.kind, repo.resources(inst.id).some((r) => r.kind === 'container'), inst.installState),
+          readiness: rolledBack ? 'healthy' : stale ? inst.readiness : 'unknown',
         });
+        if (dropInstall) repo.purgeInstance(inst.id, `${inst.name}~stale~${inst.id.slice(0, 8)}`);
         repo.bumpGeneration(inst.id);
         repo.addEvent({ operationId: op.id, instanceId: inst.id, phase: state, message: `${op.kind} ${state}: ${message}` });
       });
       // One row per failed operation (unique id in the key): auto-updates and background redeploys surface here.
       // A backup whose app runs again is reported by the backup worker itself (one row per app, resolved by the next success).
-      if (op.kind === 'backup' && rolledBack) return;
+      // A stale plan is not an app problem: the operation says so, and auto-update plans the new revision on its next pass.
+      if ((op.kind === 'backup' && rolledBack) || stale) return;
       this.ctx.notifier.notify({
         kind: 'operation-failed',
         severity: 'error',
@@ -185,6 +192,25 @@ export class OperationRunner {
   }
 
   // ---------- shared steps
+
+  // The package a plan was made from, re-read at apply time. The catalog can move on while a plan waits
+  // for review or in the queue (decision 158: a downloaded catalog swaps in at runtime; an upload replaces
+  // a revision). Caught here, before anything is written, that is a stale plan (PLAN_STALE), not a broken app.
+  private planPackage(packageId: string, revision: string, hashes: Record<string, string>): LoadedPackage {
+    const stale = (why: string) => new HarborError('PLAN_STALE', `the app catalog changed since this plan was made (${why})`);
+    let pkg: LoadedPackage;
+    try {
+      pkg = this.ctx.packages.load(packageId, revision);
+    } catch (e) {
+      // STATE_CHANGED: another revision; NOT_FOUND: the package is gone; INVALID_STATE: its newest revision needs a newer Harbor
+      if (HarborError.is(e, 'STATE_CHANGED') || HarborError.is(e, 'NOT_FOUND') || (HarborError.is(e, 'INVALID_STATE') && /^needs Harbor /.test(e.message))) throw stale(e.message);
+      throw e;
+    }
+    for (const [f, h] of Object.entries(hashes)) {
+      if (pkg.hashes[f as keyof typeof pkg.hashes] !== h) throw stale(`package ${f} changed since the plan was created`);
+    }
+    return pkg;
+  }
 
   private dirs(inst: InstanceRow) {
     return ensureInstanceDirs(this.ctx.config.stateDir, inst.id);
@@ -983,10 +1009,7 @@ export class OperationRunner {
     // Decision 120: refuse before anything is created when a default-key home could not get this
     // machine's wrapping (the daemon restarted between plan and apply, and nobody logged in since).
     if (plan.proposal.location?.defaultKey && !this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before installing an encrypted app', { nextAction: 'Log out and log in with your password once (it unlocks this machine\'s key), then install again.' });
-    const pkg = this.ctx.packages.load(inst.packageId, inst.revision);
-    for (const [f, h] of Object.entries(plan.proposal.releaseHashes)) {
-      if (pkg.hashes[f as keyof typeof pkg.hashes] !== h) throw new HarborError('STATE_CHANGED', `package ${f} changed since the plan was created`);
-    }
+    const pkg = this.planPackage(inst.packageId, inst.revision, plan.proposal.releaseHashes);
     const identity = identityFor(this.ctx.installationId, inst.id);
     const dirs = this.dirs(inst);
     writeReleaseSnapshot(dirs.release, pkg);
@@ -1551,10 +1574,7 @@ export class OperationRunner {
     if (!u) throw new HarborError('STATE_CHANGED', 'plan carries no update');
     this.phase(op, 'applying', 'preparing', `loading revision ${u.toRevision} and verifying the installed app`);
     await this.engineOrThrow();
-    const next = this.ctx.packages.load(inst.packageId, u.toRevision);
-    for (const [f, h] of Object.entries(plan.proposal.releaseHashes)) {
-      if (next.hashes[f as keyof typeof next.hashes] !== h) throw new HarborError('STATE_CHANGED', `package ${f} changed since the plan was created`);
-    }
+    const next = this.planPackage(inst.packageId, u.toRevision, plan.proposal.releaseHashes);
     const dirs = this.dirs(inst);
     const previousDir = path.join(dirs.root, 'release-previous');
     const current = loadReleaseSnapshot(dirs.release, inst.packageId);

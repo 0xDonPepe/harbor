@@ -7,6 +7,7 @@ export type ErrorCode =
   | 'PORT_CONFLICT'
   | 'STATE_CHANGED'
   | 'PLAN_EXPIRED'
+  | 'PLAN_STALE'
   | 'IDEMPOTENCY_CONFLICT'
   | 'OWNERSHIP_CONFLICT'
   | 'DATA_MISSING'
@@ -41,6 +42,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   DATA_MISSING: 409,
   SECRET_MISSING: 409,
   PLAN_EXPIRED: 410,
+  PLAN_STALE: 409,
   READINESS_TIMEOUT: 409,
   DOCKER_UNAVAILABLE: 503,
   STATE_UNAVAILABLE: 503,
@@ -71,6 +73,7 @@ const EXIT_CODE: Record<ErrorCode, number> = {
   DATA_MISSING: 3,
   SECRET_MISSING: 3,
   PLAN_EXPIRED: 3,
+  PLAN_STALE: 3,
   READINESS_TIMEOUT: 1,
   OPERATION_FAILED: 1,
   DOCKER_UNAVAILABLE: 4,
@@ -129,6 +132,7 @@ function defaultNextAction(code: ErrorCode): string {
     case 'PORT_CONFLICT': return 'Free the port or wait for the other operation, then create a new plan.';
     case 'STATE_CHANGED': return 'The instance changed since planning; create a new plan.';
     case 'PLAN_EXPIRED': return 'The plan expired; create a new plan and submit it.';
+    case 'PLAN_STALE': return 'The app catalog changed since this plan was made. Review the plan again.';
     case 'IDEMPOTENCY_CONFLICT': return 'Use a new idempotency key for a different request.';
     case 'OWNERSHIP_CONFLICT': return 'A resource with this name is not owned by this installation; inspect it manually.';
     case 'DATA_MISSING': return 'Retained data is missing or replaced; investigate before continuing. Nothing was recreated.';

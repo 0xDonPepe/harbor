@@ -105,6 +105,14 @@ export class PackageStore {
     const pkg = loadPackage(origin === 'bundled' ? this.bundledDir : this.localDir, id, expectedRevision, this.readOpts);
     return { ...pkg, origin };
   }
+  // One presentation asset (icon/gallery) of the current revision, without the minHarbor gate: the console
+  // keeps showing an installed app's icon when the catalog's newest revision needs a newer Harbor. The bytes
+  // are hash-verified like any load. Null when that revision does not name the asset.
+  loadAsset(id: string, name: string): Buffer | null {
+    const origin = this.originOf(id);
+    if (!origin) throw new HarborError('NOT_FOUND', `unknown package ${id}`);
+    return loadPackage(origin === 'bundled' ? this.bundledDir : this.localDir, id).assets[name] ?? null;
+  }
 
   // ---- uploads
   async importZip(zip: Buffer, opts: { fileName: string; actor: string }): Promise<ImportResult> {

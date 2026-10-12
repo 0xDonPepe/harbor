@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { json as fakeJson } from '../../src/appearance/fetcher.js';
-import type { CatalogItemDto, CatalogStatusDto, InstanceSummary, NotificationsDto } from '../../src/contracts/api.js';
+import type { CatalogItemDto, CatalogStatusDto, InstanceSummary, NotificationsDto, OperationDto } from '../../src/contracts/api.js';
 import { buildBundle, bumpRevision, catalogFiles, testSigner, type TestBundle } from '../unit/bundle-helpers.js';
 import { REPO_CATALOG, startHarness, type Harness } from './harness.js';
 
@@ -96,17 +96,61 @@ describe('official catalog updates (decision 158)', () => {
   });
 
   it('a bundle signed by another key is refused and changes nothing', async () => {
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), testSigner(), { serial: 1_800_000_000 });
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), testSigner(), { serial: 1_780_000_000 });
     expect(await refresh()).toMatchObject({ serial: 1_760_000_000, error: 'the app catalog signature does not verify' });
     expect((await catalogItem('excalidraw'))?.revision).toBe('2');
   });
 
-  it('a package that needs a newer Harbor lists as unavailable', async () => {
-    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3', { minHarbor: '99.0.0' }), signer, { serial: 1_800_000_000 });
-    expect(await refresh()).toMatchObject({ serial: 1_800_000_000, error: null });
+  it('a plan the catalog moved past fails PLAN_STALE and leaves the app as it was (no needs_action)', async () => {
+    const offerRevision = async (revision: string, serial: number) => {
+      bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', revision), signer, { serial });
+      expect(await refresh()).toMatchObject({ serial, error: null });
+    };
+    const failed = async (planId: string): Promise<OperationDto> => h.api.waitOperation((await h.api.submit(planId)).operationId);
+
+    // update: planned for revision 3, approved after the catalog moved to 4
+    await offerRevision('3', 1_770_000_000);
+    const before = (await h.api.instances()).find((i) => i.id === manual.id)!;
+    expect(before).toMatchObject({ revision: '2', installState: 'installed', runtime: 'running', readiness: 'healthy' });
+    const upd = await h.api.plan({ kind: 'update', instanceId: manual.id });
+    expect(upd.update?.toRevision).toBe('3');
+    await offerRevision('4', 1_771_000_000);
+    const op = await failed(upd.id);
+    expect(op.state).toBe('failed');
+    expect(op.error).toMatchObject({ code: 'PLAN_STALE', nextAction: 'The app catalog changed since this plan was made. Review the plan again.' });
+    expect(op.error?.message).toMatch(/^the app catalog changed since this plan was made \(excalidraw: bundled revision 4 differs from expected 3\)$/);
+    expect((await h.api.instances()).find((i) => i.id === manual.id)).toMatchObject({ revision: '2', installState: 'installed', runtime: 'running', readiness: 'healthy' });
+    const n = await h.api.expect<NotificationsDto>(200, 'GET', '/v1/notifications');
+    expect(n.items.filter((x) => x.kind === 'operation-failed' && x.instanceId === manual.id)).toEqual([]);
+    // the next plan is for the new revision and works
+    const again = await h.api.plan({ kind: 'update', instanceId: manual.id });
+    expect(again.update?.toRevision).toBe('4');
+
+    // install: planned for revision 4, approved after the catalog moved to 5; nothing is left behind
+    const inst = await h.api.plan({ kind: 'install', packageId: 'excalidraw' });
+    await offerRevision('5', 1_772_000_000);
+    const iop = await failed(inst.id);
+    expect(iop.state).toBe('failed');
+    expect(iop.error?.code).toBe('PLAN_STALE');
+    expect((await h.api.instances()).some((i) => i.id === inst.instanceId || i.name === inst.name)).toBe(false);
+    expect(h.daemon.ctx.repo.claimedPorts().some((c) => c.instanceId === inst.instanceId)).toBe(false);
+    const replanned = await h.api.plan({ kind: 'install', packageId: 'excalidraw' });
+    expect(replanned).toMatchObject({ name: inst.name, revision: '5' });
+    expect(replanned.endpoints.map((e) => e.hostPort)).toEqual(inst.endpoints.map((e) => e.hostPort));
+    expect((await h.api.expect<NotificationsDto>(200, 'GET', '/v1/notifications')).items.filter((x) => x.kind === 'operation-failed' && x.instanceId === inst.instanceId)).toEqual([]);
+  });
+
+  it('a package that needs a newer Harbor lists as unavailable; installed copies keep their icon', async () => {
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '6', { minHarbor: '99.0.0' }), signer, { serial: 1_780_000_000 });
+    expect(await refresh()).toMatchObject({ serial: 1_780_000_000, error: null });
     expect(await catalogItem('excalidraw')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 99.0.0 or newer', name: 'Excalidraw' });
     // no update is offered for a revision this Harbor cannot run
     expect((await h.api.instances()).find((i) => i.id === manual.id)?.updateAvailable).toBeNull();
+    // presentation assets are served without the minHarbor gate (the launcher tile and drawer icon)
+    const icon = await h.api.raw('GET', '/v1/catalog/excalidraw/asset/icon.svg', undefined, { authorization: '' });
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get('content-type')).toBe('image/svg+xml');
+    expect(Buffer.from(await icon.arrayBuffer())).toEqual(readFileSync(path.join(REPO_CATALOG, 'excalidraw', 'icon.svg')));
   });
 });
 

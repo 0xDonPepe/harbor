@@ -266,6 +266,21 @@ wrong serial, a wrong commit, a short sha, one appended zip byte, a mismatched `
 `catalog.json`. `scripts/sign.mjs` on a missing `catalog.json` exits 1 with "did the bundle step fail?".
 actionlint was not available.
 
+Review fixes (daemon), local, fake adapter (`pnpm lint`, `pnpm typecheck` pass; `pnpm test` 296 passed;
+`pnpm test:integration` 214 passed + 3 live-Docker skipped; e2e not re-run):
+- catalog-updates unit (16): a folder signed by a key no longer configured falls back to the
+  seed (warned once) and a new-key bundle with a lower serial replaces it; a folder whose `catalog.json`
+  names another serial, a tampered stored `catalog.json` and a missing signature all fall back to the
+  seed; a serial two days ahead of the clock is refused without fetching the zip (an hour ahead is
+  fine); mixed releases (old `catalog.json` + new signature, signed meta + another archive) are checked
+  again once and succeed, a bundle that stays wrong is fetched twice then reported; one 240 s deadline
+  caps each step's timeout and stops before `catalog.zip` when it runs out.
+- integration `catalog-updates` + `backups`: an update planned for revision 3 and approved
+  after the catalog moved to 4 fails `PLAN_STALE`, the app stays installed/running/healthy, no
+  operation-failed notification; a stale install leaves no instance row or port claim (re-planning gets
+  the same name and port); with a `minHarbor: 99.0.0` catalog the installed app's icon is still served;
+  restore of a package gated by `minHarbor` answers 409 `INVALID_STATE` "needs Harbor 99.0.0 or newer".
+
 Not verified: the harbor-apps workflow on GitHub Actions, a signature by the real key, a download from
 GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
 seed. These need the first harbor-apps release and a live run on a test machine or a droplet.

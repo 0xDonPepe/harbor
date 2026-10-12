@@ -79,12 +79,17 @@ export function verifyBundleSignature(meta: Buffer, signature: string, publicKey
   return false;
 }
 
-// Verify a downloaded bundle end to end and return its files (catalog layout, index.json at the root).
-export function openBundle(input: { meta: Buffer; sig: string; zip: Buffer }, publicKeys: readonly string[]): { meta: CatalogBundleMeta; files: Map<string, Buffer> } {
-  if (!verifyBundleSignature(input.meta, input.sig, publicKeys)) {
+// Verify the signed metadata alone (before downloading the archive it pins) and return it.
+export function verifyBundleMeta(meta: Buffer, sig: string, publicKeys: readonly string[]): CatalogBundleMeta {
+  if (!verifyBundleSignature(meta, sig, publicKeys)) {
     throw new HarborError('INVALID_PACKAGE', 'the app catalog signature does not verify', { nextAction: 'Nothing was changed. The catalog stays on the version already on this machine.' });
   }
-  const meta = parseBundleMeta(input.meta);
+  return parseBundleMeta(meta);
+}
+
+// Verify a downloaded bundle end to end and return its files (catalog layout, index.json at the root).
+export function openBundle(input: { meta: Buffer; sig: string; zip: Buffer }, publicKeys: readonly string[]): { meta: CatalogBundleMeta; files: Map<string, Buffer> } {
+  const meta = verifyBundleMeta(input.meta, input.sig, publicKeys);
   if (input.zip.length !== meta.zip.bytes || sha256Hex(input.zip) !== meta.zip.sha256) {
     throw new HarborError('INVALID_PACKAGE', 'the app catalog archive does not match its signed checksum', { nextAction: 'Nothing was changed. Harbor tries again at the next check.' });
   }

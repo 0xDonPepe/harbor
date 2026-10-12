@@ -27,6 +27,7 @@ import type {
 import {
   mockAppearance,
   mockCatalog,
+  mockCatalogStatus,
   mockChannels,
   mockDomains,
   mockExposures,
@@ -221,6 +222,11 @@ export const mockApi = {
   system: async (): Promise<SystemDto> => mockSystem(),
   metrics: async (): Promise<SystemMetricsDto> => mockMetrics(),
   catalog: async (): Promise<CatalogItemDto[]> => mockCatalog(),
+  catalogStatus: async () => mockCatalogStatus(),
+  catalogRefresh: async () => {
+    await beat(600);
+    return { ...mockCatalogStatus(), checkedAt: new Date().toISOString() };
+  },
   instances: async (): Promise<InstanceSummary[]> => instances,
   instance: async (id: string): Promise<InstanceDetail> => {
     const inst = instances.find((i) => i.id === id) ?? instances[0]!;

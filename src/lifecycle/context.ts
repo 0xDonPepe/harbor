@@ -10,6 +10,7 @@ import type { Clock, Ids } from '../util.js';
 import type { TailscaleProvider } from '../exposure/tailscale.js';
 import type { NetProvider } from '../system/net.js';
 import type { PackageStore } from '../packages/store.js';
+import type { CatalogUpdateService } from '../system/catalog-updates.js';
 import type { GitFetcher } from '../packages/git.js';
 import type { CaddyAdmin } from '../exposure/caddy.js';
 import type { MachineKeyHolder } from '../auth/machine-holder.js';
@@ -44,6 +45,8 @@ export interface Ctx {
   verify: UrlVerifier;
   net: NetProvider;
   packages: PackageStore;
+  // the official app catalog's updater (decision 158): which catalog folder is active, checks for newer bundles
+  catalogUpdates: CatalogUpdateService;
   logBuffer: LogBuffer;
   selfUpdate: SelfUpdateService;
   notifier: Notifier;

@@ -1,6 +1,7 @@
 import type {
   AppearanceDto,
   CatalogItemDto,
+  CatalogStatusDto,
   DomainsDto,
   EndpointDto,
   ExposureDto,
@@ -494,4 +495,10 @@ export function mockDomains(): DomainsDto {
       },
     ],
   };
+}
+
+// The official catalog line under the Store (decision 158). `?catalog=off` previews the updates-off look.
+export function mockCatalogStatus(): CatalogStatusDto {
+  const off = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('catalog') === 'off';
+  return { source: off ? null : 'https://github.com/carlosalaniz/harbor-apps/releases/latest/download', serial: 1_791_000_000, commit: '3f9c2a1b7d4e', createdAt: '2026-10-03T09:12:00Z', origin: off ? 'bundled' : 'downloaded', packages: mockCatalog().length, checkedAt: off ? null : now(), error: null };
 }

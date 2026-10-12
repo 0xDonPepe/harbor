@@ -104,6 +104,8 @@ export const CATALOG_INDEX_SCHEMA = {
         properties: {
           revision: { type: 'string', pattern: REVISION_PATTERN },
           dir: { type: 'string', pattern: ID_PATTERN },
+          // decision 158: the oldest Harbor that can run this revision; older Harbors list it as unavailable
+          minHarbor: { type: 'string', pattern: '^\\d{1,4}\\.\\d{1,4}\\.\\d{1,6}$' },
         },
       },
     },

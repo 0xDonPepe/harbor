@@ -6,6 +6,7 @@ import type { Logger } from '../lifecycle/context.js';
 import { rfc3339, type Clock } from '../util.js';
 import type { Fetcher } from '../appearance/fetcher.js';
 import { spawn } from 'node:child_process';
+import { compareVersions } from '../packages/versions.js';
 
 // Harbor updating itself. The daemon (unprivileged) only checks GitHub Releases and asks systemd to start
 // a root oneshot (`harbor-self-update@<version>.service`, allowed by the polkit rule bootstrap installs);
@@ -26,22 +27,7 @@ export interface ReleaseFeed {
   latest(): Promise<ReleaseInfo | null>;
 }
 
-// "1.2.3" style; suffixes like "-mvp" sort before the plain version.
-export function compareVersions(a: string, b: string): number {
-  const pa = a.replace(/^v/, '').split('-');
-  const pb = b.replace(/^v/, '').split('-');
-  const na = pa[0]!.split('.').map(Number);
-  const nb = pb[0]!.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    const x = na[i] ?? 0;
-    const y = nb[i] ?? 0;
-    if (x !== y) return x < y ? -1 : 1;
-  }
-  if ((pa[1] ?? '') === (pb[1] ?? '')) return 0;
-  if (!pa[1]) return 1;
-  if (!pb[1]) return -1;
-  return pa[1]! < pb[1]! ? -1 : 1;
-}
+export { compareVersions };
 
 export function archiveName(version: string): string {
   return `harbor-${version}-linux-x64.tar.gz`;

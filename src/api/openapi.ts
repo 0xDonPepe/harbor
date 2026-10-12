@@ -16,7 +16,7 @@ import type { DeviceMountService } from '../system/device-mount.js';
 export async function generateOpenApi(version = '0.0.0-doc'): Promise<Record<string, unknown>> {
   const dir = mkdtempSync(path.join(tmpdir(), 'harbor-openapi-'));
   try {
-    const config = normalizeConfig({ stateDir: dir, catalogDir: dir, docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port: 18000 } }, dir);
+    const config = normalizeConfig({ stateDir: dir, catalogDir: dir, docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port: 18000 }, catalog: { url: null } }, dir);
     const noop = { debug() {}, info() {}, warn() {}, error() {} };
     const app = await buildApi({ config, service: {} as ApplicationService, sessions: {} as SessionService, tools: {} as PlatformToolsService, devices: {} as DeviceMountService, appearance: {} as AppearanceService, power: {} as PowerControl, terminals: {} as TerminalService, setup: {} as SetupService, tailscaleFacts: async () => ({ installed: false, loggedIn: false }), log: noop, version });
     await app.ready();

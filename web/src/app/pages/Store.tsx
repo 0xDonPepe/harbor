@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CatalogItemDto, PackageSourceDto } from '../../../../src/contracts/api';
+import type { CatalogItemDto, CatalogStatusDto, PackageSourceDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
 import { StoreCard } from '../components';
 import { categoryLabel } from '../format';
@@ -48,6 +48,7 @@ export function Store({ c, onOpen, onInstall, onUpload }: { c: Console; onOpen: 
       )}
       <GitSources />
       <BackupPlaces />
+      <CatalogLine onLoaded={c.refresh} />
     </section>
   );
 }
@@ -107,5 +108,50 @@ function GitSources() {
         ))}
       </ul>
     </section>
+  );
+}
+
+// Decision 158: which official catalog this Harbor uses, and a quiet way to look for a newer one now
+// (Harbor also checks on its own every six hours). No button when updates are off.
+function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
+  const [st, setSt] = useState<CatalogStatusDto | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ text: string; error: boolean } | null>(null);
+  useEffect(() => {
+    api.catalogStatus().then(setSt, () => setSt(null));
+  }, []);
+  if (!st) return null;
+  const from = st.createdAt ? new Date(st.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+  const check = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const next = await api.catalogRefresh();
+      if (next.error) setResult({ text: next.error, error: true });
+      else if (next.serial > st.serial) {
+        await onLoaded();
+        setResult({ text: 'New apps and updates loaded', error: false });
+      } else setResult({ text: 'Up to date', error: false });
+      setSt(next);
+    } catch (e) {
+      setResult({ text: e instanceof Error ? e.message : String(e), error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="catalog-line row wrap small muted">
+      <span>{from ? `App catalog from ${from}` : 'App catalog bundled with this Harbor'}</span>
+      {st.source ? (
+        <button className="btn ghost small" disabled={busy} onClick={() => void check()}>
+          {busy ? 'Checking…' : 'Check for new apps'}
+        </button>
+      ) : (
+        <span>· Catalog updates are off</span>
+      )}
+      <span role="status" className={result?.error ? 'error' : undefined}>
+        {result?.text ?? ''}
+      </span>
+    </div>
   );
 }

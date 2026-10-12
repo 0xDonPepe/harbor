@@ -1,5 +1,7 @@
+import { createPublicKey } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { OFFICIAL_CATALOG_PUBLIC_KEY, OFFICIAL_CATALOG_URL } from './packages/catalog-bundle.js';
 import { PRODUCT } from './naming.js';
 import { compile, formatErrors } from './contracts/validate.js';
 import { HarborError } from './errors.js';
@@ -20,6 +22,9 @@ export interface DaemonConfig {
   lan: { enabled: boolean; port: number };
   // where Harbor looks for newer releases of itself (GitHub owner/name); null disables the check
   updates: { repo: string | null };
+  // the official app catalog (decision 158): where signed bundles are published (release-asset base URL,
+  // no trailing slash) and the ed25519 keys (SPKI DER, base64) they must verify against; url null = off
+  catalog: { url: string | null; publicKeys: string[] };
   listen: { host: '127.0.0.1'; port: number };
   docker: DockerConfig;
   appPortRange: { from: number; to: number };
@@ -42,6 +47,14 @@ const CONFIG_SCHEMA = {
     localPackagesDir: { type: 'string', minLength: 1 },
     lan: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' }, port: { type: 'integer', minimum: 1, maximum: 65535 } } },
     updates: { type: 'object', additionalProperties: false, properties: { repo: { type: ['string', 'null'], pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' } } },
+    catalog: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        url: { type: ['string', 'null'], minLength: 1, maxLength: 2048 },
+        publicKeys: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string', minLength: 16, maxLength: 1024, pattern: '^[A-Za-z0-9+/]+={0,2}$' } },
+      },
+    },
     listen: {
       type: 'object',
       additionalProperties: false,
@@ -79,6 +92,7 @@ export const CONFIG_DEFAULTS = {
   userDataDir: '/srv/harbor',
   lan: { enabled: false, port: 80 },
   updates: { repo: 'carlosalaniz/harbor' },
+  catalog: { url: OFFICIAL_CATALOG_URL, publicKeys: [OFFICIAL_CATALOG_PUBLIC_KEY] },
 } as const;
 
 // Configuration is always explicit: a JSON file path. No dotenv, no cwd discovery, no
@@ -107,6 +121,10 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
     localPackagesDir: raw.localPackagesDir ? abs(raw.localPackagesDir) : path.join(abs(raw.stateDir), 'packages'),
     lan: { enabled: raw.lan?.enabled ?? CONFIG_DEFAULTS.lan.enabled, port: raw.lan?.port ?? CONFIG_DEFAULTS.lan.port },
     updates: { repo: raw.updates === undefined ? CONFIG_DEFAULTS.updates.repo : (raw.updates.repo ?? null) },
+    catalog: {
+      url: raw.catalog === undefined || raw.catalog.url === undefined ? CONFIG_DEFAULTS.catalog.url : catalogUrl(raw.catalog.url),
+      publicKeys: raw.catalog?.publicKeys ? raw.catalog.publicKeys.map(catalogKey) : [...CONFIG_DEFAULTS.catalog.publicKeys],
+    },
     listen: { host: '127.0.0.1', port: raw.listen?.port ?? CONFIG_DEFAULTS.listen.port },
     docker: raw.docker.mode === 'socket' ? { mode: 'socket', socketPath: raw.docker.socketPath, cliPluginDirs: (raw.docker as { cliPluginDirs?: string[] }).cliPluginDirs ?? [] } : { mode: 'fake' },
     appPortRange: raw.appPortRange ?? { ...CONFIG_DEFAULTS.appPortRange },
@@ -121,6 +139,30 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
     throw new HarborError('STATE_UNAVAILABLE', 'invalid config: management port lies inside the app port range');
   }
   return cfg;
+}
+
+// https only; plain http just for a loopback test server.
+function catalogUrl(url: string | null): string | null {
+  if (url === null) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new HarborError('STATE_UNAVAILABLE', `invalid config: catalog.url ${JSON.stringify(url)} is not a URL`);
+  }
+  const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+  if (!(u.protocol === 'https:' || (u.protocol === 'http:' && loopback))) throw new HarborError('STATE_UNAVAILABLE', 'invalid config: catalog.url must be https:// (http:// only for 127.0.0.1 or localhost)');
+  if (u.search || u.hash || u.username || u.password) throw new HarborError('STATE_UNAVAILABLE', 'invalid config: catalog.url must not carry a query, fragment or credentials');
+  return url.replace(/\/+$/, '');
+}
+
+function catalogKey(key: string, i: number): string {
+  try {
+    if (createPublicKey({ key: Buffer.from(key, 'base64'), format: 'der', type: 'spki' }).asymmetricKeyType === 'ed25519') return key;
+  } catch {
+    /* reported below */
+  }
+  throw new HarborError('STATE_UNAVAILABLE', `invalid config: catalog.publicKeys[${i}] is not an ed25519 public key (SPKI DER, base64)`);
 }
 
 export function managementOrigin(cfg: DaemonConfig): string {

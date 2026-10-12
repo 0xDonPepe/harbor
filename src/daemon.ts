@@ -28,6 +28,7 @@ import { AppearanceService } from './appearance/service.js';
 import { FakeFetcher, RealFetcher, json as fakeJson, type Fetcher } from './appearance/fetcher.js';
 import { FakePower, SystemdPower, type PowerControl } from './system/power.js';
 import { PackageStore } from './packages/store.js';
+import { CatalogUpdateService } from './system/catalog-updates.js';
 import { LogBuffer } from './system/logs.js';
 import { TerminalService } from './system/terminal.js';
 import { FakeReleaseFeed, FakeUnitStarter, GitHubReleaseFeed, SelfUpdateService, SystemctlStarter, type ReleaseFeed, type UnitStarter } from './system/selfupdate.js';
@@ -87,6 +88,7 @@ export interface Daemon {
   tools: PlatformToolsService;
   appearance: AppearanceService;
   selfUpdate: SelfUpdateService;
+  catalogUpdates: CatalogUpdateService;
   url: string;
   close(): Promise<void>;
 }
@@ -138,9 +140,12 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     const verify = overrides.verify ?? (fakeMode ? new FakeVerifier().fn : httpsVerifier);
     const net = overrides.net ?? (fakeMode ? new FakeNet() : new RealNet());
     const registry = overrides.registry ?? (fakeMode ? demoRegistry() : new RegistryResolver());
-    const packages = new PackageStore(config.catalogDir, config.localPackagesDir, registry, clock);
     const fetcher = overrides.fetcher ?? (fakeMode ? demoFetcher() : new RealFetcher());
     const version = productVersion();
+    // The official catalog (decision 158): the bundled seed until a newer signed bundle is downloaded;
+    // the store asks for the active folder on every read, so a swap needs no restart.
+    const catalogUpdates = new CatalogUpdateService({ seedDir: config.catalogDir, stateDir: config.stateDir, url: config.catalog.url, publicKeys: config.catalog.publicKeys, fetcher, clock, log });
+    const packages = new PackageStore(() => catalogUpdates.activeDir(), config.localPackagesDir, registry, clock, { harborVersion: version });
     const feed = overrides.releaseFeed ?? (fakeMode ? demoReleaseFeed(version) : config.updates.repo ? new GitHubReleaseFeed(fetcher, config.updates.repo) : null);
     const unitStarter = overrides.unitStarter ?? (fakeMode ? new FakeUnitStarter() : new SystemctlStarter());
     const selfUpdate = new SelfUpdateService(version, feed, unitStarter, config.stateDir, clock, log);
@@ -150,7 +155,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     const machineKey = new MachineKeyHolder(log);
     // The service needs the ctx and the ctx needs the service (runner secret
     // handoff): build the ctx first with a placeholder, then link both ways.
-    const ctx: Ctx = { config, repo, docker, compose, ports: overrides.ports ?? realPortObserver, clock, ids, log, installationId: installation.id, version, tailscale, caddy, verify, net, packages, logBuffer, selfUpdate, notifier, git, machineKey, service: null as unknown as ApplicationService };
+    const ctx: Ctx = { config, repo, docker, compose, ports: overrides.ports ?? realPortObserver, clock, ids, log, installationId: installation.id, version, tailscale, caddy, verify, net, packages, catalogUpdates, logBuffer, selfUpdate, notifier, git, machineKey, service: null as unknown as ApplicationService };
     const service = new ApplicationService(ctx);
     ctx.service = service;
     const runner = new OperationRunner(ctx);
@@ -265,6 +270,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     ctx.backups.start(overrides.backupTickMs ?? 30_000);
     appearance.start();
     selfUpdate.start();
+    catalogUpdates.start();
     const url = `http://localhost:${config.listen.port}`;
     log.info(`daemon listening`, { url, stateDir: config.stateDir, docker: docker.description, installationId: installation.id });
 
@@ -277,6 +283,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
       await ctx.backups?.stop();
       appearance.stop();
       selfUpdate.stop();
+      catalogUpdates.stop();
       terminals.closeAll();
       await ctx.lanHttps?.closeAll().catch(() => undefined);
       if (lanServer) await new Promise<void>((r) => lanServer!.close(() => r()));
@@ -288,7 +295,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
       lock?.release();
       log.info('daemon stopped');
     };
-    return { app, ctx, service, runner, observer, sessions, tools, appearance, selfUpdate, url, close };
+    return { app, ctx, service, runner, observer, sessions, tools, appearance, selfUpdate, catalogUpdates, url, close };
   } catch (e) {
     lock?.release();
     throw e;

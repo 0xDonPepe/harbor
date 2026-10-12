@@ -148,7 +148,7 @@ export interface ReleaseInventory {
 
 export interface CatalogIndex {
   schemaVersion: 1;
-  packages: Record<string, { revision: string; dir: string }>;
+  packages: Record<string, { revision: string; dir: string; minHarbor?: string }>;
 }
 
 export interface LoadedPackage {

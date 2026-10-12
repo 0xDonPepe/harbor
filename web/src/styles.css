@@ -2067,6 +2067,18 @@ button.vital:hover {
   align-items: center;
 }
 
+/* ---- the official catalog line at the bottom of the Store (decision 158) ---- */
+.catalog-line {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  gap: 8px;
+  align-items: center;
+}
+.catalog-line .error {
+  overflow-wrap: anywhere;
+}
+
 /* ---- auto-update toggles ---- */
 .auto-upd {
   margin-top: 10px;

@@ -7,7 +7,7 @@ import type { LinkClaim, Manifest, SecretClaim } from '../contracts/types.js';
 import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
-import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
 import { lanAppHost, lanNames, lanUrl } from '../system/lan.js';
 import { caPem, ensureTlsCerts, lanHttpsHosts, readTlsState, reconcileLanHttps } from '../system/lan-https.js';
@@ -566,6 +566,13 @@ export class ApplicationService {
   }
   selfUpdateApply(actor: string): Promise<SelfUpdateStatusDto> {
     return this.ctx.selfUpdate.apply(actor);
+  }
+  // ---- the official app catalog (decision 158): no Docker, so a direct call, not a plan
+  catalogStatus(): CatalogStatusDto {
+    return this.ctx.catalogUpdates.status();
+  }
+  catalogRefresh(): Promise<CatalogStatusDto> {
+    return this.ctx.catalogUpdates.refresh();
   }
   // http://<hostname>.local for app addresses in LAN mode (the console swaps in the host it was opened with)
   private lanHost(): string | null {

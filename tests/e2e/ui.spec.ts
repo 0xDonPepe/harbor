@@ -79,6 +79,10 @@ test('home shows the system strip and an empty launcher; store lists real packag
   expect(res.status()).toBe(200);
   expect(res.headers()['content-type']).toContain('image/svg+xml');
   expect(res.headers()['content-security-policy']).toContain('sandbox');
+  // decision 158: one quiet catalog line under the Store; pnpm dev runs with catalog updates off, so no button
+  await expect(page.getByText(/^App catalog (from|bundled with this Harbor)/)).toBeVisible();
+  await expect(page.getByText('· Catalog updates are off', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Check for new apps' })).toHaveCount(0);
   // category chips filter the grid
   const all = await page.locator('.tile.store').count();
   await page.getByRole('tab', { name: 'Productivity' }).click();

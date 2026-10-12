@@ -164,7 +164,7 @@ export async function startHarness(opts: { catalogDir?: string; overrides?: Daem
     }
   }
   const config = normalizeConfig(
-    { stateDir, catalogDir, userDataDir: path.join(root, 'data'), docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port }, appPortRange: range, planTtlSeconds: 900, sessionTtlSeconds: 3600, logLevel: 'error', ...(opts.config ?? {}) },
+    { stateDir, catalogDir, userDataDir: path.join(root, 'data'), docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port }, appPortRange: range, planTtlSeconds: 900, sessionTtlSeconds: 3600, logLevel: 'error', catalog: { url: null }, ...(opts.config ?? {}) },
     root,
   );
   initializeState(stateDir, { clock: systemClock, ids: systemIds, config: {} });

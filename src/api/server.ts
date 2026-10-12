@@ -19,6 +19,7 @@ import type { SetupRequest, TerminalClientMessage } from '../contracts/api.js';
 import type { SetupService } from '../auth/setup.js';
 import type { BackupService } from '../backups/service.js';
 import type { BackupAppPolicyDto, BackupPolicyDto } from '../contracts/api.js';
+import { CATALOG_STATUS_SCHEMA } from '../contracts/api.js';
 import { lanHostAllowed } from '../system/lan.js';
 import { hostname as osHostname } from 'node:os';
 import { hostFacts } from '../system/metrics.js';
@@ -223,6 +224,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   // --- reads
   app.get('/v1/system', { preHandler: requireAuth, schema: { description: 'Daemon/Docker availability.' } }, async () => service.system());
   app.get('/v1/catalog', { preHandler: requireAuth, schema: { description: 'Bundled packages.' } }, async () => ({ items: service.catalog() }));
+  app.get('/v1/catalog/status', { preHandler: requireAuth, schema: { description: 'The official app catalog in use (bundled with this release or downloaded since) and the last check for a newer signed one.', response: { 200: CATALOG_STATUS_SCHEMA } } }, async () => service.catalogStatus());
+  app.post('/v1/catalog/refresh', { preHandler: requireAuth, schema: { description: 'Check the catalog repository now for a newer signed catalog and switch to it when it verifies. Never touches running apps; a failure leaves the catalog unchanged and is reported in `error`.', response: { 200: CATALOG_STATUS_SCHEMA } } }, async () => service.catalogRefresh());
   app.get(
     '/v1/catalog/:id/asset/:name',
     // Unauthenticated on purpose: <img src> cannot carry the bearer token, and the assets are static

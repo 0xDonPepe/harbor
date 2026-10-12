@@ -8,6 +8,7 @@ import { validateComposeSource } from './compose-source.js';
 import { parseReleaseInventory, sha256Hex, verifyInventory } from './inventory.js';
 import { validateManifestReferences, validateManifestShape } from './manifest.js';
 import { parseRestrictedYaml } from './yaml.js';
+import { compareVersions } from './versions.js';
 
 const MAX_README_BYTES = 256 * 1024;
 
@@ -78,11 +79,26 @@ export function loadPackageDir(dir: string, id: string, label = id): LoadedPacka
   return { id, revision: manifest.release.revision, dir, manifest, compose, release, readme: raw.readme.toString('utf8'), raw, hashes, assets };
 }
 
+// What the caller knows about the running Harbor. Pure: the daemon passes its own version in; without one
+// (scripts, tests) `minHarbor` is not enforced.
+export interface CatalogReadOptions {
+  harborVersion?: string;
+}
+
+// Decision 158: a catalog entry may name the oldest Harbor that runs it. Checked from the index alone,
+// before the package files are parsed, because a newer package may use manifest fields this Harbor rejects.
+export function requiredHarbor(entry: CatalogIndex['packages'][string], opts: CatalogReadOptions): string | null {
+  if (!entry.minHarbor || opts.harborVersion === undefined) return null;
+  return compareVersions(opts.harborVersion, entry.minHarbor) < 0 ? entry.minHarbor : null;
+}
+
 // Load one bundled package through the catalog index. Only the index's entry is trusted.
-export function loadPackage(catalogDir: string, id: string, expectedRevision?: string): LoadedPackage {
+export function loadPackage(catalogDir: string, id: string, expectedRevision?: string, opts: CatalogReadOptions = {}): LoadedPackage {
   const index = readCatalogIndex(catalogDir);
   const entry = index.packages[id];
   if (!entry) throw new HarborError('NOT_FOUND', `unknown package ${id}`);
+  const needs = requiredHarbor(entry, opts);
+  if (needs) throw new HarborError('INVALID_STATE', `needs Harbor ${needs} or newer`, { nextAction: `Update Harbor (Settings → Overview) to ${needs} or newer, then install ${id}.` });
   const dir = containedPath(catalogDir, entry.dir);
   const pkg = loadPackageDir(dir, id);
   if (pkg.revision !== entry.revision) throw new HarborError('INVALID_PACKAGE', `${id}: manifest revision ${pkg.revision} does not match catalog index ${entry.revision}`);
@@ -122,12 +138,12 @@ export function linksOf(m: Manifest): CatalogItem['links'] {
 }
 
 // Catalog listing never throws for one bad package: it reports it as unavailable with the reason.
-export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled'): CatalogItem[] {
+export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled', opts: CatalogReadOptions = {}): CatalogItem[] {
   const index = readCatalogIndex(catalogDir);
   const items: CatalogItem[] = [];
   for (const id of Object.keys(index.packages).sort()) {
     try {
-      const pkg = loadPackage(catalogDir, id);
+      const pkg = loadPackage(catalogDir, id, undefined, opts);
       items.push({
         id,
         name: pkg.manifest.metadata.name,
@@ -148,18 +164,27 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         links: linksOf(pkg.manifest),
       });
     } catch (e) {
+      // A package that needs a newer Harbor still shows its name and look when this Harbor can read them.
+      let peek: LoadedPackage | null = null;
+      if (requiredHarbor(index.packages[id]!, opts)) {
+        try {
+          peek = loadPackageDir(containedPath(catalogDir, index.packages[id]!.dir), id);
+        } catch {
+          peek = null;
+        }
+      }
       items.push({
         id,
-        name: id,
-        description: '',
+        name: peek?.manifest.metadata.name ?? id,
+        description: peek?.manifest.metadata.description ?? '',
         revision: index.packages[id]!.revision,
-        version: null,
+        version: peek?.manifest.release.version ?? null,
         origin,
         availability: 'unavailable',
         reason: e instanceof HarborError ? e.message : 'invalid package',
         qualification: 'invalid',
         requiresHttps: false,
-        presentation: { tagline: null, category: 'other', icon: null, gallery: [], developer: null, website: null, releaseNotes: null, sizeHint: null, hasWidget: false },
+        presentation: peek ? { ...presentationOf(peek), icon: null, gallery: [] } : { tagline: null, category: 'other', icon: null, gallery: [], developer: null, website: null, releaseNotes: null, sizeHint: null, hasWidget: false },
         defaultCredentials: null,
         setup: false,
         storage: 0,

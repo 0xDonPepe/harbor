@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { CatalogIndex, LoadedPackage, Manifest, ReleaseInventory } from '../contracts/types.js';
 import { HarborError } from '../errors.js';
 import { rfc3339, type Clock } from '../util.js';
-import { listCatalog, loadPackage, loadPackageDir, readCatalogIndex, type CatalogItem, type PackageOrigin } from './catalog.js';
+import { listCatalog, loadPackage, loadPackageDir, readCatalogIndex, type CatalogItem, type CatalogReadOptions, type PackageOrigin } from './catalog.js';
 import { validateComposeSource } from './compose-source.js';
 import { sha256Hex } from './inventory.js';
 import { validateManifestReferences, validateManifestShape } from './manifest.js';
@@ -12,10 +12,16 @@ import { parseRestrictedYaml } from './yaml.js';
 import { readZip } from './zip.js';
 import { readPackageTree, type GitTree } from './git.js';
 
-// Every package Harbor can install: the bundled, hash-verified catalog plus packages the operator uploaded
+// Every package Harbor can install: the official, hash-verified catalog plus packages the operator uploaded
 // ("your own apps"). Uploaded packages go through the same validation as bundled ones; Harbor pins their
 // images by digest at upload and writes their release.json itself, so the engine never sees a second kind
-// of package. A newer revision of an id (bundled after a Harbor upgrade, or uploaded) is an update.
+// of package. A newer revision of an id (official after a catalog update or a Harbor upgrade, or uploaded)
+// is an update.
+//
+// The official catalog directory is read through a provider on every call (decision 158): a downloaded
+// catalog that replaces the bundled seed takes effect on the next read, no restart. Origin stays 'bundled'.
+// Id collisions: an id the operator uploaded before the official catalog added it stays the operator's
+// (local wins in load/originOf, the official duplicate is hidden); a NEW upload of an official id is refused.
 
 export interface ImportResult {
   item: CatalogItem;
@@ -48,12 +54,22 @@ export function compareRevisions(a: string, b: string): number {
 }
 
 export class PackageStore {
+  private readonly bundled: () => string;
+  private readonly readOpts: CatalogReadOptions;
   constructor(
-    readonly bundledDir: string,
+    bundledDir: string | (() => string),
     readonly localDir: string,
     private readonly registry: ImageResolver,
     private readonly clock: Clock,
-  ) {}
+    opts: { harborVersion?: string } = {},
+  ) {
+    this.bundled = typeof bundledDir === 'string' ? () => bundledDir : bundledDir;
+    this.readOpts = opts.harborVersion === undefined ? {} : { harborVersion: opts.harborVersion };
+  }
+  // the official catalog directory in effect right now (seed or downloaded)
+  get bundledDir(): string {
+    return this.bundled();
+  }
 
   private localIndex(): CatalogIndex {
     if (!existsSync(path.join(this.localDir, 'index.json'))) return { schemaVersion: 1, packages: {} };
@@ -67,13 +83,14 @@ export class PackageStore {
   }
 
   list(): CatalogItem[] {
-    const bundled = listCatalog(this.bundledDir, 'bundled');
-    const local = existsSync(path.join(this.localDir, 'index.json')) ? listCatalog(this.localDir, 'local') : [];
+    const local = existsSync(path.join(this.localDir, 'index.json')) ? listCatalog(this.localDir, 'local', this.readOpts) : [];
+    const mine = new Set(local.map((i) => i.id));
+    const bundled = listCatalog(this.bundledDir, 'bundled', this.readOpts).filter((i) => !mine.has(i.id));
     return [...bundled, ...local].sort((a, b) => a.name.localeCompare(b.name));
   }
   originOf(id: string): PackageOrigin | null {
-    if (readCatalogIndex(this.bundledDir).packages[id]) return 'bundled';
     if (this.localIndex().packages[id]) return 'local';
+    if (readCatalogIndex(this.bundledDir).packages[id]) return 'bundled';
     return null;
   }
   // Current revision of every known package id (for "update available" checks).
@@ -85,7 +102,7 @@ export class PackageStore {
   load(id: string, expectedRevision?: string): LoadedPackageWithOrigin {
     const origin = this.originOf(id);
     if (!origin) throw new HarborError('NOT_FOUND', `unknown package ${id}`);
-    const pkg = loadPackage(origin === 'bundled' ? this.bundledDir : this.localDir, id, expectedRevision);
+    const pkg = loadPackage(origin === 'bundled' ? this.bundledDir : this.localDir, id, expectedRevision, this.readOpts);
     return { ...pkg, origin };
   }
 
@@ -128,7 +145,8 @@ export class PackageStore {
     if (manifestRaw.length > 256 * 1024 || composeRaw0.length > 256 * 1024) throw new HarborError('INVALID_PACKAGE', 'manifest.yaml and compose.yaml must each be under 256 KiB');
     const manifest = validateManifestShape(parseRestrictedYaml(manifestRaw, 'manifest.yaml'), 'manifest.yaml');
     const id = manifest.metadata.id;
-    if (readCatalogIndex(this.bundledDir).packages[id]) throw new HarborError('INVALID_PACKAGE', `the id "${id}" belongs to a built-in app`, { nextAction: 'Choose another metadata.id for your package.' });
+    // An id the operator already owns keeps taking uploads even if the official catalog added it since.
+    if (readCatalogIndex(this.bundledDir).packages[id] && !this.localIndex().packages[id]) throw new HarborError('INVALID_PACKAGE', `the id "${id}" belongs to a built-in app`, { nextAction: 'Choose another metadata.id for your package.' });
     if (ctx.expectedId && id !== ctx.expectedId) throw new HarborError('INVALID_PACKAGE', `the repository now declares metadata.id ${id}, but this source was added for ${ctx.expectedId}`, { nextAction: 'A source is bound to one app id. Add the repository again as a new source if the id really changed.' });
 
     // Pin images: any service image that is not already repository@sha256 is resolved at the registry.

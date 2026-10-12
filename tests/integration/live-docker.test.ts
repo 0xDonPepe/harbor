@@ -38,7 +38,7 @@ describe.skipIf(!enabled)('live Docker (explicit opt-in engine)', () => {
     cpSync(REPO_CATALOG, catalogDir, { recursive: true });
     const port = await freePort();
     const base = 18700;
-    config = normalizeConfig({ stateDir, catalogDir, docker: { mode: 'socket', socketPath: SOCKET!, cliPluginDirs: PLUGIN_DIRS }, listen: { host: '127.0.0.1', port }, appPortRange: { from: base, to: base + 20 }, logLevel: 'warn', imagePullTimeoutMs: 10 * 60_000 }, root);
+    config = normalizeConfig({ stateDir, catalogDir, docker: { mode: 'socket', socketPath: SOCKET!, cliPluginDirs: PLUGIN_DIRS }, listen: { host: '127.0.0.1', port }, appPortRange: { from: base, to: base + 20 }, logLevel: 'warn', imagePullTimeoutMs: 10 * 60_000, catalog: { url: null } }, root);
     installationId = initializeState(stateDir, { clock: systemClock, ids: systemIds, config: {} }).installationId;
     await enrollAdministrator(config, ADMIN.username, ADMIN.password, { reset: false });
     daemon = await startDaemon(config, { observerIntervalMs: 2000 });

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto } from '../contracts/api.js';
 import { defaultInstallLocation } from '../storage/install-location.js';
 import { validatePackageFolder } from '../packages/validate-folder.js';
-import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
 import { loadConfig } from '../config.js';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
@@ -266,13 +266,30 @@ program
     out({ loggedOut: true }, () => 'Logged out.');
   });
 
-program
-  .command('catalog')
-  .description('list bundled packages')
+// `harbor catalog` lists; `status` and `refresh` manage the official catalog's updates (decision 158).
+const catalogCmd = program.command('catalog').description('list the app catalog (built-in and your own apps); status / refresh check for a newer official catalog');
+catalogCmd.action(async () => {
+  const { items } = await client().get<{ items: CatalogItemDto[] }>('/v1/catalog');
+  const folders = (i: CatalogItemDto) => i.claims.filter((c) => c.external).map((c) => `${c.id}${c.external?.required ? ' (required)' : ''}${c.external?.readOnly ? ' (ro)' : ''}`).join(', ') || '-';
+  out(items, () => table([['ID', 'NAME', 'REV', 'VERSION', 'ORIGIN', 'AVAILABILITY', 'QUALIFICATION', 'OWN-FOLDER CLAIMS', 'DESCRIPTION'], ...items.map((i) => [i.id, i.name, i.revision, i.version ?? '-', i.origin === 'local' ? 'yours' : 'built-in', i.availability + (i.reason ? ` (${i.reason})` : ''), i.qualification, folders(i), i.description])]));
+});
+catalogCmd
+  .command('status')
+  .description('which official catalog is in use and when Harbor last checked for a newer one')
   .action(async () => {
-    const { items } = await client().get<{ items: CatalogItemDto[] }>('/v1/catalog');
-    const folders = (i: CatalogItemDto) => i.claims.filter((c) => c.external).map((c) => `${c.id}${c.external?.required ? ' (required)' : ''}${c.external?.readOnly ? ' (ro)' : ''}`).join(', ') || '-';
-    out(items, () => table([['ID', 'NAME', 'REV', 'VERSION', 'ORIGIN', 'AVAILABILITY', 'QUALIFICATION', 'OWN-FOLDER CLAIMS', 'DESCRIPTION'], ...items.map((i) => [i.id, i.name, i.revision, i.version ?? '-', i.origin === 'local' ? 'yours' : 'built-in', i.availability + (i.reason ? ` (${i.reason})` : ''), i.qualification, folders(i), i.description])]));
+    const s = await client().get<CatalogStatusDto>('/v1/catalog/status');
+    out(s, () => catalogStatusText(s));
+  });
+catalogCmd
+  .command('refresh')
+  .description('check now for a newer signed catalog and switch to it (running apps are not touched; updates show up as usual)')
+  .action(async () => {
+    const api = client();
+    const before = await api.get<CatalogStatusDto>('/v1/catalog/status');
+    const s = await api.post<CatalogStatusDto>('/v1/catalog/refresh', {});
+    const outcome = !s.source ? 'Catalog updates are off.' : s.error ? `Could not update the catalog: ${s.error}` : s.serial > before.serial ? 'New apps and updates loaded.' : 'Up to date.';
+    out(s, () => `${outcome}\n${catalogStatusText(s)}`);
+    if (s.source && s.error) process.exitCode = 1;
   });
 
 program
@@ -1667,6 +1684,17 @@ recoveryCmd
       lock.release();
     }
   });
+
+function catalogStatusText(s: CatalogStatusDto): string {
+  const built = s.createdAt ? ` from ${s.createdAt.slice(0, 10)}` : '';
+  const lines = [`App catalog${built}: ${s.packages} apps, ${s.origin === 'downloaded' ? 'downloaded' : 'bundled with this Harbor'}${s.commit ? ` (commit ${s.commit.slice(0, 12)}, serial ${s.serial})` : ''}`];
+  if (!s.source) lines.push('Catalog updates are off (catalog.url is null in the daemon config).');
+  else {
+    lines.push(`Source: ${s.source}`);
+    lines.push(s.checkedAt ? `Last check: ${s.checkedAt}${s.error ? ` — failed: ${s.error}` : ''}` : 'Not checked since the daemon started (harbor catalog refresh)');
+  }
+  return lines.join('\n');
+}
 
 function selfUpdateText(s: SelfUpdateStatusDto): string {
   const lines = [`Installed: Harbor ${s.current}`];

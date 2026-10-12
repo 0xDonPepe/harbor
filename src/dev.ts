@@ -40,6 +40,8 @@ const config = normalizeConfig(
     docker: socket ? { mode: 'socket', socketPath: socket, cliPluginDirs: [path.join(homedir(), '.docker', 'cli-plugins')].filter((d) => existsSync(d)) } : { mode: 'fake' },
     appPortRange: { from: Number(process.env['HARBOR_DEV_PORT_FROM'] ?? 18080), to: Number(process.env['HARBOR_DEV_PORT_TO'] ?? 18999) },
     logLevel: (process.env['HARBOR_DEV_LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error' | undefined) ?? 'info',
+    // never reach the network from a dev box: the Store shows "Catalog updates are off"
+    catalog: { url: null },
   },
   root,
 );

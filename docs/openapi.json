@@ -330,6 +330,152 @@
         }
       }
     },
+    "/v1/catalog/status": {
+      "get": {
+        "description": "The official app catalog in use (bundled with this release or downloaded since) and the last check for a newer signed one.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "serial",
+                    "commit",
+                    "createdAt",
+                    "origin",
+                    "packages",
+                    "checkedAt",
+                    "error"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "serial": {
+                      "type": "integer"
+                    },
+                    "commit": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "bundled",
+                        "downloaded"
+                      ]
+                    },
+                    "packages": {
+                      "type": "integer"
+                    },
+                    "checkedAt": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/catalog/refresh": {
+      "post": {
+        "description": "Check the catalog repository now for a newer signed catalog and switch to it when it verifies. Never touches running apps; a failure leaves the catalog unchanged and is reported in `error`.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "serial",
+                    "commit",
+                    "createdAt",
+                    "origin",
+                    "packages",
+                    "checkedAt",
+                    "error"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "serial": {
+                      "type": "integer"
+                    },
+                    "commit": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "bundled",
+                        "downloaded"
+                      ]
+                    },
+                    "packages": {
+                      "type": "integer"
+                    },
+                    "checkedAt": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "error": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/catalog/{id}/asset/{name}": {
       "get": {
         "description": "Package presentation asset (icon/gallery) from the bundled package. Open (no session): static catalog content only.",

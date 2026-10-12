@@ -1,10 +1,23 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readDriveId, verifyBindMarker, writeBindMarker } from '../../src/storage/bind-marker.js';
 
 describe('bind marker', () => {
+  // harbor.service runs with UMask=0077, which turned the intended 0644 into 0600: an app whose start script
+  // chowns its data folder (metube, linuxserver PUID images) then locked Harbor out of its own marker, and the
+  // drive guard stopped the app ("carries no Harbor identity"). Decision 122: ids only, readable by anyone.
+  it('stays readable by everyone under the service umask, so an app that chowns its folder cannot hide it', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'harbor-bind-'));
+    const old = process.umask(0o077);
+    try {
+      writeBindMarker(dir, 'inst-1', 'library');
+    } finally {
+      process.umask(old);
+    }
+    expect(statSync(path.join(dir, '.harbor-bind.json')).mode & 0o777).toBe(0o644);
+  });
   it('round-trips for the owning app; refuses a different drive at the same path', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'harbor-bind-'));
     const driveId = writeBindMarker(dir, 'inst-1', 'library');

@@ -193,6 +193,28 @@ describe('compose source subset', () => {
     expectCode(() => hc('      test: [CMD, "true"]\n      timeout: 10m\n'), 'INVALID_PACKAGE', /timeout/);
     expect(hc('      test: [CMD, "true"]\n      interval: 5s\n      timeout: 3s\n      retries: 3\n      start_period: 10s\n').services['web']?.healthcheck?.retries).toBe(3);
   });
+  // decision 162: `disable: true` switches off a check the image carries (Compose's own key), nothing else
+  it('accepts healthcheck disable alone, and only as true', () => {
+    const hc = (body: string) => composeOf(MINIMAL_COMPOSE + '    healthcheck:\n' + body);
+    expect(hc('      disable: true\n').services['web']?.healthcheck).toEqual({ disable: true });
+    expectCode(() => hc('      disable: false\n'), 'INVALID_PACKAGE', /disable/);
+    expectCode(() => hc('      disable: true\n      test: [CMD, "true"]\n'), 'INVALID_PACKAGE', /disable/);
+    expectCode(() => hc('      disable: true\n      interval: 5s\n'), 'INVALID_PACKAGE', /disable/);
+    expectCode(() => hc('      interval: 5s\n'), 'INVALID_PACKAGE', /test/);
+  });
+  it('refuses waiting for a service to be healthy when its check is disabled', () => {
+    const compose = `services:
+  web:
+    image: example/demo@${DIGEST_A}
+    depends_on:
+      db: {condition: service_healthy}
+  db:
+    image: example/db@${DIGEST_B}
+    healthcheck: {disable: true}
+`;
+    const manifest = MINIMAL_MANIFEST.replace('    web: application\n', '    web: application\n    db: infrastructure\n');
+    expectCode(() => full(manifest, compose), 'INVALID_PACKAGE', /db.*disabled/);
+  });
 });
 
 describe('afterStart hooks (decision 116)', () => {

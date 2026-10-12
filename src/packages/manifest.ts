@@ -63,6 +63,7 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
     for (const dep of Object.keys(def.depends_on ?? {})) {
       if (dep === svc) problems.push(`service ${svc} depends on itself`);
       else if (!(dep in compose.services)) problems.push(`service ${svc} depends on unknown service ${dep}`);
+      else if (def.depends_on?.[dep]?.condition === 'service_healthy' && compose.services[dep]?.healthcheck?.disable) problems.push(`service ${svc} waits for ${dep} to be healthy, but ${dep}'s healthcheck is disabled`);
     }
   }
   for (const v of composeVolumes) if (!mounted.has(v)) problems.push(`compose volume ${v} is declared but never mounted`);

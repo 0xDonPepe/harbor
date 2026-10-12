@@ -77,8 +77,11 @@ export function validateComposeSource(value: unknown, label = 'compose.yaml'): C
     }
     if (def.image !== undefined && INTERPOLATION_RE.test(def.image)) problems.push(`service ${svc} image contains an interpolation expression`);
     const hc = def.healthcheck;
-    if (hc) {
-      for (const part of hc.test) if (INTERPOLATION_RE.test(part)) problems.push(`service ${svc} healthcheck contains an interpolation expression`);
+    if (hc?.disable) {
+      if (Object.keys(hc).length > 1) problems.push(`service ${svc} healthcheck disable: true stands alone (no test or timings)`);
+    } else if (hc) {
+      if (!hc.test) problems.push(`service ${svc} healthcheck needs a test (or disable: true)`);
+      for (const part of hc.test ?? []) if (INTERPOLATION_RE.test(part)) problems.push(`service ${svc} healthcheck contains an interpolation expression`);
       const check = (name: string, raw: string | undefined, bounds: { min: number; max: number }) => {
         if (raw === undefined) return;
         const ms = parseDuration(raw);

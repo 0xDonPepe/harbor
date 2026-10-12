@@ -220,6 +220,27 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3t. Fixes from porting the Umbrel store (2026-10-12, Harbor 0.28.4, decision 162)
+
+**Local gate + live droplets** (not yet a published release; harbor-apps branch `umbrel-import` is local):
+
+- **Gate:** `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 327 passed (new: `tests/unit/cli-exit.test.ts` — a child
+  writes 300,000 bytes into a pipe and exits through `exitAfterFlush`, all arrive; plain `process.exit` delivered
+  65,536 on the same host; `bind-marker.test.ts` — under `umask 077` the marker is `0644`; `manifest.test.ts` —
+  `healthcheck: {disable: true}` accepted alone, refused with `test`, timings or `false`, a `test`-less check
+  refused, `service_healthy` on a disabled service refused; `links-secrets.test.ts` — render keeps
+  `{disable: true}`); `pnpm test:integration` 215 passed + 3 live-Docker skipped; `pnpm build && pnpm test:e2e`
+  30 passed; `pnpm catalog:verify tests/fixtures/catalog --quiet` 9 ok; `catalog:hash --check` ok; `pnpm openapi
+  -- --check` current.
+- **Live (15 disposable DigitalOcean droplets in parallel, Ubuntu 24.04, archive 0.28.4 with the drafts as its
+  seed, `qualify-catalog.mjs` in SOCKS mode):** 121 of 124 Umbrel-converted apps qualified `passed` (install,
+  readiness, Chromium page load, removal; external-storage variant where a claim exists); blocked: bitboard and
+  trilium-notes (`EACCES mkdir /data`, need an initial volume owner), kokoro (UI at `/web/`, needs a UI path).
+  Before the fixes: `harbor --json catalog` over SSH returned exactly 65,536 bytes (qualify crashed on the drift
+  check); metube with a bound folder was stopped by the drive guard 10 s after start ("carries no Harbor identity":
+  the image chowns `/downloads` incl. the `0600` marker); after the fix both metube variants passed. Evidence:
+  `docs/evidence/catalog-2026-10-12T18-2*` (not committed: iteration runs).
+
 ## 3s. Apps declare their minimum Harbor (2026-10-12, Harbor 0.28.2, decision 161)
 
 **Local only** (developer host, fake adapter). No published app declares `release.minHarbor` yet, and the

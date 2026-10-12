@@ -185,6 +185,12 @@ values), `depends_on` (with `condition`), `healthcheck`, `volumes` of `type: vol
 purpose: `ports` (Harbor publishes the endpoints on 127.0.0.1 itself), `entrypoint`, `privileged`, `cap_add`, `devices`, host networking, bind mounts
 (operators choose folders through storage claims instead).
 
+`healthcheck: {disable: true}` (Harbor 0.28.4, decision 162; set `release.minHarbor: "0.28.4"`) switches off a check the
+image carries. Use it when the image's own check cannot pass in your setup or takes longer than Harbor waits: Harbor
+starts apps with `compose up --wait`, so an unhealthy container fails the install. `disable` stands alone (no `test`
+or timings), and no service may wait for a disabled one with `condition: service_healthy`. Harbor's own HTTP health
+check (`health:` in the manifest) still decides whether the app is ready.
+
 `command` replaces the image's CMD (the image's ENTRYPOINT still runs first). Use the array form —
 `command: [bench, worker, --queue, short]` — or a shell when you need one:
 `command: [sh, -c, 'exec my-server --port 8080']`. Write it exactly as the container should receive it:

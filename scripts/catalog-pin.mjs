@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Editorial helper: pin a package's images to immutable digests and write release.json.
-//   node scripts/catalog-pin.mjs [--catalog <dir>] <packageId> [--check]
+//   node scripts/catalog-pin.mjs [--catalog <dir>] <packageId> [--check | --keep-digest]
+// --keep-digest records an already pinned `repo@sha256:... # tag: <tag>` as it is instead of re-resolving the tag
+// (umbrel-import drafts keep the exact image the source package was tested with).
 // The catalog dir resolves as in scripts/catalog-dir.mjs (HARBOR_CATALOG_DIR, then ../harbor-apps/apps).
 // Authoring form: compose.yaml may reference `image: repo:tag` (or an already pinned `repo@sha256:...`
 // together with `# tag: <tag>` on the same line). The script resolves each tag through the registry
@@ -60,7 +62,8 @@ for (const [svc, img] of Object.entries(images)) {
   const tag = pinned ? (img.tagComment ?? release.images?.[svc]?.tag) : img.ref.slice(img.ref.lastIndexOf(':') + 1);
   const repo = pinned ? img.ref.slice(0, img.ref.indexOf('@')) : img.ref.slice(0, img.ref.lastIndexOf(':'));
   if (!tag) { console.error(`${id}/${svc}: pinned image without a known tag; add "# tag: <tag>" after the image`); process.exit(1); }
-  const lookup = `${repo}:${tag}`;
+  const keep = flag === '--keep-digest' && pinned;
+  const lookup = keep ? img.ref : `${repo}:${tag}`;
   const r = await resolve(lookup);
   const reference = `${r.repository}@${r.indexDigest}`;
   const existing = release.images?.[svc];

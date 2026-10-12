@@ -80,7 +80,7 @@ function writeState(s) {
 }
 
 async function findDroplet() {
-  const { droplets } = await api('GET', `/droplets?tag_name=${VM_TAG}&per_page=10`);
+  const { droplets } = await api('GET', `/droplets?tag_name=${VM_TAG}&per_page=200`);
   const mine = droplets.filter((d) => d.name === VM_NAME);
   if (mine.length > 1) fail(`More than one droplet named ${VM_NAME} with tag ${VM_TAG}; refusing to guess.`);
   return mine[0] ?? null;

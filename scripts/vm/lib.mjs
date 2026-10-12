@@ -73,6 +73,15 @@ class SshTarget {
     const r = this.ssh('command -v cloud-init >/dev/null && cloud-init status --wait --long 2>&1 | tail -3 || echo no-cloud-init', { timeoutMs });
     return r.stdout.trim();
   }
+  // Open `ssh -N -D <localPort>`: a SOCKS proxy whose `localhost` is the box's. Parallel runs against several
+  // boxes each get their own proxy port, while URLs (and so Host headers) stay `localhost:<box port>`.
+  socks(localPort) {
+    const args = [...this.sshBase.slice(1, -1), '-N', '-D', `127.0.0.1:${localPort}`, this.sshBase[this.sshBase.length - 1]];
+    const child = spawn(this.sshBase[0], args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', (d) => (err += d.toString()));
+    return { pid: child.pid, close: () => child.kill('SIGTERM'), error: () => err };
+  }
   // Open `ssh -N -L p:127.0.0.1:p` tunnels for the given ports; returns a closer.
   tunnel(ports) {
     const args = [...this.sshBase.slice(1, -1), '-N', ...ports.flatMap((p) => ['-L', `${p}:127.0.0.1:${p}`]), this.sshBase[this.sshBase.length - 1]];
@@ -98,17 +107,20 @@ class SshTarget {
   }
 }
 
+const knownHosts = () => path.join(ROOT, process.env.HARBOR_VM_KNOWN_HOSTS ?? '.vm-known_hosts');
+
 class DigitalOceanTarget extends SshTarget {
   constructor() {
-    const state = JSON.parse(readFileSync(path.join(ROOT, '.vm.local.json'), 'utf8'));
+    // HARBOR_VM_STATE / HARBOR_VM_KNOWN_HOSTS select another droplet made by do-vm.mjs (parallel qualification)
+    const state = JSON.parse(readFileSync(path.join(ROOT, process.env.HARBOR_VM_STATE ?? '.vm.local.json'), 'utf8'));
     const key = process.env.HARBOR_VM_SSH_KEY ?? path.join(homedir(), '.ssh', 'harbor-test-vm_ed25519');
-    super(`digitalocean droplet ${state.dropletId}`, ['ssh', '-i', key, '-o', `UserKnownHostsFile=${path.join(ROOT, '.vm-known_hosts')}`, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', '-o', 'ConnectTimeout=15', `root@${state.ip}`], state.ip);
+    super(`digitalocean droplet ${state.dropletId}`, ['ssh', '-i', key, '-o', `UserKnownHostsFile=${knownHosts()}`, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=15', '-o', 'ConnectTimeout=15', `root@${state.ip}`], state.ip);
     addRedaction(state.ip);
     this.state = state;
   }
   scp(local, remote) {
     const key = process.env.HARBOR_VM_SSH_KEY ?? path.join(homedir(), '.ssh', 'harbor-test-vm_ed25519');
-    const r = spawnSync('scp', ['-q', '-i', key, '-o', `UserKnownHostsFile=${path.join(ROOT, '.vm-known_hosts')}`, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'BatchMode=yes', local, `root@${this.state.ip}:${remote}`], { encoding: 'utf8' });
+    const r = spawnSync('scp', ['-q', '-i', key, '-o', `UserKnownHostsFile=${knownHosts()}`, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'BatchMode=yes', local, `root@${this.state.ip}:${remote}`], { encoding: 'utf8' });
     if (r.status !== 0) throw new Error(`scp failed: ${r.stderr}`);
   }
   controller(args) {

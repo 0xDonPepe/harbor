@@ -9,7 +9,7 @@ import { linkAlias, linkNetworkLabels, linkNetworkName, linkValue } from '../../
 import { checkSubmittedSecrets, operatorValueProblem, plannedSecrets } from '../../src/planner/secrets.js';
 import { HarborError } from '../../src/errors.js';
 import { LABELS } from '../../src/naming.js';
-import { DIGEST_A, DIGEST_B, MINIMAL_MANIFEST } from './helpers.js';
+import { DIGEST_A, DIGEST_B, MINIMAL_COMPOSE, MINIMAL_MANIFEST } from './helpers.js';
 
 const y = (s: string) => parseRestrictedYaml(Buffer.from(s), 'x');
 const COMPOSE = `services:
@@ -183,5 +183,16 @@ describe('planner: operator secrets', () => {
     expect(doc.services.web.environment.SMTP_PASSWORD).toBeUndefined();
     // the prospective model (plan time) only has placeholders
     expect(parseYaml(renderCompose({ manifest, compose, identity, endpoints, secretValues: null }).yaml).services.web.environment.API_TOKEN).toBe('<<secret:api-token>>');
+  });
+});
+
+describe('planner: healthcheck disable (decision 162)', () => {
+  it('renders `disable: true` as is, so Compose switches off the image check', () => {
+    const manifest = validateManifestShape(y(MINIMAL_MANIFEST));
+    const compose = validateComposeSource(y(`${MINIMAL_COMPOSE}    healthcheck: {disable: true}\n`));
+    validateManifestReferences(manifest, compose);
+    const id = identityFor('0a0a0a0a-0000-4000-8000-000000000001', '33333333-3333-4333-8333-333333333333');
+    const doc = parseYaml(renderCompose({ manifest, compose, identity: id, endpoints: [{ id: 'web', service: 'web', containerPort: 80, hostPort: 18080 }], secretValues: null }).yaml);
+    expect(doc.services.web.healthcheck).toEqual({ disable: true });
   });
 });

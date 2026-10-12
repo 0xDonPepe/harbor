@@ -59,11 +59,13 @@ export const COMPOSE_SOURCE_SCHEMA = {
               properties: { condition: { enum: ['service_started', 'service_healthy'] } },
             },
           },
+          // `test` is required unless `disable: true` stands alone (checked in code; decision 162: switches off a check
+          // the image carries, the way Umbrel-style packages that never acted on Docker health expect)
           healthcheck: {
             type: 'object',
             additionalProperties: false,
-            required: ['test'],
             properties: {
+              disable: { const: true },
               test: {
                 type: 'array',
                 minItems: 2,

@@ -406,6 +406,16 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 62 — porting the Umbrel store (2026-10-12, 0.28.4) ⏳ release
+- [x] `docs/design/UMBREL_COMPAT.md`: all 393 Umbrel apps classified; feature ladder to 100%; §7 the first port
+- [x] `scripts/umbrel-import.mjs`: deterministic 1:1 converter (refuses anything without an exact equivalent); `catalog-pin --keep-digest`; registry `HARBOR_DOCKERHUB_MIRROR` / `HARBOR_DOCKERHUB_LOGIN`
+- [x] Parallel qualification: `qualify-catalog.mjs` SOCKS mode (`HARBOR_QUALIFY_SOCKS_PORT`), `lib.mjs` honours `HARBOR_VM_STATE` / `HARBOR_VM_KNOWN_HOSTS`, `do-vm.mjs` finds its droplet among more than 10
+- [x] Decision 162: `healthcheck: {disable: true}` (Umbrel never acts on Docker health; Harbor waits for it)
+- [x] Fixes: piped `--json` output cut at 64 KiB (`src/cli/exit.ts`); bind marker `0600` under the service umask (`src/storage/bind-marker.ts`)
+- [x] Live: 121 of 124 drafts qualified on 15 droplets (VERIFICATION 3t)
+- [ ] Release 0.28.4, then publish the harbor-apps drafts (their `minHarbor: "0.28.4"` needs the release)
+- [ ] Features for the last 3: initial volume owner, `ui.path`
+
 ## Phase 61 — apps declare their minimum Harbor (2026-10-12, 0.28.2) ⏳ live
 - [x] Decision 161: manifest `release.minHarbor` (optional, canonical x.y.z, ≥ 0.28.2 because the published 0.28.1 does not know it; absent = 0.28.0); `pnpm catalog:bundle` copies it into the index entry; an index value must equal the manifest's; `pnpm catalog:plan <dir>` groups apps by it (JSON) for the harbor-apps CI, which proves each declaration with that real release's own `catalog:verify` plus the latest release
 - [x] Daemon: the manifest value gates catalog listing/load (peeked before the schema check, `src/packages/min-harbor.ts`) next to the index gate; uploads and git sources refuse "needs Harbor x.y.z or newer" (409 `INVALID_STATE`)

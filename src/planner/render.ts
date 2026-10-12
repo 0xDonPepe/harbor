@@ -163,9 +163,8 @@ export function renderCompose(input: RenderInput): RenderedCompose {
     if (Object.keys(env).length) def['environment'] = env;
     if (ports.length) def['ports'] = ports;
     if (src.depends_on) def['depends_on'] = src.depends_on;
-    if (src.healthcheck) {
-      def['healthcheck'] = { ...src.healthcheck, test: src.healthcheck.test.map(escapeCompose) };
-    }
+    if (src.healthcheck?.disable) def['healthcheck'] = { disable: true };
+    else if (src.healthcheck?.test) def['healthcheck'] = { ...src.healthcheck, test: src.healthcheck.test.map(escapeCompose) };
     if (src.volumes?.length) {
       def['volumes'] = src.volumes.map((m) => {
         const ext = external[m.source];

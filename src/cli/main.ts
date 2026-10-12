@@ -15,6 +15,7 @@ import path from 'node:path';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { confirm, promptHidden, promptVisible, readStdinAll } from './prompt.js';
+import { exitAfterFlush } from './exit.js';
 
 interface Globals {
   url: string;
@@ -1770,5 +1771,5 @@ export async function runCli(argv: string[]): Promise<number> {
 }
 
 if (process.argv[1] && /cli\/main\.(js|ts)$|\/harbor$/.test(process.argv[1])) {
-  runCli(process.argv).then((code) => process.exit(code));
+  runCli(process.argv).then((code) => exitAfterFlush(code));
 }

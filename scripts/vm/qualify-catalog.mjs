@@ -8,6 +8,9 @@
 // --fresh rebuilds the VM and bootstraps Harbor from the release archive first (recommended: clean host).
 // --catalog is the harbor-apps checkout (its apps/ folder; default as in scripts/catalog-dir.mjs) whose
 // release.json files get the result. The box must list the same revisions, or nothing is recorded.
+// Parallel runs (one droplet each: HARBOR_VM_NAME/HARBOR_VM_STATE/HARBOR_VM_KNOWN_HOSTS, see do-vm.mjs) set
+// HARBOR_QUALIFY_SOCKS_PORT to a free local port: instead of fixed-port tunnels, the browser goes through an SSH
+// SOCKS proxy to the box's own localhost and the probes run with curl on the box.
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -40,7 +43,8 @@ try {
   fail(e.message, 2);
 }
 const target = resolveTarget();
-const runId = `catalog-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+const SOCKS = process.env.HARBOR_QUALIFY_SOCKS_PORT ? Number(process.env.HARBOR_QUALIFY_SOCKS_PORT) : null;
+const runId = `catalog-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}${process.env.HARBOR_VM_NAME ? `-${process.env.HARBOR_VM_NAME}` : ''}`;
 const ev = new Evidence(path.join(ROOT, 'docs', 'evidence', runId));
 const ssh = (cmd, o) => target.sshOk(cmd, o);
 const sshTry = (cmd, o) => target.ssh(cmd, o);
@@ -55,13 +59,22 @@ const externalClaims = (m) => [...m.matchAll(/^\s+- id: ([a-z0-9-]+)\n(?:.*\n){0
 
 let browser;
 let tunnel;
+// HTTP status of a URL as the box itself sees it (SOCKS mode) or through the local tunnel
+async function statusOf(url) {
+  if (!SOCKS) return (await fetch(url, { redirect: 'manual' })).status;
+  const r = sshTry(`curl -s -o /dev/null --max-time 20 -w '%{http_code}' '${String(url).replace(/'/g, '')}'`, { timeoutMs: 40_000 });
+  const code = Number(r.stdout.trim());
+  if (!code) throw new Error(`curl exit ${r.code}`);
+  return code;
+}
 async function openTunnels() {
   tunnel?.close();
-  tunnel = target.tunnel(PORTS);
-  await waitFor(async () => (await fetch(`${UI}/healthz`)).ok, { timeoutMs: 60_000, intervalMs: 1000, what: 'tunnel to daemon' });
+  tunnel = SOCKS ? target.socks(SOCKS) : target.tunnel(PORTS);
+  await waitFor(async () => (await statusOf(`${UI}/healthz`)) === 200, { timeoutMs: 60_000, intervalMs: 1000, what: 'tunnel to daemon' });
 }
 async function newPage() {
-  browser ??= await chromium.launch();
+  // '<-loopback>': Chromium otherwise never sends localhost through a proxy
+  browser ??= await chromium.launch(SOCKS ? { proxy: { server: `socks5://127.0.0.1:${SOCKS}`, bypass: '<-loopback>' } } : {});
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   return { ctx, page: await ctx.newPage() };
 }
@@ -131,7 +144,7 @@ async function qualifyOne(id, variant, storageArgs) {
   let probe = null;
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
-      probe = await fetch(probeUrl, { redirect: 'manual' });
+      probe = { status: await statusOf(probeUrl) };
       probeHistory.push(probe.status);
       if (expected.includes(probe.status)) break;
     } catch (e) {

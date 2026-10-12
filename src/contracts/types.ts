@@ -108,7 +108,7 @@ export interface ComposeSourceService {
   command?: string[];
   environment?: Record<string, string>;
   depends_on?: Record<string, { condition: 'service_started' | 'service_healthy' }>;
-  healthcheck?: { test: string[]; interval?: string; timeout?: string; retries?: number; start_period?: string };
+  healthcheck?: { test?: string[]; interval?: string; timeout?: string; retries?: number; start_period?: string; disable?: true };
   volumes?: { type: 'volume'; source: string; target: string; read_only?: boolean }[];
 }
 export interface ComposeSource {

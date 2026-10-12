@@ -5,7 +5,7 @@
 // copies the folder, marker included); a replacement or stranger's drive at the
 // same path fails the check, so Harbor refuses to start the app against the
 // wrong data instead of writing into a stranger's disk.
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { HarborError } from '../errors.js';
@@ -35,8 +35,11 @@ export function writeBindMarker(dir: string, instanceId: string, storageId: stri
   const keep = readDriveId(dir, instanceId, storageId);
   const driveId = keep ?? randomUUID();
   try {
-    // 0644: ids only, no secrets — any machine's harbor user (different uid) can read it (decision 122).
+    // 0644: ids only, no secrets — any machine's harbor user (different uid) can read it (decision 122). The explicit
+    // chmod matters: harbor.service's UMask=0077 turns a create mode of 0644 into 0600, and an app that chowns its
+    // folder (metube, PUID images) then hides the marker from Harbor and the drive guard stops the app.
     writeFileSync(bindMarkerFile(dir), JSON.stringify({ instanceId, storageId, driveId, writtenAt: new Date().toISOString() }), { mode: 0o644 });
+    chmodSync(bindMarkerFile(dir), 0o644);
   } catch (e) {
     if (opts.required) throw unwritableFolder(dir, e);
   }

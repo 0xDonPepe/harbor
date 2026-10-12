@@ -1,5 +1,6 @@
-import { COMPOSE_SOURCE_SCHEMA } from '../contracts/compose.schema.js';
+import { COMPOSE_SOURCE_SCHEMA, HEALTHCHECK_BOUNDS } from '../contracts/compose.schema.js';
 import { MANIFEST_SCHEMA } from '../contracts/manifest.schema.js';
+import { INTERPOLATION_RE, SECRET_TEMPLATE_SLOT } from '../contracts/patterns.js';
 import { CATALOG_INDEX_SCHEMA, RELEASE_SCHEMA } from '../contracts/release.schema.js';
 import { compareVersions } from './versions.js';
 
@@ -14,8 +15,11 @@ import { compareVersions } from './versions.js';
 // property names; `*` = a key the author chooses (services, endpoints, environment names); `[]` = an array
 // item; `[0]` = a fixed position (prefixItems). `path=value` names one enum/const value of a field.
 // The guard (tests/unit/package-features.test.ts) also snapshots every node's own constraints (type, pattern,
-// limits, required, ...) in features-constraints.json: a widened one needs a `when` entry on that path, a
-// narrowed one is a format violation (ACKNOWLEDGED_NARROWING, with a decision, for a deliberate one).
+// limits, required, enum/const values with their JSON types, and the per-field rules validation code enforces:
+// CODE_CONSTRAINTS) in features-constraints.json: a widened one needs a `when` entry on that path, a narrowed one
+// is a format violation (ACKNOWLEDGED_NARROWING, with a decision, for a deliberate one). Each such entry names
+// the exact constraints it accepted (`accepts`), so any later change on the path needs a new entry, and the
+// snapshot pins every entry once committed (the tables are append-only, like the format).
 
 export interface HarborFeature {
   path: string;
@@ -24,6 +28,9 @@ export interface HarborFeature {
   // only values matching this (an existing field whose pattern, limit, type or required list was widened;
   // on a root path, `value` is the whole document: `{ path: 'manifest', when: (m) => !('ui' in (m as object)) }`)
   when?: (value: unknown) => boolean;
+  // with `when` (and only then): the node's constraints after the widening, exactly as the snapshot stores them
+  // (the guard prints them). A later change on the same path is not covered by this entry: it needs a new one.
+  accepts?: Constraints;
   // the first Harbor release that accepts it ("0.29.0")
   since: string;
   note: string;
@@ -32,12 +39,13 @@ export interface HarborFeature {
 // Everything the format accepted when the catalog moved out (0.28.0, decision 158) needs no minimum:
 // Harbor before 0.28 never fetches the published catalog. Add new fields and values HERE, with the next
 // release version; tests/unit/package-features.test.ts fails for a schema path that is in neither list.
+// Append-only: once committed, an entry is pinned in features-constraints.json and never edited or removed.
 export const FEATURES: readonly HarborFeature[] = [];
 
 export const BASELINE_VERSION = '0.28.0';
 
-// The 0.28.0 format, every field and every enum/const value. Never remove an entry (the format only grows);
-// the test fails when one of these disappears from the schemas.
+// The 0.28.0 format, every field and every enum/const value. CLOSED: never add, edit or remove an entry (the
+// test pins its size and hash). New paths and values go in FEATURES with since = the next release.
 export const BASELINE: readonly string[] = [
   // manifest.yaml
   'manifest', 'manifest.apiVersion', 'manifest.apiVersion=harbor/v1alpha1', 'manifest.kind', 'manifest.kind=Application',
@@ -116,10 +124,14 @@ export const BASELINE: readonly string[] = [
 ];
 
 // Deliberate narrowings of an existing field (a format violation by default: the format only grows). Each one
-// names the decision that accepted breaking the packages that relied on the wider form.
+// names the decision that accepted breaking the packages that relied on the wider form, and the exact
+// constraints it accepted. It excuses only the narrowed part of a change (a widened part still needs a `when`
+// entry), never an index.json path (those need a new index schemaVersion), and never a later change.
 export interface AcknowledgedNarrowing {
   path: string;
   decision: number;
+  // the node's constraints after the narrowing, exactly as the snapshot stores them
+  accepts: Constraints;
   note: string;
 }
 export const ACKNOWLEDGED_NARROWING: readonly AcknowledgedNarrowing[] = [];
@@ -154,9 +166,16 @@ const OPAQUE_KEYWORDS = new Set(['pattern', 'format', 'multipleOf', 'propertyNam
 const CONSTRAINT_KEYWORDS = new Set([...MIN_KEYWORDS, ...MAX_KEYWORDS, ...OPAQUE_KEYWORDS, 'type', 'required', 'uniqueItems']);
 const ANNOTATION_KEYWORDS = new Set(['$schema', '$id', '$comment', 'title', 'description']);
 const PROPERTY_NAMES_KEYWORDS = new Set(['pattern', 'minLength', 'maxLength', 'format']);
+// Synthetic constraints for the per-field rules validation code enforces (CODE_CONSTRAINTS). Never schema keywords:
+// the walker refuses `x-*` in a schema. `x-refuses` = a regex the value must not match; `x-slotOnce` = a token the
+// value must contain exactly once; `x-minimumMs`/`x-maximumMs` = duration bounds.
+const CODE_MIN_KEYWORDS = new Set(['x-minimumMs']);
+const CODE_MAX_KEYWORDS = new Set(['x-maximumMs']);
+const CODE_KEYWORDS = new Set([...CODE_MIN_KEYWORDS, ...CODE_MAX_KEYWORDS, 'x-refuses', 'x-slotOnce']);
 
-// A node's own constraints (no child schemas, no enum/const: those are the `path=value` keys), as a stable JSON
-// object. A boolean additionalProperties/items is a constraint; a schema there is a child path (`.*`, `[]`).
+// A node's own constraints (no child schemas), as a stable JSON object. A boolean additionalProperties/items is a
+// constraint; a schema there is a child path (`.*`, `[]`). enum/const become `enum`: the allowed values with
+// their JSON types (32 is not "32"), sorted. Code-enforced rules are merged in by describeFormat.
 export type Constraints = Record<string, unknown>;
 
 export interface SchemaDescription {
@@ -174,6 +193,8 @@ export function featureKey(f: Pick<HarborFeature, 'path' | 'value'>): string {
 
 const stable = (v: unknown): unknown =>
   Array.isArray(v) ? v.map(stable) : isNode(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v;
+const json = (v: unknown): string => JSON.stringify(stable(v)) ?? 'unset';
+const byJson = (a: unknown, b: unknown): number => (json(a) < json(b) ? -1 : json(a) > json(b) ? 1 : 0);
 
 // Every field path (the root included: `manifest`), every enum/const value (`path=value`) and every node's own
 // constraints. `*` = a key the author chooses, `[]` = an array item, `[0]` = a fixed (prefixItems) position.
@@ -195,14 +216,21 @@ export function describeSchema(schema: unknown, root: string): SchemaDescription
       }
       own[k] = k === 'required' || (k === 'type' && Array.isArray(v)) ? [...(v as unknown[])].sort() : v;
     }
+    if ('enum' in node && 'const' in node) throw new Error(`${p}: both enum and const; use one (src/packages/features.ts)`);
+    const vals = node.enum ?? ('const' in node ? [node.const] : undefined);
+    if (vals) {
+      for (const v of vals) {
+        if (v !== null && typeof v === 'object') throw new Error(`${p}: enum/const value ${JSON.stringify(v)} is not a scalar; src/packages/features.ts matches values by their string form`);
+        const key = `${p}=${String(v)}`;
+        if (values.has(key)) throw new Error(`${p}: enum/const values ${JSON.stringify(values.get(key))} and ${JSON.stringify(v)} share the string form "${String(v)}" (src/packages/features.ts matches values by it)`);
+        keys.add(key);
+        values.set(key, v);
+      }
+      own['enum'] = [...vals].sort(byJson);
+    }
     if (keys.has(p)) throw new Error(`${p}: two schema nodes share this path`);
     keys.add(p);
     constraints.set(p, stable(own) as Constraints);
-    const vals = node.enum ?? ('const' in node ? [node.const] : []);
-    for (const v of vals) {
-      keys.add(`${p}=${String(v)}`);
-      values.set(`${p}=${String(v)}`, v);
-    }
     for (const [k, sub] of Object.entries(node.properties ?? {})) visit(sub, `${p}.${k}`);
     if (isNode(node.additionalProperties)) visit(node.additionalProperties, `${p}.*`);
     (node.prefixItems ?? []).forEach((sub, i) => visit(sub, `${p}[${i}]`));
@@ -217,28 +245,76 @@ export function schemaFeatureKeys(schema: unknown, root: string): string[] {
   return describeSchema(schema, root).keys;
 }
 
+// The per-field rules package validation enforces in code rather than in the schemas, as synthetic constraints on
+// their paths, so changing one is guarded like a schema limit. HEALTHCHECK_FIELDS is typed over every key of
+// HEALTHCHECK_BOUNDS, so a new bound cannot be added without naming its path here.
+const HEALTHCHECK_FIELDS: Record<keyof typeof HEALTHCHECK_BOUNDS, string> = { intervalMs: 'interval', timeoutMs: 'timeout', startPeriodMs: 'start_period' };
+export type HealthcheckBounds = Record<keyof typeof HEALTHCHECK_BOUNDS, { readonly min: number; readonly max: number }>;
+// INTERPOLATION_RE: src/packages/compose-source.ts (environment values, image, healthcheck test) and
+// src/packages/manifest.ts (operator secret prompt, link purpose, name, description, setup instructions).
+const NO_INTERPOLATION_PATHS = [
+  'compose.services.*.environment.*', 'compose.services.*.image', 'compose.services.*.healthcheck.test[]',
+  'manifest.secrets[].prompt', 'manifest.links[].purpose', 'manifest.metadata.name', 'manifest.metadata.description', 'manifest.setup.instructions',
+];
+export interface CodeRules {
+  healthcheck: HealthcheckBounds;
+  interpolation: RegExp;
+  secretTemplateSlot: string;
+}
+export const CODE_RULES: CodeRules = { healthcheck: HEALTHCHECK_BOUNDS, interpolation: INTERPOLATION_RE, secretTemplateSlot: SECRET_TEMPLATE_SLOT };
+
+export function codeConstraints(rules: CodeRules = CODE_RULES): Record<string, Constraints> {
+  const out: Record<string, Constraints> = {};
+  for (const [bound, field] of Object.entries(HEALTHCHECK_FIELDS) as [keyof typeof HEALTHCHECK_BOUNDS, string][]) {
+    out[`compose.services.*.healthcheck.${field}`] = { 'x-minimumMs': rules.healthcheck[bound].min, 'x-maximumMs': rules.healthcheck[bound].max };
+  }
+  for (const p of NO_INTERPOLATION_PATHS) out[p] = { 'x-refuses': String(rules.interpolation) };
+  out['manifest.secrets[].bindings[].template'] = { 'x-slotOnce': rules.secretTemplateSlot };
+  return out;
+}
+export const CODE_CONSTRAINTS: Readonly<Record<string, Constraints>> = codeConstraints();
+
+// The whole guarded format: every root of FEATURE_SCHEMAS walked, with CODE_CONSTRAINTS merged into their paths.
+export function describeFormat(schemas: Readonly<Record<string, unknown>> = FEATURE_SCHEMAS, code: Readonly<Record<string, Constraints>> = CODE_CONSTRAINTS): SchemaDescription {
+  const all = Object.entries(schemas).map(([root, schema]) => describeSchema(schema, root));
+  const constraints = new Map(all.flatMap((d) => [...d.constraints]));
+  for (const [p, extra] of Object.entries(code)) {
+    const own = constraints.get(p);
+    if (!own) throw new Error(`${p}: CODE_CONSTRAINTS names a path the schemas do not have (src/packages/features.ts)`);
+    for (const k of Object.keys(extra)) {
+      if (!CODE_KEYWORDS.has(k)) throw new Error(`${p}: code constraint "${k}" is not understood by src/packages/features.ts`);
+      if (k in own) throw new Error(`${p}: code constraint "${k}" is set twice`);
+    }
+    constraints.set(p, stable({ ...own, ...extra }) as Constraints);
+  }
+  return { keys: all.flatMap((d) => d.keys), values: new Map(all.flatMap((d) => [...d.values])), constraints };
+}
+
 // How one node's constraints moved. `narrowed`: an old valid document may now fail (the format only grows, so
 // that is a violation). `widened`/`unknown`: a new document may fail on an older Harbor (needs a `when` entry).
+// `added`: new enum/const values (each needs a FEATURES `value` entry of the same JSON type).
 export interface ConstraintChange {
   path: string;
   narrowed: string[];
   widened: string[];
   unknown: string[];
+  added: unknown[];
 }
 
 const typeCovers = (types: unknown[], t: unknown): boolean => types.includes(t) || (t === 'integer' && types.includes('number'));
 const asList = (v: unknown): unknown[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]);
+const typed = (v: unknown): string => `${JSON.stringify(v)} (${v === null ? 'null' : typeof v})`;
 
 export function compareConstraints(path: string, before: Constraints, after: Constraints): ConstraintChange | null {
-  const change: ConstraintChange = { path, narrowed: [], widened: [], unknown: [] };
+  const change: ConstraintChange = { path, narrowed: [], widened: [], unknown: [], added: [] };
   for (const k of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
     const a = before[k];
     const b = after[k];
-    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    if (json(a) === json(b)) continue;
     const label = `${k} ${JSON.stringify(a) ?? 'unset'} -> ${JSON.stringify(b) ?? 'unset'}`;
     const into = (dir: 'narrowed' | 'widened' | 'unknown'): void => void change[dir].push(label);
-    if (MIN_KEYWORDS.has(k)) into(((b as number | undefined) ?? -Infinity) > ((a as number | undefined) ?? -Infinity) ? 'narrowed' : 'widened');
-    else if (MAX_KEYWORDS.has(k)) into(((b as number | undefined) ?? Infinity) < ((a as number | undefined) ?? Infinity) ? 'narrowed' : 'widened');
+    if (MIN_KEYWORDS.has(k) || CODE_MIN_KEYWORDS.has(k)) into(((b as number | undefined) ?? -Infinity) > ((a as number | undefined) ?? -Infinity) ? 'narrowed' : 'widened');
+    else if (MAX_KEYWORDS.has(k) || CODE_MAX_KEYWORDS.has(k)) into(((b as number | undefined) ?? Infinity) < ((a as number | undefined) ?? Infinity) ? 'narrowed' : 'widened');
     else if (k === 'required') {
       if (asList(b).some((r) => !asList(a).includes(r))) into('narrowed');
       if (asList(a).some((r) => !asList(b).includes(r))) into('widened');
@@ -246,15 +322,25 @@ export function compareConstraints(path: string, before: Constraints, after: Con
       // no type keyword = any type
       if (b !== undefined && (a === undefined || asList(a).some((t) => !typeCovers(asList(b), t)))) into('narrowed');
       if (a !== undefined && (b === undefined || asList(b).some((t) => !typeCovers(asList(a), t)))) into('widened');
+    } else if (k === 'enum') {
+      // values compare with their JSON type: const 32 -> "32" removes 32 (narrowed) and adds "32"
+      if (a === undefined) into('narrowed');
+      else if (b === undefined) into('widened');
+      else {
+        const was = new Set(asList(a).map(json));
+        const now = new Set(asList(b).map(json));
+        for (const v of asList(a)) if (!now.has(json(v))) change.narrowed.push(`enum value ${typed(v)} removed`);
+        for (const v of asList(b)) if (!was.has(json(v))) change.added.push(v);
+      }
     } else if (k === 'additionalProperties' || k === 'items' || k === 'uniqueItems') {
       // additionalProperties/items: false = refused (unset or a schema = allowed); uniqueItems: true = refused
       const refuses = (v: unknown): boolean => (k === 'uniqueItems' ? v === true : v === false);
       if (refuses(b) !== refuses(a)) into(refuses(b) ? 'narrowed' : 'widened');
-    } else if (a === undefined) into('narrowed'); // a new pattern/format/multipleOf/propertyNames
+    } else if (a === undefined) into('narrowed'); // a new pattern/format/multipleOf/propertyNames/code rule
     else if (b === undefined) into('widened');
     else into('unknown');
   }
-  return change.narrowed.length || change.widened.length || change.unknown.length ? change : null;
+  return change.narrowed.length || change.widened.length || change.unknown.length || change.added.length ? change : null;
 }
 
 // The field paths a document uses, each with every value found at it (guided by the schema, so author-chosen
@@ -337,9 +423,27 @@ export function declaredTooLow(declared: string | null | undefined, computed: st
   return Boolean(declared && computed && compareVersions(declared, computed) < 0);
 }
 
-// The guard over the committed constraint snapshot (src/packages/features-constraints.json; used by
-// tests/unit/package-features.test.ts). `problems` are format violations or unrecorded changes; `stale` lists the
-// paths whose recorded change is accepted but whose snapshot must be regenerated (and committed).
+// The committed snapshot (src/packages/features-constraints.json): every node's constraints, and every FEATURES and
+// ACKNOWLEDGED_NARROWING entry as it was when committed (the tables are append-only: an entry is never edited or
+// removed, because a released Harbor's limits never move).
+export type SnapshotEntry =
+  | { feature: string; since: string; accepts?: Constraints }
+  | { narrowing: string; decision: number; accepts: Constraints };
+
+export interface ConstraintSnapshot {
+  constraints: Record<string, Constraints>;
+  entries: SnapshotEntry[];
+}
+
+export function snapshotEntries(features: readonly HarborFeature[] = FEATURES, acknowledged: readonly AcknowledgedNarrowing[] = ACKNOWLEDGED_NARROWING): SnapshotEntry[] {
+  return [
+    ...features.map((f): SnapshotEntry => (f.accepts === undefined ? { feature: featureKey(f), since: f.since } : { feature: featureKey(f), since: f.since, accepts: f.accepts })),
+    ...acknowledged.map((a): SnapshotEntry => ({ narrowing: a.path, decision: a.decision, accepts: a.accepts })),
+  ].map((e) => stable(e) as SnapshotEntry);
+}
+
+// `problems` are format violations or unrecorded changes; `stale` lists what is recorded and accepted but not yet
+// in the snapshot file (regenerate and commit it).
 export interface SnapshotCheck {
   problems: string[];
   stale: string[];
@@ -347,54 +451,127 @@ export interface SnapshotCheck {
 
 export const SNAPSHOT_UPDATE_COMMAND = 'UPDATE_FEATURE_BASELINE=1 pnpm test package-features';
 
-export function checkConstraintSnapshot(
-  snapshot: Readonly<Record<string, Constraints>>,
-  current: ReadonlyMap<string, Constraints>,
-  features: readonly HarborFeature[] = FEATURES,
-  acknowledged: readonly AcknowledgedNarrowing[] = ACKNOWLEDGED_NARROWING,
-): SnapshotCheck {
+const isIndexPath = (p: string): boolean => p === 'index' || p.startsWith('index.') || p.startsWith('index=');
+const INDEX_RULE = 'Older Harbors reject the WHOLE index on an entry key or value they do not know (minHarbor cannot protect it), so this needs a new index schemaVersion or must stay out of the index. ACKNOWLEDGED_NARROWING does not apply to index.json.';
+
+export interface SnapshotTables {
+  features?: readonly HarborFeature[];
+  acknowledged?: readonly AcknowledgedNarrowing[];
+  baseline?: readonly string[];
+}
+
+export function checkConstraintSnapshot(snapshot: Readonly<ConstraintSnapshot>, current: ReadonlyMap<string, Constraints>, tables: SnapshotTables = {}): SnapshotCheck {
+  const { features = FEATURES, acknowledged = ACKNOWLEDGED_NARROWING, baseline = BASELINE } = tables;
   const problems: string[] = [];
   const stale: string[] = [];
-  for (const path of Object.keys(snapshot)) {
+  const nowEntries = snapshotEntries(features, acknowledged);
+  const nowJson = new Set(nowEntries.map(json));
+  const pinned = new Set(snapshot.entries.map(json));
+  for (const e of snapshot.entries) {
+    if (!nowJson.has(json(e))) {
+      problems.push(
+        `${json(e)}: this entry is pinned in src/packages/features-constraints.json and is now changed or gone. FEATURES and ACKNOWLEDGED_NARROWING are ` +
+          `append-only (a released Harbor's limits never move): restore it and add a NEW entry for the new state. (Only if its release has not shipped yet: ` +
+          `delete its line under "entries" in the snapshot, then regenerate with \`${SNAPSHOT_UPDATE_COMMAND}\`.)`,
+      );
+    }
+  }
+  for (const e of nowEntries) if (!pinned.has(json(e))) stale.push(`entry ${json(e)}`);
+  for (const path of Object.keys(snapshot.constraints)) {
     if (!current.has(path)) problems.push(`${path}: gone from the schemas. The format only grows (decision 159): keep accepting it and migrate old packages in the engine.`);
   }
+  const recordedPaths = new Set([...baseline, ...features.filter((f) => f.value === undefined && !f.when).map((f) => f.path)]);
   for (const [path, now] of current) {
-    const before = snapshot[path];
+    const before = snapshot.constraints[path];
+    const accepts = json(now);
     if (!before) {
-      stale.push(path);
+      if (isIndexPath(path)) problems.push(`${path}: new index.json path. ${INDEX_RULE}`);
+      else if (!recordedPaths.has(path)) {
+        problems.push(
+          `${path}: new path, not recorded. Add FEATURES { path: '${path}', since: '<next release>', note: '...' } in src/packages/features.ts ` +
+            `(never BASELINE: that is the closed 0.28.0 format), then regenerate with \`${SNAPSHOT_UPDATE_COMMAND}\`.`,
+        );
+      } else stale.push(path);
       continue;
     }
     const change = compareConstraints(path, before, now);
     if (!change) continue;
-    const what = [...change.narrowed, ...change.widened, ...change.unknown].join('; ');
-    const ack = acknowledged.find((a) => a.path === path);
-    if (path === 'index' || path.startsWith('index.')) {
-      if (ack) stale.push(path);
-      else problems.push(`${path}: index.json format changed (${what}). Older Harbors reject the WHOLE index on an entry key or value they do not know, so this needs a new index schemaVersion or must stay out of the index.`);
+    if (isIndexPath(path)) {
+      problems.push(`${path}: index.json format changed (${[...change.narrowed, ...change.widened, ...change.unknown, ...change.added.map((v) => `enum value ${typed(v)} added`)].join('; ')}). ${INDEX_RULE}`);
       continue;
     }
     let ok = true;
-    if (change.narrowed.length && !ack) {
-      ok = false;
-      problems.push(
-        `${path}: narrowed (${change.narrowed.join('; ')}). The format only grows (decision 159): a published package may rely on the wider form. ` +
-          `Revert it, or list it in ACKNOWLEDGED_NARROWING in src/packages/features.ts with the decision that accepts the break.`,
-      );
+    if (change.narrowed.length) {
+      const acks = acknowledged.filter((a) => a.path === path);
+      if (!acks.some((a) => json(a.accepts) === accepts)) {
+        ok = false;
+        problems.push(
+          `${path}: narrowed (${change.narrowed.join('; ')}). The format only grows (decision 159): a published package may rely on the wider form. ` +
+            (acks.length ? `ACKNOWLEDGED_NARROWING for this path accepted ${acks.map((a) => json(a.accepts)).join(', ')} only (each entry covers one change). ` : '') +
+            `Revert it, or add an ACKNOWLEDGED_NARROWING entry { path: '${path}', decision: <the decision that accepts the break>, accepts: ${accepts}, note: '...' } in src/packages/features.ts.`,
+        );
+      }
     }
     const loosened = [...change.widened, ...change.unknown];
-    if (loosened.length && !ack && !features.some((f) => f.path === path && f.when)) {
-      ok = false;
-      problems.push(
-        `${path}: changed (${loosened.join('; ')}). If it only widens, add a FEATURES entry { path: '${path}', when: (v) => <true for values an older Harbor refuses>, since: <next release> } ` +
-          `in src/packages/features.ts; if it narrows, the format only grows (revert it, or ACKNOWLEDGED_NARROWING with a decision).`,
-      );
+    if (loosened.length) {
+      const whens = features.filter((f) => f.path === path && f.when);
+      if (!whens.some((f) => json(f.accepts) === accepts)) {
+        ok = false;
+        problems.push(
+          `${path}: changed (${loosened.join('; ')}). ` +
+            (whens.length ? `The FEATURES \`when\` entries on this path accepted ${whens.map((f) => `${json(f.accepts)} (${f.since})`).join(', ')} only (each entry covers one change). ` : '') +
+            `If it widens, add a FEATURES entry { path: '${path}', when: (v) => <true for values an older Harbor refuses>, accepts: ${accepts}, since: '<next release>', note: '...' } ` +
+            `in src/packages/features.ts; if it narrows, the format only grows (revert it, or ACKNOWLEDGED_NARROWING with a decision).`,
+        );
+      }
+    }
+    for (const v of change.added) {
+      if (!features.some((f) => f.path === path && f.value !== undefined && json(f.value) === json(v))) {
+        ok = false;
+        problems.push(`${path}: new enum/const value ${typed(v)}. Add FEATURES { path: '${path}', value: ${JSON.stringify(v)}, since: '<next release>', note: '...' } in src/packages/features.ts.`);
+      }
     }
     if (ok) stale.push(path);
   }
   return { problems, stale };
 }
 
-// The snapshot file body: one path per line, in schema order, stable JSON (what SNAPSHOT_UPDATE_COMMAND writes).
-export function renderConstraintSnapshot(current: ReadonlyMap<string, Constraints>): string {
-  return `{\n${[...current].map(([p, c]) => `  ${JSON.stringify(p)}: ${JSON.stringify(c)}`).join(',\n')}\n}\n`;
+// The well-formedness of FEATURES and ACKNOWLEDGED_NARROWING against the format (used by the guard test).
+export function checkEntries(format: SchemaDescription, tables: SnapshotTables = {}): string[] {
+  const { features = FEATURES, acknowledged = ACKNOWLEDGED_NARROWING, baseline = BASELINE } = tables;
+  const problems: string[] = [];
+  const base = new Set(baseline);
+  for (const f of features) {
+    const k = featureKey(f);
+    const bad = (why: string): void => void problems.push(`FEATURES ${k} (${f.since}): ${why}`);
+    if (!/^\d{1,4}\.\d{1,4}\.\d{1,6}$/.test(f.since)) bad('since must be x.y.z (the index.json minHarbor pattern)');
+    else if (compareVersions(f.since, BASELINE_VERSION) <= 0) bad(`since must be newer than the ${BASELINE_VERSION} baseline`);
+    if (!f.note) bad('needs a note');
+    if (isIndexPath(f.path)) bad('index.json fields cannot be gated by minHarbor (older Harbors reject the whole index)');
+    if (!format.constraints.has(f.path)) bad('no such schema path');
+    if (f.value !== undefined && f.when) bad('value and when are exclusive (a value entry names one new value; a when entry one widening)');
+    if (f.when && !isNode(f.accepts)) bad('a when entry needs accepts: the constraints it accepted (the guard prints them)');
+    if (!f.when && f.accepts !== undefined) bad('accepts belongs to a when entry only');
+    if (!f.when && base.has(k)) bad('already baseline');
+    if (f.value !== undefined && !format.values.has(k)) bad('no such enum/const value in the schema');
+    else if (f.value !== undefined && typeof f.value !== typeof format.values.get(k)) bad(`the value's JSON type must be the schema's (${typed(format.values.get(k))})`);
+  }
+  for (const a of acknowledged) {
+    const bad = (why: string): void => void problems.push(`ACKNOWLEDGED_NARROWING ${a.path} (decision ${a.decision}): ${why}`);
+    if (isIndexPath(a.path)) bad('index.json paths cannot be acknowledged: an index format change needs a new index schemaVersion');
+    if (!format.constraints.has(a.path)) bad('no such schema path');
+    if (!Number.isInteger(a.decision) || a.decision < 159) bad('decision must be a docs/DECISIONS.md row number >= 159');
+    if (!isNode(a.accepts)) bad('needs accepts: the constraints it accepted (the guard prints them)');
+    if (!a.note) bad('needs a note');
+  }
+  return problems;
+}
+
+// The snapshot file body: one path or entry per line, in schema/table order, stable JSON (what SNAPSHOT_UPDATE_COMMAND writes).
+export function renderConstraintSnapshot(current: ReadonlyMap<string, Constraints>, entries: readonly SnapshotEntry[] = snapshotEntries()): string {
+  const lines = (xs: string[]): string => (xs.length ? `\n${xs.join(',\n')}\n  ` : '');
+  return (
+    `{\n  "constraints": {${lines([...current].map(([p, c]) => `    ${JSON.stringify(p)}: ${JSON.stringify(stable(c))}`))}},\n` +
+    `  "entries": [${lines(entries.map((e) => `    ${JSON.stringify(stable(e))}`))}]\n}\n`
+  );
 }

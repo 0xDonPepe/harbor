@@ -296,8 +296,13 @@ so authors normally never set it. Its log prints `ok   <id>@<revision>[ (<versio
 app (the harbor-apps publish job reads these lines). `pnpm catalog:verify` prints `minHarbor declared=… computed=…` per app and fails
 when a declared value is lower than computed. The daemon checks the index `minHarbor` before parsing
 the package files (§9). Uploads and git sources are not gated: the running Harbor validates them itself.
-Not expressible as a path: a relaxed cross-field rule in `validateManifestReferences` — set `minHarbor`
-by hand on the index entry.
+Not covered (set `minHarbor` by hand on the index entry; the bundle keeps the higher value): a relaxed
+cross-field rule in `validateManifestReferences` or `validateComposeSource`; a per-field check written inline
+in validation code instead of as a `CODE_CONSTRAINTS` constant (mount-target traversal), or a constant code
+starts or stops applying to a field; the file-size caps (manifest.yaml, compose.yaml, release.json and
+README.md 256 KiB, icon 256 KiB, screenshots 1 MiB, `MAX_YAML_BYTES`) and the YAML depth limit (32); the document-wide parser settings (Ajv options in
+`src/contracts/validate.ts`, the restricted YAML rules in `src/packages/yaml.ts`) — loosening those is a
+deliberate format change with its own decision.
 
 **The guard.** `tests/unit/package-features.test.ts` walks `MANIFEST_SCHEMA`, `COMPOSE_SOURCE_SCHEMA`,
 `RELEASE_SCHEMA` and `CATALOG_INDEX_SCHEMA`:
@@ -306,10 +311,19 @@ by hand on the index entry.
 - the walker throws on a keyword it does not understand (anyOf/oneOf/allOf, if/then/else, not, `$ref`,
   patternProperties, ...), so no field hides from it;
 - every node's own constraints (type, pattern, format, min*/max*, required, propertyNames, uniqueItems,
-  boolean additionalProperties/items) are compared with the committed `src/packages/features-constraints.json`.
-  A widened or changed one needs a `when` entry on that path; a narrowed one fails ("the format only grows")
-  unless `ACKNOWLEDGED_NARROWING` lists it with a decision number. Once recorded, regenerate the file with
-  `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` and commit it;
+  boolean additionalProperties/items, enum/const values with their JSON types) are compared with the committed
+  `src/packages/features-constraints.json`, and so are the per-field rules validation code enforces
+  (`CODE_CONSTRAINTS`: `HEALTHCHECK_BOUNDS` as `x-minimumMs`/`x-maximumMs`, `INTERPOLATION_RE` as `x-refuses`,
+  the secret template slot as `x-slotOnce`). A widened or changed one needs a `when` entry on that path; a
+  narrowed one fails ("the format only grows") unless `ACKNOWLEDGED_NARROWING` lists it with a decision number;
+  a new enum value needs a `value` entry of the same JSON type. A `when` or ACK entry carries `accepts` (the
+  node's constraints after the change, printed by the failure), so it covers that one change: a later change
+  on the path needs a new entry. An ACK clears only the narrowed part and never an index.json path. Once
+  recorded, regenerate the file with `UPDATE_FEATURE_BASELINE=1 pnpm test package-features` and commit it;
+- the snapshot also pins every committed `FEATURES` and `ACKNOWLEDGED_NARROWING` entry: the tables are
+  append-only (a released Harbor's limits never move; an unreleased entry can be dropped from the snapshot's
+  `entries` by hand). `BASELINE` is the closed 0.28.0 format: the test pins its size and sha256, and new paths
+  go in `FEATURES`, never in `BASELINE`;
 - index.json has no `FEATURES`: an older Harbor refuses the whole index on one unknown entry key, so any
   index format change fails with "needs a new index schemaVersion or must stay out of the index".
 

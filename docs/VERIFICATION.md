@@ -297,6 +297,26 @@ Not verified: the harbor-apps workflow on GitHub Actions, a signature by the rea
 GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
 seed. These need the first harbor-apps release and a live run on a test machine or a droplet.
 
+Catalog compatibility (decision 159), local only (no UI, route or schema change; e2e not re-run):
+- `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 311 passed (new `package-features`: the walk finds 189
+  schema paths and values, all baseline; an unrecorded or removed one fails with the "add it to FEATURES"
+  / "the format only grows" message; field, `value` and `when` entries and max-over-used; with an injected
+  table where `command` arrived in 0.29.0 the bundle stamps `minHarbor: 0.29.0` on that app only, a higher
+  declared value wins, `verifyCatalog` fails a declared 0.28.0, and the stamped bundle extracted as a box
+  catalog lists the app for Harbor 0.28.0 as unavailable "needs Harbor 0.29.0 or newer" and available for
+  0.29.0; `catalog-fetch` extracts a local bundle signed by a test key and refuses another key);
+  `pnpm test:integration` 214 passed + 3 live-Docker skipped; `pnpm openapi -- --check` current.
+- `pnpm catalog:verify` on `tests/fixtures/catalog` (9 ok) and on harbor-apps `apps/` (17 ok), every app
+  `minHarbor declared=none computed=none`. `pnpm catalog:bundle` on harbor-apps `apps/` (17 apps, unsigned,
+  into a scratch dir): the bundled index.json equals `apps/index.json` as JSON.
+- `pnpm catalog:fetch --out <dir>` against GitHub: fails with "could not resolve the latest catalog
+  release … (is there a published catalog release on carlosalaniz/harbor-apps?)" — no release exists yet.
+  With `HARBOR_CATALOG_BUNDLE` + a throwaway key: 17 packages extracted, `catalog:verify` on them 17 ok, a
+  non-empty `--out` refused. `pnpm package --skip-build` the same way (now through `catalog-fetch.mjs`)
+  built an archive with the 17-app seed; the archive was deleted afterwards.
+
+Not verified: the `official-catalog` CI job on GitHub Actions (it needs the first harbor-apps release).
+
 
 Console + presentation only; no engine, route or schema change. Local, fake adapter:
 - `pnpm test:e2e` 30 passed: the Excalidraw spec checks the Storage/Access summaries, *How?*, the

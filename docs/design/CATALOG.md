@@ -254,7 +254,7 @@ as unavailable ("needs Harbor x.y.z or newer"), install fails with INVALID_STATE
 "Update Harbor …", restore from a backup says the same (not "no package"), and the app offers no
 update. Presentation assets (`/v1/catalog/<id>/asset/<name>`) skip the gate, and fall back to an
 installed copy's release snapshot when the current revision cannot be read, so installed apps keep
-their icon. Not enforced by the scripts.
+their icon. Since decision 159 it is computed, not typed: see §10.
 
 **Id clashes.** An id the operator uploaded keeps winning after the official catalog adds the same id
 (the official duplicate is hidden and offers no update); removing the upload hands the id back. A new
@@ -262,10 +262,58 @@ upload of an official id is still refused.
 
 **Bootstrap order.** harbor-apps CI runs Harbor's tools at `.harbor-ref` (a commit on Harbor's `main`);
 Harbor's release job needs a published harbor-apps release. First publish: push Harbor to `main` (its
-release job fails: no catalog yet) → write that commit's sha into `.harbor-ref` → push harbor-apps (first
+release job and its `official-catalog` CI job fail: no catalog yet) → write that commit's sha into `.harbor-ref` → push harbor-apps (first
 `c<serial>`) → re-run Harbor's release job. Later Harbor changes reach the catalog tooling only through a
 reviewed `.harbor-ref` bump.
 
 **Not done yet** (docs/TODO.md): a key rotation procedure, the daemon downloading by tag instead of
 `releases/latest` (`pnpm package` already pins the tag; today a check that reads two releases starts over once), persisting `checkedAt`,
 and a review policy for community submissions.
+
+## 10. Compatibility: the format only grows (added 2026-10-11, v0.28.0, decision 159)
+
+Published apps are read by Harbors of every age, and a new Harbor reads apps written for old ones.
+Neither direction may break.
+
+**The rule.** The package format only grows: never remove, rename or narrow a field or value an
+official package may use. New fields and values are optional and get an entry in
+`src/packages/features.ts`. A breaking change needs a migration in the engine: Harbor adapts old
+packages (as Umbrel does), packages are never rewritten for it.
+
+**Automatic minHarbor (old Harbor, new app).** `features.ts` (pure) maps field paths and enum/const
+values to the Harbor that first accepts them:
+
+| Key | Meaning |
+|---|---|
+| `compose.services.*.command` | a field (`*` = a key the author chooses, `[]` = an array item) |
+| `manifest.endpoints.*.kind=api` | one enum/const value of a field |
+| `path` + `when(value)` | an existing field whose pattern or limit was widened |
+
+Everything up to 0.28.0 is `BASELINE` (no requirement: older Harbors never fetch the signed catalog);
+`FEATURES` holds later additions with `since`. `requiredHarbor(manifest, compose)` = the highest `since`
+over what a package uses. `pnpm catalog:bundle` re-writes the bundled index.json with each entry's
+`minHarbor` = max(declared, computed) (sorted, deterministic; no longer the checkout's bytes), so authors
+normally never set it. `pnpm catalog:verify` prints `minHarbor declared=… computed=…` per app and fails
+when a declared value is lower than computed. The daemon checks the index `minHarbor` before parsing
+the package files (§9). Uploads and git sources are not gated: the running Harbor validates them itself.
+Not expressible as a path: a relaxed cross-field rule in `validateManifestReferences` — set `minHarbor`
+by hand on the index entry.
+
+**The guard.** `tests/unit/package-features.test.ts` walks `MANIFEST_SCHEMA` and
+`COMPOSE_SOURCE_SCHEMA`: a path or value that is neither baseline nor in `FEATURES` fails ("add it with
+the next version"), and so does a baseline or recorded one that disappeared ("the format only grows").
+
+**Strict validation stays.** Umbrel ignores unknown manifest keys; Harbor refuses them. An unknown
+Compose key is a security boundary (an old engine that silently dropped one could run something other
+than what was reviewed), so old boxes get the explicit `minHarbor` gate instead of leniency.
+
+**New Harbor, live catalog.** Harbor CI job `official-catalog` (separate from `verify`, so it never
+changes that job's result) runs `pnpm catalog:fetch --out <dir>` (`scripts/catalog-fetch.mjs`, the same
+tag-resolving, signature-verifying download `pnpm package` uses) and then `pnpm catalog:verify <dir>`
+with the commit's code. An engine change that would break a published app fails at push/PR time, not
+first at release. With no catalog release yet (bootstrap only) the fetch fails with "is there a
+published catalog release on carlosalaniz/harbor-apps?".
+
+**Why.** Umbrel's `manifestVersion` is the minimum OS, set by hand, and Umbrel only started enforcing it
+on app updates in Aug 2026 (umbrel commit 36fa892d5e); StartOS stamps the minimum OS at pack time.
+Harbor takes StartOS's stamping and Umbrel's grow-only format.

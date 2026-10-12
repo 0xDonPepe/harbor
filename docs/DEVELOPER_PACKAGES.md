@@ -393,9 +393,24 @@ tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; ot
 5. Open a pull request on harbor-apps. Its CI runs `catalog:verify` and `catalog:hash --check` with
    Harbor's own loader.
 
-**minHarbor.** An app that needs a newer Harbor feature sets `"minHarbor": "x.y.z"` on its entry in
-`apps/index.json`. An older Harbor lists it as unavailable ("needs Harbor x.y.z or newer"), refuses to
-install it, and offers no update to it. Scripts do not enforce it.
+**minHarbor.** You normally do not set it. `pnpm catalog:bundle` computes which Harbor an app needs from
+the fields and values it uses (`src/packages/features.ts`, decision 159) and stamps `"minHarbor":
+"x.y.z"` on its entry in the bundled `index.json`. An older Harbor lists the app as unavailable ("needs
+Harbor x.y.z or newer"), refuses to install it, and offers no update to it. If you do set it by hand in
+`apps/index.json` (say, for a behaviour the table cannot see), the bundle keeps the higher of yours and
+the computed one, and `pnpm catalog:verify` fails when yours is lower (it prints
+`minHarbor declared=… computed=…` for every app).
+
+**The format only grows** (for Harbor developers changing the format itself). Every published app is
+read by Harbors of every age, so:
+- never remove, rename or narrow a field or value an official package may use;
+- add new fields and values as optional, each with an entry in `FEATURES` in `src/packages/features.ts`
+  (`since` = the next Harbor release; `value` for one new enum value; `when` for a widened pattern or
+  limit). `tests/unit/package-features.test.ts` fails until you do, and fails when a field disappears;
+- a breaking change needs a migration in the engine: Harbor adapts old packages, like Umbrel;
+- unknown keys stay refused (an unknown Compose key is a security boundary).
+Harbor CI's `official-catalog` job loads the latest published catalog with every Harbor commit, so a
+change that breaks a published app fails before it ships.
 
 **Qualification.** `"status": "passed"` in `release.json` only comes from a live run on a disposable
 droplet: `node scripts/vm/qualify-catalog.mjs --catalog <dir>` installs each app on a box running a
@@ -410,8 +425,8 @@ by hand. A qualification change alone needs no revision bump.
 1. **verify** checks as above, with Harbor checked out at the commit pinned in `.harbor-ref` (a full sha
    on Harbor's `main`; branches and tags are refused, because the bundle is built by that code),
 2. **bundle** (read-only token, no secret) runs `pnpm catalog:bundle <apps> --out dist --commit <sha>
-   --serial <unix>`, which writes `catalog.zip` (deterministic: index.json plus, per app, only the package
-   files and the assets its manifest names) and an unsigned `catalog.json` (zip sha256 + size, commit,
+   --serial <unix>`, which writes `catalog.zip` (deterministic: index.json with each app's computed
+   `minHarbor` stamped in, plus, per app, only the package files and the assets its manifest names) and an unsigned `catalog.json` (zip sha256 + size, commit,
    serial, createdAt, package count), and hands them over as a workflow artifact,
 3. **sign** runs in the `catalog-signing` GitHub Environment (main only), the only place the
    `CATALOG_SIGNING_KEY` secret exists. It checks out only harbor-apps and installs nothing.

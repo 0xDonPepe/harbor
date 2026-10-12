@@ -1,11 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildCatalogBundle } from '../../scripts/catalog-bundle-build.js';
+import { extractCatalog, fetchCatalogBundle } from '../../scripts/catalog-fetch.mjs';
+import { verifyCatalog } from '../../scripts/catalog-verify-lib.js';
+import * as bundleLib from '../../src/packages/catalog-bundle.js';
 import { openBundle, parseBundleMeta } from '../../src/packages/catalog-bundle.js';
-import { readCatalogIndex } from '../../src/packages/catalog.js';
+import * as catalogLib from '../../src/packages/catalog.js';
+import { listCatalog, readCatalogIndex } from '../../src/packages/catalog.js';
+import type { HarborFeature } from '../../src/packages/features.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
 
 // Decision 158: the harbor-apps CI bundles its apps/ folder with scripts/catalog-bundle.ts and signs the
@@ -33,7 +38,8 @@ describe('catalog bundle build (decision 158)', () => {
     expect(meta.serial).toBe(SERIAL);
     const names = [...files.keys()];
     expect(names).toEqual([...names].sort());
-    expect(files.get('index.json')).toEqual(readFileSync(path.join(REPO_CATALOG, 'index.json')));
+    // re-written (decision 159: minHarbor is stamped), same entries; nothing in the fixtures needs a minimum
+    expect(JSON.parse(files.get('index.json')!.toString('utf8'))).toEqual(readCatalogIndex(REPO_CATALOG));
     for (const id of ids) for (const f of ['manifest.yaml', 'compose.yaml', 'README.md', 'release.json']) expect(files.get(`${id}/${f}`), `${id}/${f}`).toEqual(readFileSync(path.join(REPO_CATALOG, id, f)));
     expect(files.get('excalidraw/icon.svg')).toEqual(readFileSync(path.join(REPO_CATALOG, 'excalidraw', 'icon.svg')));
     expect(names.some((n) => n.startsWith('README') || n.includes('..'))).toBe(false); // the catalog README is not a package file
@@ -91,5 +97,82 @@ describe('catalog bundle build (decision 158)', () => {
     expect(readFileSync(path.join(dir, 'jellyfin', 'release.json'))).toEqual(before);
     expect(runScript('catalog-hash.ts', ['--catalog', dir, 'jellyfin']).code).toBe(0);
     expect(runScript('catalog-hash.ts', ['--catalog', dir, '--check']).code).toBe(0);
+  });
+
+  it('extracts a fetched bundle into a catalog that verifies (scripts/catalog-fetch.mjs, local bundle + test key)', async () => {
+    const key = throwawayKey();
+    const built = buildCatalogBundle(REPO_CATALOG, { commit: COMMIT, serial: SERIAL });
+    const src = tempDir('harbor-fetch-src-');
+    writeFileSync(path.join(src, 'catalog.zip'), built.zip);
+    writeFileSync(path.join(src, 'catalog.json'), built.meta);
+    writeFileSync(path.join(src, 'catalog.json.sig'), key.signMeta(built.meta));
+    const fetched = await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src, HARBOR_CATALOG_PUBLIC_KEY: key.publicKey });
+    expect(fetched.official).toBe(false);
+    const out = tempDir('harbor-fetch-out-');
+    const index = extractCatalog(out, fetched, { bundleLib, catalogLib });
+    expect(index).toEqual(readCatalogIndex(REPO_CATALOG));
+    expect(readFileSync(path.join(out, 'catalog.json'))).toEqual(built.meta);
+    expect(verifyCatalog(out).failed).toBe(0);
+    // a bundle signed by any other key is refused before anything is extracted
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src, HARBOR_CATALOG_PUBLIC_KEY: throwawayKey().publicKey })).rejects.toThrow(/signature does not verify/);
+  });
+});
+
+// Decision 159 with an injected feature table: pretend `command` (decision 123) first arrived in 0.29.0.
+describe('automatic minHarbor (decision 159)', () => {
+  const TABLE: HarborFeature[] = [{ path: 'compose.services.*.command', since: '0.29.0', note: 'pretend' }];
+  function catalogWithCommand(declared?: string): string {
+    const dir = cloneCatalog();
+    writePackage(dir, 'demo', { manifest: MINIMAL_MANIFEST, compose: MINIMAL_COMPOSE + '    command: ["serve"]\n', images: { web: `example/demo@${DIGEST_A}` } });
+    if (declared) {
+      const index = JSON.parse(readFileSync(path.join(dir, 'index.json'), 'utf8'));
+      index.packages.demo.minHarbor = declared;
+      writeFileSync(path.join(dir, 'index.json'), JSON.stringify(index));
+    }
+    return dir;
+  }
+
+  it('the bundle stamps the computed minimum; an older Harbor lists the app as unavailable', () => {
+    const built = buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE });
+    expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.29.0');
+    expect(built.packages.filter((p) => p.minHarbor).map((p) => p.id)).toEqual(['demo']);
+    const key = throwawayKey();
+    const { files } = openBundle({ meta: built.meta, sig: key.signMeta(built.meta), zip: built.zip }, [key.publicKey]);
+    const index = JSON.parse(files.get('index.json')!.toString('utf8'));
+    expect(index.packages.demo).toEqual({ revision: '1', dir: 'demo', minHarbor: '0.29.0' });
+    expect(index.packages.memos.minHarbor).toBeUndefined();
+    const box = tempDir('harbor-box-catalog-');
+    for (const [name, bytes] of files) {
+      mkdirSync(path.dirname(path.join(box, name)), { recursive: true });
+      writeFileSync(path.join(box, name), bytes);
+    }
+    const old = listCatalog(box, 'bundled', { harborVersion: '0.28.0' });
+    expect(old.find((i) => i.id === 'demo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 0.29.0 or newer', name: 'Demo' });
+    expect(old.filter((i) => i.availability === 'unavailable').map((i) => i.id)).toEqual(['demo']);
+    expect(listCatalog(box, 'bundled', { harborVersion: '0.29.0' }).find((i) => i.id === 'demo')?.availability).toBe('available');
+    // the same checkout still gives the same bytes
+    expect(buildCatalogBundle(catalogWithCommand(), { commit: COMMIT, serial: SERIAL, features: TABLE }).zip.equals(built.zip)).toBe(true);
+  });
+
+  it('a higher declared minimum wins over the computed one', () => {
+    const built = buildCatalogBundle(catalogWithCommand('0.30.0'), { commit: COMMIT, serial: SERIAL, features: TABLE });
+    expect(built.packages.find((p) => p.id === 'demo')?.minHarbor).toBe('0.30.0');
+  });
+
+  it('verify reports declared vs computed and fails a declared minimum below the computed one', () => {
+    const ok = verifyCatalog(catalogWithCommand(), { features: TABLE });
+    expect(ok.failed).toBe(0);
+    expect(ok.lines.find((l) => l.includes(' demo@'))).toMatch(/minHarbor declared=none computed=0\.29\.0/);
+    expect(verifyCatalog(catalogWithCommand('0.29.0'), { features: TABLE }).failed).toBe(0);
+    const low = verifyCatalog(catalogWithCommand('0.28.0'), { features: TABLE });
+    expect(low.failed).toBe(1);
+    expect(low.lines.find((l) => l.startsWith('FAIL'))).toMatch(/^FAIL demo: index.json declares minHarbor 0\.28\.0 but the package uses compose\.services\.\*\.command \(0\.29\.0\): raise it to 0\.29\.0/);
+    expect(verifyCatalog(catalogWithCommand('0.28.0')).failed).toBe(0); // the real table: command is baseline
+  });
+
+  it('the verify CLI prints declared vs computed (the real table: nothing beyond the baseline yet)', () => {
+    const r = runScript('catalog-verify.ts', [catalogWithCommand('0.28.0'), '--quiet']);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toMatch(/ok {3}demo@1 .*minHarbor declared=0\.28\.0 computed=none/);
   });
 });

@@ -1,4 +1,5 @@
-# CI: lint, typecheck, unit + integration (fake adapter), build, UI e2e. Frozen lockfile.
+# CI: lint, typecheck, unit + integration (fake adapter), build, UI e2e (job verify); this commit against the
+# latest published official app catalog (job official-catalog, decision 159). Frozen lockfile.
 # Never touches a Docker socket and never reboots anything; live VM tests are run separately with pnpm test:vm.
 name: ci
 on:
@@ -34,3 +35,24 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report
+  # Decision 159: does THIS commit still load every app in the latest published official catalog? An engine change
+  # that would break published apps fails here, at push/PR time, not first at release (pnpm package). A separate job,
+  # so its result never changes the verify job's. Without any catalog release on carlosalaniz/harbor-apps (bootstrap
+  # only) the fetch step fails with "is there a published catalog release on carlosalaniz/harbor-apps?".
+  official-catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.16.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # the fetch verifies the signature with the compiled verifier; catalog:verify then runs this commit's sources
+      - run: pnpm build:server
+      - run: pnpm catalog:fetch --out "$RUNNER_TEMP/official-catalog"
+      - run: pnpm catalog:verify "$RUNNER_TEMP/official-catalog" --quiet

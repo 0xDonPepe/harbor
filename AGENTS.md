@@ -17,7 +17,7 @@ release tarball ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **159**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **160**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -25,7 +25,8 @@ release tarball ships the latest one as an offline seed.
 ```
 src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
   contracts/    JSON Schemas + DTO types — the API's source of truth
-  packages/     restricted YAML parser, manifest/compose validators, catalog loader, zip import
+  packages/     restricted YAML parser, manifest/compose validators, catalog loader, zip import,
+                features.ts (format field/value → first Harbor version; computes minHarbor, decision 159)
   planner/      identity, port allocation, Compose rendering (PURE functions, no I/O)
   state/        SQLite (better-sqlite3, SCHEMA_VERSION 11, migrations v1→v11; v9 = `links`, v10 = several public names per endpoint, v11 = `backup_runs`), repositories
   docker/       adapter interface, Dockerode adapter, Compose CLI runner, FAKE adapter, port probe
@@ -58,7 +59,8 @@ targets/<id>/   one backup place package = manifest.yaml (kind BackupTarget: a f
 tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live suite, opt-in);
                 fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store)
 scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_CATALOG_DIR, default
-                ../harbor-apps/apps), openapi.ts, package.mjs (downloads + verifies the signed seed), vm/ controllers
+                ../harbor-apps/apps), catalog-fetch.mjs (downloads + verifies the latest signed catalog),
+                openapi.ts, package.mjs (ships that catalog as the seed), vm/ controllers
 docs/           OPERATOR_GUIDE.md (user manual), DEVELOPER_PACKAGES.md (package authoring),
                 VERIFICATION.md (evidence log), FUTURE.md (deliberately not built), TODO.md (wanted, not built yet),
                 design/ (UI, CATALOG, EXPOSURE, ROUND9, APP_HOMES, BACKUPS), openapi.json (GENERATED — never hand-edit)
@@ -92,6 +94,13 @@ Key separations (do not blur them):
 5. **Every mutation is a plan → operation** through the serial queue with idempotency keys,
    15-minute plan expiry, persisted phases, and no replay after interruption (`needs_action`).
    No direct Docker writes from routes.
+6. **The package format only grows** (decision 159). Published apps are read by Harbors of every age,
+   so never remove, rename or narrow a field or value an official package may use. Add new fields and
+   values as optional, each with an entry in `src/packages/features.ts` (`FEATURES`, `since` = the next
+   release): the catalog bundle then stamps `minHarbor` and older boxes list the app as "needs Harbor
+   x.y.z or newer" instead of failing on it. A breaking change needs a migration in the engine (Harbor
+   adapts old packages, like Umbrel). `tests/unit/package-features.test.ts` fails on an unrecorded or
+   removed schema path; CI job `official-catalog` loads the latest published catalog with your commit.
 
 ## 4. HOW to work here
 
@@ -130,7 +139,7 @@ Key separations (do not blur them):
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **159**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **160**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -170,11 +179,16 @@ The non-negotiable subset:
 - **After editing an official package** (in harbor-apps; the scripts find `../harbor-apps/apps` on their
   own, or take `--catalog <dir>` / `HARBOR_CATALOG_DIR`): raise the revision in the manifest AND in
   `apps/index.json` → `node scripts/catalog-pin.mjs <id>` for new image pins → `pnpm catalog:hash <id>`
-  (refresh `release.json` hashes) → `pnpm catalog:verify` (validates as the daemon does). A package that
-  needs a newer Harbor sets `minHarbor` on its index entry. Qualification (`passed`) only comes from
+  (refresh `release.json` hashes) → `pnpm catalog:verify` (validates as the daemon does). `minHarbor` is
+  computed and stamped by `pnpm catalog:bundle` from the fields a package uses (decision 159); authors
+  normally leave it out, and one set by hand that is lower than the computed value fails verify. Qualification (`passed`) only comes from
   `scripts/vm/qualify-catalog.mjs --catalog <dir>` on a droplet — never stamp it by hand.
 - **Forbidden**: secrets in the package, interpolation/`$` tricks, symlinks/`..` paths,
   remote images in presentation, rendering package text as HTML (served sandboxed).
+- **Changing the format itself** (a schema in `src/contracts/manifest.schema.ts` or
+  `compose.schema.ts`): it only grows (§3.6). New optional field or enum value → a `FEATURES` entry in
+  `src/packages/features.ts` with the next version; a widened pattern or limit → an entry with `when`.
+  Unknown keys stay refused (they are a security boundary for the Compose subset).
 
 ### 4.3 UI/UX rules (the craft pass is the bar)
 

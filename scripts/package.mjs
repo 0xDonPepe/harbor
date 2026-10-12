@@ -7,7 +7,8 @@
 // No npm/pnpm/compilation happens on the destination host.
 // catalog/ is the offline seed (decision 158): the latest signed bundle published by carlosalaniz/harbor-apps,
 // verified against the pinned key and extracted (index.json + package dirs + catalog.json + catalog.json.sig).
-// "Latest" is resolved once to its tag c<serial>; all three files come from releases/download/c<serial>.
+// "Latest" is resolved once to its tag c<serial>; all three files come from releases/download/c<serial>
+// (scripts/catalog-fetch.mjs, shared with CI's official-catalog job).
 //   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json/catalog.json.sig from <dir> instead of downloading
 //   HARBOR_CATALOG_PUBLIC_KEY=<b64>  trust this SPKI key instead of the official one (local test builds only;
 //                                    recorded in release.json, never set in CI)
@@ -15,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, lstatSync, unlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { extractCatalog, fetchCatalogBundle, loadCatalogLibs } from './catalog-fetch.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -50,44 +52,16 @@ for (const f of ['dist/daemon.js', 'dist/cli/main.js', 'dist/packages/catalog-bu
 }
 
 // 1b. App catalog seed: the signed harbor-apps bundle, verified before anything is staged. No silent empty catalog.
-const bundleLib = await import(new URL('../dist/packages/catalog-bundle.js', import.meta.url).href);
-const catalogLib = await import(new URL('../dist/packages/catalog.js', import.meta.url).href);
-const catalogKey = process.env.HARBOR_CATALOG_PUBLIC_KEY ?? bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY;
-if (catalogKey !== bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY) console.warn('WARNING: HARBOR_CATALOG_PUBLIC_KEY overrides the official catalog key; this archive is for local testing only');
-async function fetchAsset(url, max) {
-  console.log(`downloading ${url}`);
-  const res = await fetch(url, { redirect: 'follow', signal: globalThis.AbortSignal.timeout(120_000) });
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status} (is there a published catalog release on carlosalaniz/harbor-apps?)`);
-  const bytes = Buffer.from(await res.arrayBuffer());
-  if (bytes.length > max) throw new Error(`${url}: ${bytes.length} bytes exceeds ${max}`);
-  return bytes;
-}
-// Resolve "latest" once (the Location of releases/latest names tag c<serial>) and fetch all three files from that
-// fixed tag: per-file `latest/download` requests could mix two bundles when harbor-apps publishes mid-download.
-async function resolveCatalogTag() {
-  const releases = bundleLib.catalogReleasesBase(bundleLib.OFFICIAL_CATALOG_URL);
-  console.log(`resolving ${releases}/latest`);
-  const res = await fetch(`${releases}/latest`, { redirect: 'manual', signal: globalThis.AbortSignal.timeout(60_000) });
-  if (res.status < 300 || res.status > 399) throw new Error(`${releases}/latest: HTTP ${res.status}, expected a redirect to the latest tag (is there a published catalog release on carlosalaniz/harbor-apps?)`);
-  const serial = bundleLib.catalogTagFromLocation(res.headers.get('location'), releases);
-  return { serial, url: bundleLib.catalogDownloadBase(releases, serial) };
-}
-const pinned = process.env.HARBOR_CATALOG_BUNDLE ? null : await resolveCatalogTag();
-const catalogSource = pinned ? pinned.url : path.resolve(process.env.INIT_CWD ?? process.cwd(), process.env.HARBOR_CATALOG_BUNDLE);
-const bundleRaw = {};
-for (const [k, name] of Object.entries(bundleLib.BUNDLE_FILES)) {
-  const max = k === 'zip' ? bundleLib.MAX_BUNDLE_ZIP_BYTES : bundleLib.MAX_BUNDLE_META_BYTES;
-  bundleRaw[k] = process.env.HARBOR_CATALOG_BUNDLE ? readFileSync(path.join(catalogSource, name)) : await fetchAsset(`${catalogSource}/${name}`, max);
-}
-let bundle;
+const catalogLibs = await loadCatalogLibs();
+const { bundleLib, catalogLib } = catalogLibs;
+let fetched;
 try {
-  bundle = bundleLib.openBundle({ meta: bundleRaw.meta, sig: bundleRaw.sig.toString('utf8'), zip: bundleRaw.zip }, [catalogKey]);
-  if (pinned && bundle.meta.serial !== pinned.serial) throw new Error(`tag c${pinned.serial} carries a catalog with serial ${bundle.meta.serial}`);
+  fetched = await fetchCatalogBundle(bundleLib);
 } catch (e) {
-  console.error(`app catalog from ${catalogSource}: ${e.message}; no release archive was built`);
+  console.error(`${e.message}; no release archive was built`);
   process.exit(1);
 }
-console.log(`app catalog serial ${bundle.meta.serial} (${bundle.meta.createdAt}, commit ${bundle.meta.commit.slice(0, 12)}, ${bundle.meta.packages} packages) from ${catalogSource}: signature verified`);
+const { bundle, source: catalogSource, key: catalogKey } = fetched;
 
 // 2. Node runtime (official tarball, verified against the published SHASUMS256.txt)
 mkdirSync(cacheDir, { recursive: true });
@@ -119,16 +93,8 @@ for (const f of ['CHANGELOG.md', 'README.md', 'bin/npm', 'bin/npx', 'bin/corepac
 cpSync(path.join(ROOT, 'dist'), path.join(stage, 'dist'), { recursive: true });
 cpSync(path.join(ROOT, 'web', 'dist'), path.join(stage, 'web'), { recursive: true });
 const stageCatalog = path.join(stage, 'catalog');
-for (const [name, bytes] of bundle.files) {
-  if (path.isAbsolute(name) || name.split('/').some((seg) => seg === '..' || seg === '')) throw new Error(`catalog.zip: unsafe entry ${name}`);
-  mkdirSync(path.dirname(path.join(stageCatalog, name)), { recursive: true });
-  writeFileSync(path.join(stageCatalog, name), bytes);
-}
-writeFileSync(path.join(stageCatalog, bundleLib.BUNDLE_FILES.meta), bundleRaw.meta); // verbatim: the daemon reads the seed serial from it
-writeFileSync(path.join(stageCatalog, bundleLib.BUNDLE_FILES.sig), bundleRaw.sig);
-const catalogIndex = catalogLib.readCatalogIndex(stageCatalog);
+const catalogIndex = extractCatalog(stageCatalog, fetched, catalogLibs);
 const catalogIds = Object.keys(catalogIndex.packages);
-if (!catalogIds.length || catalogIds.length !== bundle.meta.packages) throw new Error(`catalog.zip lists ${catalogIds.length} packages, catalog.json says ${bundle.meta.packages}`);
 for (const id of catalogIds) catalogLib.loadPackage(stageCatalog, id); // every seeded package loads exactly as the daemon loads it
 cpSync(path.join(ROOT, 'targets'), path.join(stage, 'targets'), { recursive: true }); // backup place packages (decision 152)
 cpSync(path.join(ROOT, 'release-assets', 'bin'), path.join(stage, 'bin'), { recursive: true });
@@ -174,7 +140,7 @@ writeFileSync(
       commit,
       node: { version: NODE_VERSION, tarball, sha256: actual, source: `https://nodejs.org/dist/${NODE_VERSION}/` },
       packages: Object.fromEntries(Object.entries(catalogIndex.packages).map(([id, e]) => [id, e.revision])),
-      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, publicKey: catalogKey, official: catalogKey === bundleLib.OFFICIAL_CATALOG_PUBLIC_KEY },
+      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, publicKey: catalogKey, official: fetched.official },
       dependencies: pkg.dependencies,
     },
     null,

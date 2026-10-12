@@ -30,6 +30,7 @@
     "catalog:verify": "tsx scripts/catalog-verify.ts",
     "catalog:hash": "tsx scripts/catalog-hash.ts",
     "catalog:bundle": "tsx scripts/catalog-bundle.ts",
+    "catalog:fetch": "node scripts/catalog-fetch.mjs",
     "openapi": "tsx scripts/openapi.ts"
   },
   "dependencies": {

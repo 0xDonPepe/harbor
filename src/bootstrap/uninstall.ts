@@ -5,6 +5,7 @@
 // folders ("bind" resources), Docker itself, and optional tools installed from
 // OS packages (Cockpit, Tailscale, Caddy) are left alone.
 import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { CLI_LINK, removeCliLink } from './cli-link.js';
 import { DockerodeAdapter } from '../docker/dockerode-adapter.js';
 import { HarborError } from '../errors.js';
 import { LABELS, PRODUCT } from '../naming.js';
@@ -39,6 +40,7 @@ export function uninstallPreview(facts: HostFacts, opts: { keepData: boolean }):
     `Stop and disable systemd unit ${PRODUCT.paths.systemdUnit} (only if written by Harbor bootstrap)`,
     `Remove Harbor-labelled Docker objects (label ${LABELS.installation}=<this installation>): containers (stop + remove), volumes, networks — including platform projects ${PRODUCT.platformProjectPrefix}*`,
     `Remove ${PRODUCT.paths.opt} (release files)`,
+    `Remove ${CLI_LINK} (only Harbor's own link to the CLI)`,
     `Remove ${PRODUCT.paths.etc} (daemon config)`,
     opts.keepData ? `Keep ${PRODUCT.paths.var} (state, secrets, release snapshots)` : `Remove ${PRODUCT.paths.var} (state, secrets, release snapshots — apps' data volumes are already gone above)`,
     `Remove ${PRODUCT.paths.data} only if empty (your folders inside it are never deleted)`,
@@ -194,6 +196,7 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallResult
     }
   }
   if (facts.existing.unit === 'harbor') rmSync(unitPath, { force: true });
+  if (removeCliLink()) removed.push(CLI_LINK);
   // Backup tools and root-only backup state (rclone sessions, restic cache). Backups stored at the
   // operator's places are theirs and stay where they are.
   for (const dir of ['/usr/local/lib/harbor', '/var/lib/harbor-backup', '/var/cache/harbor']) {

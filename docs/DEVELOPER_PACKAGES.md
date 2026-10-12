@@ -457,22 +457,28 @@ the archive from a bundle of that checkout with `HARBOR_CATALOG_BUNDLE`, or use 
 by hand. A qualification change alone needs no revision bump.
 
 **Publishing (maintainers).** Every push to `main` of harbor-apps that touches `apps/`, `scripts/`
-or the workflow (or a manual run) runs two jobs:
+or the workflow (or a manual run) runs four jobs:
 
-1. **verify** checks as above: the latest Harbor release for every app, and each declared
-   `release.minHarbor` release for the apps declaring it,
-2. **release** (the only job with write access; the token reaches only its `gh` steps) runs
-   `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix>` with the latest Harbor release,
-   which writes `catalog.zip` (deterministic: index.json with each app's declared `minHarbor` copied in,
-   plus, per app, only the package files and the assets its manifest names) and `catalog.json` (zip sha256 + size, commit, serial, createdAt, package
-   count), then runs `gh release create c<serial>` with the two files and marks the release latest.
+1. **plan** resolves the latest Harbor release to its commit (checked to be on Harbor's `main`), runs its
+   `pnpm catalog:plan`, and checks every declared `release.minHarbor` is a published Harbor release,
+2. **check** (one job per Harbor version, from plan) checks out that exact commit with its own Node and
+   pnpm and runs its `catalog:verify` on the apps that version must accept: the latest release on every
+   app, and each declared `release.minHarbor` release on the apps declaring it,
+3. **bundle** (read-only, no token) refuses a committer time more than 5 minutes ahead, then runs
+   `pnpm catalog:bundle <apps> --out dist --commit <sha> --serial <unix> --summary dist/summary.json` with
+   the latest Harbor release, which writes `catalog.zip` (deterministic: index.json with each app's
+   declared `minHarbor` copied in, plus, per app, only the package files and the assets its manifest names)
+   and `catalog.json` (zip sha256 + size, commit, serial, createdAt, package count), and uploads `dist/`,
+4. **publish** (the only job with write access; no checkout, no install; the token reaches only its `gh`
+   steps) downloads that artifact, checks it belongs to this commit and serial, and runs
+   `gh release create c<serial>` with the two files (release notes from `summary.json`), marked latest.
 
 There is no signature. A box trusts the catalog because it comes over HTTPS from this GitHub repository,
 the same trust as Harbor's own self-update (decision 158). `catalog.json` is an integrity check against
 a truncated or mixed download, not a trust anchor.
 
 The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so:
-- a committer time more than 5 minutes in the future fails the release job,
+- a committer time more than 5 minutes in the future fails the bundle job,
 - a re-run for a commit that is already released does nothing,
 - a different commit in the same second as an existing release fails ("make a new commit"),
 - a commit older than the latest release is skipped when `main` has moved on (the newer commit

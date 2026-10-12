@@ -195,12 +195,15 @@ Harbor keeps only frozen copies of 9 apps in `tests/fixtures/catalog` for its ow
 with the same serial as an existing release, and for a serial not newer than the latest release skips
 when `main` has moved on (the newer commit publishes) and fails otherwise (clock skew).
 
-**CI layout.** Two jobs. *verify* (every PR, manual run, and push to main touching the apps, the CI
-scripts or the workflow) runs the tools of published Harbor releases (decision 161, §10): the latest
-release on every app, and each declared `release.minHarbor` release on the apps declaring it.
-*release* (main push or manual run only) bundles with the latest Harbor release's tools and runs
-`gh release create c<serial> catalog.zip catalog.json --latest`; it is the only job with
-`contents: write`, and its token is only on the two steps that call `gh` (checkouts keep no credentials).
+**CI layout.** Four jobs. *plan* (every PR, manual run, and push to main touching the apps, the CI
+scripts or the workflow) resolves the latest Harbor release to its commit, runs its `catalog:plan`, and
+checks each declared `release.minHarbor` is a published release (decision 161, §10). *check* runs the
+tools of each of those releases at its exact commit: the latest on every app, each declared minimum on
+the apps declaring it. *bundle* (main push or manual run only; read-only, no token) builds `catalog.zip`
++ `catalog.json` + `summary.json` with the latest release's tools and uploads them. *publish* (the only
+job with `contents: write`; no checkout, no install, its token only on the two `gh` steps) downloads that
+artifact, checks it belongs to this commit, and runs `gh release create c<serial> catalog.zip catalog.json
+--latest`.
 
 **Trust.** HTTPS to GitHub, exactly like Harbor's self-update: whoever can publish a harbor-apps release
 is trusted, as whoever can publish a Harbor release already is. There is no signature (decision 158:

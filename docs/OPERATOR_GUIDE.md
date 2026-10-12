@@ -155,7 +155,7 @@ button when absent — one click starts the install as root and the card reports
 about). Every change goes through the same plan review; the operation tray at the bottom right shows
 progress and, once, any generated credentials.
 
-CLI (`/opt/harbor/bin/harbor`, add it to PATH if you like):
+CLI (`harbor`; bootstrap links `/usr/local/bin/harbor` to `/opt/harbor/bin/harbor` since 0.28.2, and never replaces a file of yours there):
 
 ```sh
 harbor login                      # prompts without echo; token stored 0600 in ~/.config/harbor

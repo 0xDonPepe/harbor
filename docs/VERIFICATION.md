@@ -252,7 +252,7 @@ published 0.28.1, 598c7f2, is the ufw change of decision 160 and has neither the
   `--sumary` (typo) or a valueless `--summary` exit 2. On `../harbor-apps/apps`: 17 entries, all
   `version: null, minHarbor: null`.
 - **Release guard (`scripts/release-tag-guard.sh`, read-only `git ls-remote` against the real origin):**
-  `v0.28.1` with 598c7f2 → exit 0 (a re-run); `v0.28.1` with cca556d → exit 1 "already released from
+  `v0.28.1` with 598c7f2 → exit 0 (a re-run); `v0.28.1` with any other commit → exit 1 "already released from
   598c7f2…: bump the version"; `v0.28.2` → "is new", exit 0. Annotated tag in a scratch repo: the `^{}` commit
   is compared (match 0, other commit 1, missing argument 1).
 - **harbor-apps CI (local only, not run on GitHub):** YAML parses (4 jobs: plan, check, bundle with

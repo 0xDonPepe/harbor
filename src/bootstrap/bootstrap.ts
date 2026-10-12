@@ -17,6 +17,7 @@ import { prepareDataFolderForSealing } from './app-crypto-apply.js';
 import { installBackupTools } from './backup-tools.js';
 import { configureAvahiForLan, restartAvahi, unpinAvahiHostName } from './mdns.js';
 import { openLanFirewall } from './firewall.js';
+import { ensureCliLink } from './cli-link.js';
 import { privateInterfaces, lanUrl as lanUrlFor } from '../system/lan.js';
 import { readSetupCode, writeSetupCode } from '../auth/setup.js';
 import { hostname as osHostname } from 'node:os';
@@ -156,6 +157,11 @@ async function bootstrapAfterStop(opts: BootstrapOptions, s: { facts: Awaited<Re
     log(`installed release ${release.version} to ${PRODUCT.paths.opt}`);
   } else {
     log(`release already at ${PRODUCT.paths.opt}`);
+  }
+  try {
+    log(ensureCliLink());
+  } catch (e) {
+    log(`could not link the CLI into /usr/local/bin (${(e as Error).message}); use ${PRODUCT.paths.opt}/bin/harbor`);
   }
   await execOk('/usr/bin/chown', ['-R', 'root:root', PRODUCT.paths.opt]);
 
@@ -463,6 +469,6 @@ export function accessInstructions(port: number, toolPorts: number[], appPorts: 
     `From another machine, forward the same port numbers over SSH (management, app ports, tools):`,
     `  ssh ${forwards} <user>@<this-host>`,
     'If a local port is busy on your machine, free it or choose a different local port and open http://localhost:<that-port>/ — the remote ports never change.',
-    `CLI: ${PRODUCT.paths.opt}/bin/harbor login   (then: catalog, install <package>, list, tools)`,
+    `CLI: harbor login   (then: catalog, install <package>, list, tools; full path ${PRODUCT.paths.opt}/bin/harbor)`,
   ];
 }

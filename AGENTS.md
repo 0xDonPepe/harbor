@@ -134,8 +134,8 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (290)
-   pnpm test:integration        # 213 + 3 live-Docker skipped (~5 min)
+   pnpm test                    # unit (321)
+   pnpm test:integration        # 214 + 3 live-Docker skipped (~5 min)
    pnpm build && pnpm test:e2e  # 30 Playwright (~2 min, ports 18500/18700)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check

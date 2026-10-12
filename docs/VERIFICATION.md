@@ -348,6 +348,21 @@ Catalog compatibility (decision 159), local only (no UI, route or schema change;
 
 Not verified: the `official-catalog` CI job on GitHub Actions (it needs the first harbor-apps release).
 
+No-signing merged onto the compat-hardened main (decisions 158 + 159), local, fake adapter:
+- `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 321 passed (43 files; `catalog-fetch` extracts a local
+  bundle without any key, writes no `.sig`, and refuses a zip with one flipped byte: "does not match its
+  catalog.json checksum"); `pnpm test:integration` 214 passed + 3 live-Docker skipped; `pnpm build &&
+  pnpm test:e2e` 30 passed; `pnpm catalog:verify tests/fixtures/catalog --quiet` (9 ok), `pnpm
+  catalog:hash --catalog tests/fixtures/catalog --check`, `pnpm openapi -- --check` current.
+- harbor-apps `apps/` (main with the no-signing CI): `catalog:verify` 17 ok; `catalog:bundle` 17 apps
+  (no `.sig` written); `HARBOR_CATALOG_BUNDLE=<that dir> pnpm package --skip-build` built the archive with
+  `catalog/index.json` (equal to `apps/index.json`) + `catalog.json` (byte-identical to the bundle's), no
+  `.sig` anywhere, and `release.json` `catalog` = `{serial, commit, createdAt, source, official: false}`
+  (no `publicKey`); the archive was deleted afterwards.
+- harbor-apps release notes: the awk that reads `bundle.log` takes the version only from a field that
+  starts with `(` and prints "needs Harbor x.y.z+" for `minHarbor=`; checked on sample lines with and
+  without version/minHarbor (BSD awk; POSIX only) and on the real bundle log.
+
 
 Console + presentation only; no engine, route or schema change. Local, fake adapter:
 - `pnpm test:e2e` 30 passed: the Excalidraw spec checks the Storage/Access summaries, *How?*, the

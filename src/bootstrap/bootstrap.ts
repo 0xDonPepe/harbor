@@ -16,6 +16,7 @@ import { harborUnit, POLKIT_RULE_PATH, polkitPowerRule, SELF_UPDATE_UNIT_FILE, s
 import { prepareDataFolderForSealing } from './app-crypto-apply.js';
 import { installBackupTools } from './backup-tools.js';
 import { configureAvahiForLan, restartAvahi, unpinAvahiHostName } from './mdns.js';
+import { openLanFirewall } from './firewall.js';
 import { privateInterfaces, lanUrl as lanUrlFor } from '../system/lan.js';
 import { readSetupCode, writeSetupCode } from '../auth/setup.js';
 import { hostname as osHostname } from 'node:os';
@@ -125,7 +126,7 @@ export async function bootstrap(opts: BootstrapOptions): Promise<BootstrapResult
     facts.existing.state ? `Keep existing state in ${PRODUCT.paths.var} (apps, keys, administrator untouched)` : `Initialize fresh state in ${PRODUCT.paths.var}`,
     adminPreview,
     ...(opts.hostname ? [`Set the machine hostname to ${opts.hostname} (mDNS name ${opts.hostname}.local)`] : []),
-    ...(opts.lan ? [`LAN mode: install avahi (mDNS), console on port ${lanPort} and app ports on every interface of this machine`] : []),
+    ...(opts.lan ? [`LAN mode: install avahi (mDNS), console on port ${lanPort} and app ports on every interface of this machine`, 'LAN mode: if ufw is installed, allow the console, 443, app ports (and their HTTPS twins) and mDNS from private networks only'] : []),
     `${facts.existing.unit === 'harbor' ? 'Rewrite' : 'Install'} systemd unit ${PRODUCT.paths.systemdUnit} and (re)start it`,
   ];
   if (!(await opts.confirm('Apply the Harbor installation steps above?', preview))) throw new HarborError('INVALID_REQUEST', 'bootstrap not approved');
@@ -237,6 +238,8 @@ async function bootstrapAfterStop(opts: BootstrapOptions, s: { facts: Awaited<Re
     // Publish <hostname>.local only on the LAN interface (never on Docker's
     // bridges) and restart avahi socket+service together (decision 107).
     await configureAvahiForLan(log, { restart: avahiUnpinned });
+    // ufw (default deny) would drop the console, LAN HTTPS app proxies and mDNS (decision 160).
+    await openLanFirewall(log, { lanPort: config.lan.port, appPortRange: config.appPortRange });
   } else if (avahiUnpinned) {
     await restartAvahi(log);
   }

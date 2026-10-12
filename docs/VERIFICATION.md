@@ -220,6 +220,18 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3r. LAN mode opens its ports in ufw (2026-10-12, Harbor 0.28.1, decision 160)
+
+- **Found live on the home server (0.27.1):** an app's secure LAN address (`https://<hostname>.local:38085`)
+  timed out from another device while its plain LAN address (`:18085`) answered 200. On the box the daemon
+  was listening on 38080–38087 and a loopback `curl` to 38085 returned 200; ufw was active with default deny
+  incoming. Docker-published ports skip ufw's INPUT chain, the daemon's LAN HTTPS listeners do not.
+- Fixed there by hand with a ufw allow rule for the home subnet on 38000:38999; the secure addresses then
+  answered 200 from the LAN.
+- **Code:** `src/bootstrap/firewall.ts` + the LAN step of bootstrap; `harbor uninstall` deletes the rules.
+- **Tests:** unit `firewall.test.ts` (port list incl. custom LAN port/range, private sources only, delete
+  args, `ufw status` parsing). **Not yet run live:** the bootstrap step itself on a box with ufw.
+
 ## 3q. The app catalog moves to harbor-apps (2026-10-11, Harbor 0.28.0, decision 158)
 
 **No live run yet.** Nothing is pushed, no harbor-apps release exists, and no box has downloaded a

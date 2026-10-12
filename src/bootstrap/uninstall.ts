@@ -9,6 +9,8 @@ import { DockerodeAdapter } from '../docker/dockerode-adapter.js';
 import { HarborError } from '../errors.js';
 import { LABELS, PRODUCT } from '../naming.js';
 import { exec } from './exec.js';
+import { closeLanFirewall } from './firewall.js';
+import { loadConfig } from '../config.js';
 import { gatherHostFacts, UNIT_MARKER, type HostFacts } from './host.js';
 import { POLKIT_RULE_PATH, SELF_UPDATE_UNIT_FILE, TAILSCALE_OPERATOR_UNIT, TOOLS_INSTALL_UNIT, DEVICE_MOUNT_UNIT, APP_CRYPTO_UNIT_FILE, BACKUP_UNIT_FILE } from './systemd.js';
 
@@ -41,6 +43,7 @@ export function uninstallPreview(facts: HostFacts, opts: { keepData: boolean }):
     opts.keepData ? `Keep ${PRODUCT.paths.var} (state, secrets, release snapshots)` : `Remove ${PRODUCT.paths.var} (state, secrets, release snapshots — apps' data volumes are already gone above)`,
     `Remove ${PRODUCT.paths.data} only if empty (your folders inside it are never deleted)`,
     `Remove Harbor-owned systemd units (${TAILSCALE_OPERATOR_UNIT}, ${SELF_UPDATE_UNIT_FILE}, ${TOOLS_INSTALL_UNIT.replace('.service', '@.service')}, ${DEVICE_MOUNT_UNIT.replace('.service', '@.service')}, ${APP_CRYPTO_UNIT_FILE}, ${BACKUP_UNIT_FILE}), the backup tools and their root-only state, and ${POLKIT_RULE_PATH}`,
+    'LAN mode: delete the ufw rules Harbor added (comment "harbor")',
     `Delete service user ${PRODUCT.serviceUser} and its group (even when Caddy is still a member — otherwise the next install fails at useradd)`,
     'Leave untouched: Docker Engine, Cockpit/Tailscale/Caddy packages, your own folders, non-Harbor Docker objects',
   ];
@@ -146,6 +149,16 @@ export async function uninstall(opts: UninstallOptions): Promise<UninstallResult
     removed.push(PRODUCT.paths.opt);
   } else if (facts.existing.optDir === 'foreign') {
     kept.push(`foreign ${PRODUCT.paths.opt}`);
+  }
+  // LAN mode's ufw rules (decision 160), read from the config before it goes.
+  try {
+    const cfg = loadConfig(`${PRODUCT.paths.etc}/harbor.json`);
+    if (cfg.lan.enabled) {
+      await closeLanFirewall(log, { lanPort: cfg.lan.port, appPortRange: cfg.appPortRange });
+      removed.push('Harbor\'s ufw rules (comment "harbor")');
+    }
+  } catch {
+    /* no readable config: nothing of ours to remove */
   }
   if (existsSync(PRODUCT.paths.etc)) {
     rmSync(PRODUCT.paths.etc, { recursive: true, force: true });

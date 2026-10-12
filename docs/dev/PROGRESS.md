@@ -406,6 +406,11 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 59 — LAN firewall (2026-10-12, 0.28.1)
+- [x] Decision 160: LAN bootstrap allows console, 443, app range + LAN HTTPS twin and mDNS in ufw from private networks only (comment `harbor`); uninstall deletes them
+- [x] Found live on the home server: ufw dropped every secure app address (`https://<hostname>.local:38xxx`); fixed there by hand first
+- [x] Tests: unit `firewall.test.ts` (ports, private sources only, delete args, status parsing)
+
 ## Phase 58 — install page redesign (2026-10-11, 0.27.0)
 - [x] Decision 156: one Storage summary (place, free space, encrypted, *How?*), one Access summary (who can reach it), *Change* reveals the choices (a single radio group for this machine + drives), *Advanced* holds name, own passphrase, own folders and technical details; footer says what happens next
 - [x] Manifest `presentation.sizeHint` (≤ 120 plain text) + hints for the 17 bundled packages (hashes refreshed, no revision bump); data-folder candidate reports its disk's free space

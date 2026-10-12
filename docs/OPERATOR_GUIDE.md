@@ -57,6 +57,10 @@ is typed on the terminal.
 like Umbrel. Protect the console with a strong password and two-factor login (Settings → Account); apps
 without their own login are open to the LAN. It is chosen at install time (`bootstrap --lan`); apps
 installed before it was turned on keep answering on the machine only until they are updated.
+If the machine runs **ufw** (Ubuntu's firewall), bootstrap allows what LAN mode needs — the console port,
+443, the app ports and their secure twins (port + 20000), and mDNS — from private networks only, on every
+install and update (`sudo ufw status` lists them with the comment `harbor`; `harbor uninstall` removes them).
+Other firewalls (firewalld, your router) are yours to open.
 
 **Every address at once.** An app opens on all the addresses you have set up: LAN (`http://<hostname>.local:<port>`
 or the IP), secure LAN, Tailscale and your domains. Its **main address**, picked at install, is only the one it

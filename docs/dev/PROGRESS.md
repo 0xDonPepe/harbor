@@ -406,6 +406,11 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 65 — WebSockets over the LAN HTTPS app ports (2026-10-12, 0.30.2) ⏳ live
+- [x] App proxy relays the app's own 101 (Sec-WebSocket-Accept), `head` bytes, refusals and `X-Forwarded-*`; closing a secure port ends its WebSockets
+- [x] Tests: `lan-https-ws.test.ts` (fails on 0.30.1)
+- [ ] Live: Open WebUI over https on Carlos's box
+
 ## Phase 64 — console round from Carlos's 0.29.0 review (2026-10-12, 0.30.0) ⏳ live
 - [x] Decision 164 (a): notification `actions[]` derived by kind; console buttons in the bell and on Notifications
 - [x] (b) `MACHINE_KEY_LOCKED` + `POST /v1/account/unlock` + `harbor account unlock`; the review dialog asks for the password and retries

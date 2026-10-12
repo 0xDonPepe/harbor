@@ -220,6 +220,24 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
 
+## 3w. WebSockets over the LAN HTTPS app ports (2026-10-12, Harbor 0.30.2)
+
+**Local gate only** (fake adapter):
+
+- **Found live (Carlos's box):** Open WebUI worked on `http://…:<port>` but its WebSocket failed on
+  `https://…:<port + 20000>`. The daemon's app proxy answered every upgrade with a hand-written
+  `101 Switching Protocols` without `Sec-WebSocket-Accept`, so browsers dropped the handshake; it also lost bytes sent
+  with the handshake, never relayed a refusal (the browser hung), and left out `X-Forwarded-Proto/Host`.
+- **Fix:** the proxy relays the app's own 101 (all its headers, incl. the accept key and subprotocol), forwards the
+  `head` bytes both ways, passes a non-101 answer back as is, adds the forwarded headers, and uses no connection pool
+  for upgrades. Closing a secure port (HTTPS off, shutdown) now also ends its open WebSockets — `server.close()`
+  otherwise waited on them forever.
+- **Gate:** new `tests/integration/lan-https-ws.test.ts` (real TLS listener with a minted cert + a raw upgrade
+  stub): 101 with the app's `Sec-WebSocket-Accept` and `Sec-WebSocket-Protocol`, `X-Forwarded-*` seen by the app,
+  frames echo both ways, a 403 reaches the browser. Against 0.30.1's proxy both tests fail (accept header missing;
+  the refusal hangs). `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 341 passed; `pnpm test:integration` 222 passed + 3 live-Docker skipped; `pnpm build && pnpm test:e2e` 35 passed; `pnpm openapi -- --check` current.
+- **Not yet live:** Open WebUI over https on a real box after the release.
+
 ## 3v. Console round: notification buttons, unlock in place, https by itself, Store/Settings layout (2026-10-12, Harbor 0.30.0, decision 164)
 
 **Local gate only** (fake adapter; no live run yet — see the last bullet):

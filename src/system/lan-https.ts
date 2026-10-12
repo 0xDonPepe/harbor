@@ -227,18 +227,56 @@ function proxyHandler(targetPort: number) {
   };
 }
 
+// The app's own 101 goes back verbatim: browsers drop a handshake without its
+// Sec-WebSocket-Accept (a hand-written 101 broke Open WebUI over https). Bytes
+// that arrived with either handshake (`head`) are forwarded, and a refusal
+// (403, 400, …) is relayed instead of leaving the browser hanging.
+function rawHead(statusLine: string, rawHeaders: string[]): string {
+  let out = statusLine + '\r\n';
+  for (let i = 0; i + 1 < rawHeaders.length; i += 2) out += `${rawHeaders[i]}: ${rawHeaders[i + 1]}\r\n`;
+  return out + '\r\n';
+}
+
 function proxyUpgrade(server: HttpsServer, targetPort: number): void {
-  server.on('upgrade', (req, socket) => {
+  server.on('upgrade', (req: IncomingMessage, socket, head: Buffer) => {
     const sock = socket as Socket;
-    const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: { ...req.headers, host: `127.0.0.1:${targetPort}` } });
-    up.on('upgrade', (_down, downSocket) => {
-      const down = downSocket as Socket;
-      sock.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
-      down.pipe(sock).pipe(down);
+    sock.on('error', () => sock.destroy());
+    const headers = { ...req.headers, host: `127.0.0.1:${targetPort}`, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host ?? '' };
+    const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]>, agent: false });
+    up.on('upgrade', (down, downSocket, downHead) => {
+      const d = downSocket as Socket;
+      d.on('error', () => sock.destroy());
+      sock.on('close', () => d.destroy());
+      d.on('close', () => sock.destroy());
+      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 101} ${down.statusMessage ?? 'Switching Protocols'}`, down.rawHeaders));
+      if (downHead.length) sock.write(downHead);
+      if (head.length) d.write(head);
+      d.pipe(sock).pipe(d);
+    });
+    up.on('response', (down) => {
+      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 502} ${down.statusMessage ?? ''}`, down.rawHeaders));
+      down.pipe(sock);
     });
     up.on('error', () => sock.destroy());
     up.end();
   });
+}
+
+// server.close() waits for every socket, upgraded WebSockets included (they
+// never finish on their own): track them so close ends them too.
+function shut(server: HttpsServer, done?: () => void): void {
+  server.close(() => done?.());
+  for (const s of (server as HttpsServer & { harborSockets?: Set<Socket> }).harborSockets ?? []) s.destroy();
+}
+
+function track(server: HttpsServer): HttpsServer {
+  const sockets = new Set<Socket>();
+  (server as HttpsServer & { harborSockets?: Set<Socket> }).harborSockets = sockets;
+  server.on('secureConnection', (s: Socket) => {
+    sockets.add(s);
+    s.on('close', () => sockets.delete(s));
+  });
+  return server;
 }
 
 export class LanHttpsServers {
@@ -249,7 +287,7 @@ export class LanHttpsServers {
   async ensureConsole(appRouting: (req: never, res: never) => void, key: Buffer, cert: Buffer): Promise<void> {
     const port = consoleHttpsPort();
     if (this.servers.has(port)) return;
-    const server = createHttpsServer({ key, cert }, (req, res) => appRouting(req as never, res as never));
+    const server = track(createHttpsServer({ key, cert }, (req, res) => appRouting(req as never, res as never)));
     server.on('upgrade', (req, socket, head) => {
       const fastify = (appRouting as unknown as { server?: { emit: (e: string, ...a: unknown[]) => void } }).server;
       fastify?.emit('upgrade', req, socket, head);
@@ -259,7 +297,7 @@ export class LanHttpsServers {
   }
   async ensureAppProxy(securePort: number, targetPort: number, key: Buffer, cert: Buffer): Promise<void> {
     if (this.servers.has(securePort)) return;
-    const server = createHttpsServer({ key, cert }, proxyHandler(targetPort));
+    const server = track(createHttpsServer({ key, cert }, proxyHandler(targetPort)));
     proxyUpgrade(server, targetPort);
     await listen(server, securePort);
     this.servers.set(securePort, server);
@@ -267,7 +305,7 @@ export class LanHttpsServers {
   dropExcept(wanted: Set<number>): void {
     for (const [port, s] of this.servers) {
       if (!wanted.has(port)) {
-        s.close();
+        shut(s);
         this.servers.delete(port);
       }
     }
@@ -275,7 +313,7 @@ export class LanHttpsServers {
   async closeAll(): Promise<void> {
     const all = [...this.servers.values()];
     this.servers.clear();
-    await Promise.all(all.map((s) => new Promise<void>((r) => s.close(() => r()))));
+    await Promise.all(all.map((s) => new Promise<void>((r) => shut(s, r))));
   }
 }
 

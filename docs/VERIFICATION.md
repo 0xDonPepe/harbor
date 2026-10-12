@@ -287,6 +287,9 @@ published 0.28.1, 598c7f2, is the ufw change of decision 160 and has neither the
 - Found live: 0.28.2's `/usr/local/bin/harbor` link failed ("exec: /usr/local/node/bin/node: not found"):
   the launchers resolved their runtime next to the link. Fixed in 0.28.3 (both launchers follow the link;
   `tests/unit/launcher.test.ts` runs them through a symlink and fails on the old launcher).
+- 0.28.3 on harbor-old (self-update from the GitHub release): plain `harbor --version` → 0.28.3 and
+  `harbor catalog status` work through `/usr/local/bin/harbor`; the archive's seed is `c1791820303`; the 12
+  containers stayed up.
 - Not exercised live: the Store's *Check for new apps* button in a browser (the same route the CLI
   refresh uses), and the 6-hour timer.
 

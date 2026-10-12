@@ -244,8 +244,14 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - Screenshots in design mode (`pnpm dev:ui`, 1370 px and 390 px) checked by eye: Settings, Store, install page,
   Notifications, Appearance, phone list and section.
 - The probe PNG decodes (1x1, IHDR/IDAT/IEND CRCs valid).
-- **Not yet live:** the https move needs a browser that trusts a real box's CA (harbor-old after the release), and
-  the unlock prompt after a real daemon restart.
+- **Live-found on 0.30.0 (Carlos's box, read-only checks from the Mac):** `http://harbor.local/` did not move.
+  Server side was right (0.30.0, `/v1/setup` `https.enabled`, CSP listing the cert hosts, bundle with the probe
+  code, `curl https://harbor.local/v1/network/https/probe` → 200 `image/png`), but headless Chromium showed
+  `ERR_BLOCKED_BY_ORB` on the probe: with the browser's `Sec-Fetch-Site: same-site` the request guard answered 403
+  `FORBIDDEN_ORIGIN` JSON, which ORB blocks as an image. **0.30.1** exempts exactly `GET /v1/network/https/probe`
+  from the Sec-Fetch-Site check; `lan-https.test.ts` now sends the browser's headers (probe 200, `/v1/setup` and
+  another path still 403).
+- **Not yet live:** the unlock prompt after a real daemon restart.
 
 ## 3u. Fixed UDP ports and permissions: the VPN pack (2026-10-12, Harbor 0.29.0, decision 163)
 

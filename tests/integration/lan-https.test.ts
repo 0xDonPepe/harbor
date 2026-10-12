@@ -100,6 +100,14 @@ describe('LAN HTTPS (local CA + secure addresses)', () => {
     expect(probe.status).toBe(200);
     expect(probe.headers.get('content-type')).toBe('image/png');
     expect(probe.headers.get('cache-control')).toBe('no-store');
+    // live-found on 0.30.0: the browser loads it from the http page, so it arrives marked cross-site; the
+    // Sec-Fetch-Site guard must let exactly this GET through (a JSON 403 is blocked as an image, ORB)
+    const crossSite = { authorization: '', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'no-cors', 'sec-fetch-dest': 'image' };
+    const probed = await h.api.raw('GET', '/v1/network/https/probe?t=1', undefined, crossSite);
+    expect(probed.status).toBe(200);
+    expect(probed.headers.get('content-type')).toBe('image/png');
+    expect((await h.api.raw('GET', '/v1/setup', undefined, crossSite)).status).toBe(403);
+    expect((await h.api.raw('HEAD', '/v1/network/https/probe/x', undefined, crossSite)).status).toBe(403);
     // System + app endpoints carry the secure addresses.
     const sys = await h.api.expect<SystemDto>(200, 'GET', '/v1/system');
     expect(sys.network.https.url).toBe('https://harbor.local/');

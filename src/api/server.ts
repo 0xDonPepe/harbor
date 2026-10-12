@@ -134,7 +134,10 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
       if (!(originHost && lanOk(originHost))) throw new HarborError('FORBIDDEN_ORIGIN', `Origin ${reqOrigin} is not allowed`);
     }
     const site = req.headers['sec-fetch-site'];
-    if (site && site !== 'same-origin' && site !== 'none' && req.url.startsWith('/v1/')) {
+    // Decision 164: the https probe is loaded as an image from the console's http page, so the browser marks it
+    // cross-site; it is an open 1x1 PNG, the one /v1/ request exempt from this check (GET of that exact path only).
+    const probe = req.method === 'GET' && req.url.split('?')[0] === '/v1/network/https/probe';
+    if (site && site !== 'same-origin' && site !== 'none' && req.url.startsWith('/v1/') && !probe) {
       throw new HarborError('FORBIDDEN_ORIGIN', `cross-site request (${site}) is not allowed`);
     }
     if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.url.startsWith('/v1/')) {

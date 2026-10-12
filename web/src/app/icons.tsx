@@ -20,6 +20,15 @@ export function PencilIcon(): ReactNode {
   );
 }
 
+export function RefreshIcon({ spinning = false }: { spinning?: boolean }): ReactNode {
+  return (
+    <svg className={spinning ? 'spin-svg' : undefined} viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M13.2 6.2A5.4 5.4 0 0 0 3.1 5.4M2.8 9.8a5.4 5.4 0 0 0 10.1.8" />
+      <path d="M3 2.6v2.9h2.9M13 13.4v-2.9h-2.9" />
+    </svg>
+  );
+}
+
 export function EllipsisIcon(): ReactNode {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">

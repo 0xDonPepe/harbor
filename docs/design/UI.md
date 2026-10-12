@@ -22,7 +22,7 @@ a cloud relay for remote access (Harbor's remote path is the tailnet), hidden "e
 ```
 Sidebar (desktop) / bottom tabs (phone)
 ├── Home        system strip · installed apps grid (tiles) · attention list (needs action / degraded)
-├── App Store   search · category chips · cards (icon, name, tagline) · app drawer (gallery, description, developer, website, ports/storage/secrets preview, Install)
+├── App Store   search · category chips · cards (icon, name, tagline) · install page (screenshot strip with tap-to-enlarge, description, *Source code on GitHub* / *Website* links from `presentation.source`/`website`, developer, storage/access, Install) · sections *Apps / Backup places / Your repositories* · catalog line + refresh icon under the title (decision 164)
 ├── Publishing  every published address, state, primary marker · Publish/Withdraw · Harbor-on-tailnet toggle
 ├── Platform    Docker, Cockpit, Portainer, Tailscale, Proxy cards with real state, links and the exact next step
 └── Settings    session, version, installation id, access instructions (SSH forward line), theme
@@ -102,6 +102,18 @@ wallpaper, surfaces are translucent (`backdrop-filter`), one accent colour, 8pt 
 - **Settings → Overview** (default): device card with a live wallpaper preview, Log out / Restart / Shut down
   (confirmation dialogs; logind via a polkit rule), machine facts, storage/memory/temperature/live usage,
   wallpaper picker, then the section list.
+
+## 7a. Readability and phones (decision 164, v0.30.0)
+
+- Surfaces are nearly solid by default (0.94); the Settings section list sits in a solid card, the active
+  row is a solid accent tint with an accent edge. Look = theme *Auto / Light / Dark* + background
+  *Picture of the day* (or your own) / flat *Harbor*.
+- Settings ≥ 1025 px: two columns that scroll on their own (the page itself does not); Overview starts with
+  the Harbor version card (update button when a release is out).
+- Phones: Settings is a list; a section opens alone with *‹ Settings*. The dock uses short labels (Home,
+  Store, Publish, Platform, Alerts, Settings), carries the unread badge, and hides the duplicate bell.
+- Notifications carry their own buttons (`actions[]`, derived from the kind); the first is primary.
+- A locked machine key (daemon restarted) asks for the password inside the review dialog and carries on.
 
 ## 8. Advanced access, troubleshoot, security (added 2026-09-15, v0.7.0)
 

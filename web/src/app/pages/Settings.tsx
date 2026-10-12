@@ -10,7 +10,7 @@ import { BackupsSettings } from './Backups';
 import { Mark, PencilIcon } from '../icons';
 import { fmtBytes, fmtUptime } from '../format';
 import type { Console } from '../store';
-import { WALLPAPERS, applySurfacesOpacity, applyTheme, applyWallpaper, hasExplicitWallpaper, readSurfacesOpacity, readTheme, readWallpaper, syncWallpaperPicture, type Theme, type Wallpaper } from '../theme';
+import { DEFAULT_SURFACES_OPACITY, WALLPAPERS, applySurfacesOpacity, applyTheme, applyWallpaper, hasExplicitWallpaper, readSurfacesOpacity, readTheme, readWallpaper, syncWallpaperPicture, type Theme, type Wallpaper } from '../theme';
 
 type Section = 'overview' | 'account' | 'network' | 'links' | 'remote' | 'public' | 'storage' | 'backups' | 'appearance' | 'notifications' | 'access' | 'troubleshoot' | 'about';
 // One 16px stroke set for the settings rail: same weight, same box, no emoji.
@@ -118,60 +118,112 @@ const SECTIONS: { id: Section; label: string; blurb: string }[] = [
   { id: 'about', label: 'About', blurb: 'Version and trust boundary' },
 ];
 
-export function Settings({ c, initialSection, onSection }: { c: Console; initialSection?: string; onSection?: (s: string) => void }) {
-  const [section, setSectionState] = useState<Section>((SECTIONS.some((s) => s.id === initialSection) ? initialSection : 'overview') as Section);
+// Phones (decision 164) get a list first and one section at a time with a way back; wider screens keep
+// the two columns, each scrolling on its own.
+function usePhone(): boolean {
+  const q = '(max-width: 760px)';
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(q).matches);
   useEffect(() => {
-    if (SECTIONS.some((s) => s.id === initialSection)) setSectionState(initialSection as Section);
-    else if (!initialSection) setSectionState('overview');
-  }, [initialSection]);
-  const setSection = (s: Section) => {
-    setSectionState(s);
-    onSection?.(s);
-  };
+    if (typeof window.matchMedia !== 'function') return;
+    const m = window.matchMedia(q);
+    const on = () => setPhone(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
+export function Settings({ c, initialSection, onSection }: { c: Console; initialSection?: string; onSection?: (s: string | null) => void }) {
+  const phone = usePhone();
+  const known = (s: string | undefined): s is Section => SECTIONS.some((x) => x.id === s);
+  const section: Section | null = known(initialSection) ? initialSection : phone ? null : 'overview';
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    body.current?.scrollTo?.({ top: 0 });
+    if (phone) window.scrollTo?.({ top: 0 });
+  }, [section, phone]);
+  const setSection = (s: Section | null) => onSection?.(s);
+  const current = SECTIONS.find((x) => x.id === section);
   return (
-    <div className="settings">
-      <nav className="settings-nav" aria-label="Settings sections">
-        <ul className="plain">
-          {SECTIONS.map((s) => (
-            <li key={s.id}>
-              <button className={`settings-link ${section === s.id ? 'active' : ''}`} onClick={() => setSection(s.id)} aria-current={section === s.id ? 'page' : undefined}>
-                <span className="nav-icon" aria-hidden="true">
-                  {SECTION_ICON[s.id]}
-                </span>
-                <span>
-                  <span className="settings-label">{s.label}</span>
-                  <span className="muted small">{s.blurb}</span>
-                </span>
+    <div className={`settings ${phone ? (section ? 'phone-detail' : 'phone-list') : ''}`}>
+      {(!phone || !section) && (
+        <nav className="settings-nav" aria-label="Settings sections">
+          {phone && <h2 className="settings-title">Settings</h2>}
+          <ul className="plain">
+            {SECTIONS.map((s) => (
+              <li key={s.id}>
+                <button className={`settings-link ${section === s.id ? 'active' : ''}`} onClick={() => setSection(s.id)} aria-current={section === s.id ? 'page' : undefined}>
+                  <span className="nav-icon" aria-hidden="true">
+                    {SECTION_ICON[s.id]}
+                  </span>
+                  <span className="settings-text">
+                    <span className="settings-label">{s.label}</span>
+                    <span className="muted small">{s.blurb}</span>
+                  </span>
+                  {phone && (
+                    <span className="chevron" aria-hidden="true">
+                      ›
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+      {section && (
+        <div className="settings-body" ref={body}>
+          {phone && (
+            <div className="settings-back row">
+              <button className="btn ghost small" onClick={() => setSection(null)} aria-label="Back to all settings">
+                ‹ Settings
               </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="settings-body">
-        {section === 'overview' && <Overview c={c} go={setSection} />}
-        {section === 'account' && <Account />}
-        {section === 'network' && <Network c={c} />}
-        {section === 'links' && <InternalNetworks />}
-        {section === 'remote' && <RemoteAccess c={c} />}
-        {section === 'public' && <PublicAddresses c={c} />}
-        {section === 'storage' && <Storage />}
-        {section === 'backups' && <BackupsSettings c={c} />}
-        {section === 'appearance' && <Appearance c={c} />}
-        {section === 'notifications' && <Notifications />}
-        {section === 'access' && <Access c={c} />}
-        {section === 'troubleshoot' && <Troubleshoot c={c} />}
-        {section === 'about' && <About c={c} />}
-      </div>
+              <h2 className="settings-title">{current?.label}</h2>
+            </div>
+          )}
+          {section === 'overview' && <Overview c={c} go={setSection} />}
+          {section === 'account' && <Account />}
+          {section === 'network' && <Network c={c} />}
+          {section === 'links' && <InternalNetworks />}
+          {section === 'remote' && <RemoteAccess c={c} />}
+          {section === 'public' && <PublicAddresses c={c} />}
+          {section === 'storage' && <Storage />}
+          {section === 'backups' && <BackupsSettings c={c} />}
+          {section === 'appearance' && <Appearance c={c} />}
+          {section === 'notifications' && <Notifications />}
+          {section === 'access' && <Access c={c} />}
+          {section === 'troubleshoot' && <Troubleshoot c={c} />}
+          {section === 'about' && <About c={c} />}
+        </div>
+      )}
     </div>
   );
 }
 
+// A notification's "Install now" (decision 164) lands on Overview with the update's confirm dialog open.
+let updateRequested = false;
+export function requestHarborUpdate(): void {
+  updateRequested = true;
+  window.dispatchEvent(new Event('harbor:update-now'));
+}
+
 // Harbor updating itself: newest GitHub release, one button, progress that survives the daemon's restart.
+// Decision 164: it leads Overview, so the version and an available update are the first thing you see.
 function HarborUpdate({ c }: { c: Console }) {
   const initial = c.data.system?.update ?? null;
   const [st, setSt] = useState<SelfUpdateStatusDto | null>(initial);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  useEffect(() => {
+    const take = () => {
+      if (!updateRequested) return;
+      updateRequested = false;
+      setConfirm(true);
+    };
+    take();
+    window.addEventListener('harbor:update-now', take);
+    return () => window.removeEventListener('harbor:update-now', take);
+  }, []);
   const [msg, setMsg] = useState<string | null>(null);
   const [watching, setWatching] = useState(false);
   useEffect(() => {
@@ -281,7 +333,6 @@ function HarborUpdate({ c }: { c: Console }) {
           </div>
         </Dialog>
       )}
-      <AutoUpdateDefault />
     </section>
   );
 }
@@ -342,6 +393,7 @@ function Overview({ c, go }: { c: Console; go: (s: Section) => void }) {
   };
   return (
     <>
+      <HarborUpdate c={c} />
       <section className="card device" aria-labelledby="dev-h">
         <div className="device-preview" aria-hidden="true">
           <div className="device-screen">
@@ -417,11 +469,6 @@ function Overview({ c, go }: { c: Console; go: (s: Section) => void }) {
             {host ? `${host.os} · ${host.arch}` : m ? `${m.host.os} · ${m.host.arch}` : '—'}
             {(host?.cpuModel ?? m?.host.cpuModel) ? <span className="muted"> · {host?.cpuModel ?? m?.host.cpuModel}</span> : null}
           </dd>
-          <dt>Harbor version</dt>
-          <dd>
-            {c.data.system?.version ?? '—'}
-            {c.data.system?.update.available && c.data.system.update.latest ? <span className="notice"> · {c.data.system.update.latest.version} is available (below)</span> : c.data.system?.update.latest && !c.data.system.update.error ? <span className="muted"> · up to date</span> : null}
-          </dd>
           <dt>Up for</dt>
           <dd>{m ? fmtUptime(m.uptimeSeconds) : '—'}</dd>
         </dl>
@@ -483,8 +530,11 @@ function Overview({ c, go }: { c: Console; go: (s: Section) => void }) {
           </dl>
         </section>
       )}
-      <HarborUpdate c={c} />
       <WallpaperPicker c={c} compact onMore={() => go('appearance')} />
+      <section className="card" aria-labelledby="au-h">
+        <h2 id="au-h">App updates</h2>
+        <AutoUpdateDefault />
+      </section>
       {confirm && (
         <Dialog title={confirm === 'reboot' ? 'Restart this machine?' : 'Shut down this machine?'} onClose={() => setConfirm(null)}>
           <p>{confirm === 'reboot' ? 'Apps stop for a moment and come back on their own after the restart. Harbor reconnects when it is up again.' : 'Everything stops. You will need to turn the machine on again yourself (its power button, or your provider’s console) before Harbor and your apps are back.'}</p>
@@ -1836,21 +1886,13 @@ function Storage() {
 }
 
 function Appearance({ c }: { c: Console }) {
-  const [theme, setTheme] = useState<Theme>(readTheme());
   const [opacity, setOpacity] = useState<number>(readSurfacesOpacity());
   return (
     <>
-      <section className="card" aria-labelledby="theme-h">
-        <h2 id="theme-h">Theme</h2>
-        <div role="radiogroup" aria-label="Theme" className="seg">
-          {(['system', 'dark', 'light'] as Theme[]).map((t) => (
-            <button key={t} role="radio" aria-checked={theme === t} className={`seg-btn ${theme === t ? 'active' : ''}`} onClick={() => (applyTheme(t), setTheme(t))}>
-              {t === 'system' ? 'Match device' : t === 'dark' ? 'Dark' : 'Light'}
-            </button>
-          ))}
-        </div>
-        <h4>Readability over pictures</h4>
-        <p className="muted small">When a photo wallpaper makes text hard to read, make cards and panels more solid. This stays on this browser only.</p>
+      <WallpaperPicker c={c} />
+      <section className="card" aria-labelledby="read-h">
+        <h2 id="read-h">Readability over pictures</h2>
+        <p className="muted small">How solid cards and panels are over the picture. This stays on this browser only.</p>
         <div className="opacity-row">
           <input
             type="range"
@@ -1868,12 +1910,12 @@ function Appearance({ c }: { c: Console }) {
           <span className="muted small" aria-live="polite">
             {opacity >= 0.995 ? 'Solid' : `${Math.round(opacity * 100)}%`}
           </span>
-          {Math.abs(opacity - 0.82) > 0.001 && (
+          {Math.abs(opacity - DEFAULT_SURFACES_OPACITY) > 0.001 && (
             <button
               className="btn ghost"
               onClick={() => {
-                setOpacity(0.82);
-                applySurfacesOpacity(0.82);
+                setOpacity(DEFAULT_SURFACES_OPACITY);
+                applySurfacesOpacity(DEFAULT_SURFACES_OPACITY);
               }}
             >
               Reset
@@ -1881,29 +1923,45 @@ function Appearance({ c }: { c: Console }) {
           )}
         </div>
       </section>
-      <WallpaperPicker c={c} />
       <Rotation c={c} />
       <OwnPicture c={c} />
     </>
   );
 }
 
-const PRESET_NAMES: Record<Wallpaper, string> = { harbor: 'Harbor', dusk: 'Dusk', forest: 'Forest', plain: 'Plain', photo: 'Picture' };
+// Decision 164: one look picker. Harbor comes in two colors, light and dark (Auto follows the device); the
+// background is the picture of the day (or your own picture) or flat Harbor.
+const THEME_NAMES: Record<Theme, string> = { system: 'Auto', light: 'Light', dark: 'Dark' };
 function WallpaperPicker({ c, compact = false, onMore }: { c: Console; compact?: boolean; onMore?: () => void }) {
+  const [theme, setTheme] = useState<Theme>(readTheme());
   const [wallpaper, setWallpaper] = useState<Wallpaper>(readWallpaper());
+  const [msg, setMsg] = useState<string | null>(null);
   const wp = c.data.appearance?.wallpaper;
   const hasPicture = Boolean(wp && wp.kind !== 'none');
-  const active = hasPicture && !hasExplicitWallpaper() ? 'photo' : wallpaper;
-  const choose = (w: Wallpaper) => {
+  const active: Wallpaper = hasPicture && (!hasExplicitWallpaper() || wallpaper === 'photo') ? 'photo' : 'harbor';
+  const choose = async (w: Wallpaper) => {
+    setMsg(null);
     applyWallpaper(w);
     setWallpaper(w);
+    // no picture yet: choosing it turns the picture of the day on
+    if (w === 'photo' && !hasPicture) {
+      try {
+        const next = await api.setRotation({ enabled: true });
+        c.patchData((d) => ({ ...d, appearance: next }));
+        syncWallpaperPicture({ present: next.wallpaper.kind !== 'none', version: next.wallpaper.version });
+        if (next.rotation.lastError) setMsg(next.rotation.lastError);
+      } catch (e) {
+        setMsg(e instanceof ApiError ? e.message : String(e));
+      }
+    }
   };
+  const pictureName = wp?.kind === 'uploaded' ? 'Your picture' : 'Picture of the day';
   return (
     <section className="card" aria-labelledby="wp-h">
       <div className="row between wrap">
         <div>
-          <h2 id="wp-h">Wallpaper</h2>
-          <p className="muted small">{hasPicture ? (wp!.kind === 'rotating' ? `Picture rotates from ${wp!.current?.sourceName ?? 'the internet'}.` : 'Your uploaded picture.') : 'Presets, your own picture, or a new picture every day.'}</p>
+          <h2 id="wp-h">Look</h2>
+          <p className="muted small">{hasPicture ? (wp!.kind === 'rotating' ? `A new picture from ${wp!.current?.sourceName ?? 'the internet'} every day.` : 'Your own picture.') : 'Harbor light or dark, over the picture of the day or flat.'}</p>
         </div>
         {compact && (
           <button className="btn ghost" onClick={onMore}>
@@ -1911,16 +1969,23 @@ function WallpaperPicker({ c, compact = false, onMore }: { c: Console; compact?:
           </button>
         )}
       </div>
+      <div role="radiogroup" aria-label="Theme" className="seg">
+        {(['system', 'light', 'dark'] as Theme[]).map((t) => (
+          <button key={t} role="radio" aria-checked={theme === t} className={`seg-btn ${theme === t ? 'active' : ''}`} onClick={() => (applyTheme(t), setTheme(t))}>
+            {THEME_NAMES[t]}
+          </button>
+        ))}
+      </div>
       <ul className="wallpapers" role="listbox" aria-label="Wallpaper">
-        {WALLPAPERS.filter((w) => w !== 'photo' || hasPicture).map((w) => (
+        {WALLPAPERS.map((w) => (
           <li key={w}>
-            <button role="option" aria-selected={active === w} className={`swatch wp-${w} ${active === w ? 'active' : ''}`} onClick={() => choose(w)} aria-label={`Wallpaper ${PRESET_NAMES[w]}`}>
-              <span className="swatch-name">{w === 'photo' ? (wp?.kind === 'rotating' ? 'Rotating' : 'My picture') : PRESET_NAMES[w]}</span>
+            <button role="option" aria-selected={active === w} className={`swatch wp-${w} ${active === w ? 'active' : ''}`} onClick={() => void choose(w)} aria-label={`Wallpaper ${w === 'photo' ? pictureName : 'Harbor'}`}>
+              <span className="swatch-name">{w === 'photo' ? pictureName : 'Harbor'}</span>
             </button>
           </li>
         ))}
       </ul>
-      {compact && !hasPicture && <p className="muted small">Want a fresh photo every day? Turn on rotating wallpapers under More options.</p>}
+      {msg && <p className="error small">{msg}</p>}
     </section>
   );
 }

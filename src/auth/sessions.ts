@@ -203,6 +203,23 @@ export class SessionService {
       this.repo.deleteSetting('security.totp.pending');
     });
   }
+  // Decision 164: a session that outlived a daemon restart types the password once to unseal the
+  // machine key (the console asks in place), instead of logging out and in again. Wrong passwords count
+  // against the same limits as logins; the error is not a 401, so the console keeps its session.
+  async unlock(password: string, client: string): Promise<{ unlocked: boolean }> {
+    const nowMs = this.clock.now().getTime();
+    const w = this.windowFor(client);
+    if (w.blocked(nowMs) || this.global.blocked(nowMs)) throw new HarborError('RATE_LIMITED', 'too many wrong passwords', { nextAction: 'Wait ten minutes and retry.' });
+    const admin = this.repo.administrator();
+    if (!admin) throw new HarborError('STATE_UNAVAILABLE', 'no administrator enrolled');
+    if (!(await verifyPassword(password, { hash: admin.passwordHash, salt: admin.salt, params: admin.params }))) {
+      w.record(nowMs);
+      this.global.record(nowMs);
+      throw new HarborError('INVALID_REQUEST', 'password is wrong', { nextAction: 'Type your Harbor password again.' });
+    }
+    await this.unlockMachineKey(password);
+    return { unlocked: this.machineKey?.unlocked ?? false };
+  }
   /** Confirm the operator's password before a sensitive account action. */
   async verifyAdminPassword(password: string): Promise<void> {
     const admin = this.repo.administrator();

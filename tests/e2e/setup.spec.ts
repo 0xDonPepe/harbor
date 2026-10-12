@@ -27,7 +27,7 @@ test('first-run wizard: name the machine, create the account with the setup code
   await page.getByLabel('I wrote down the recovery key').check();
   await done.click();
   await expect(page.getByRole('heading', { name: 'Make it yours' })).toBeVisible();
-  await page.getByRole('option', { name: 'Wallpaper dusk' }).click();
+  await page.getByRole('option', { name: 'Wallpaper Harbor' }).click();
   await page.getByRole('button', { name: 'Open Harbor' }).click();
   await expect(page.getByRole('heading', { name: 'Your apps' })).toBeVisible();
   await expect(page).toHaveTitle('Attic box · Harbor');

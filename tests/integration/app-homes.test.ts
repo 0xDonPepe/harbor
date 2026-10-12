@@ -76,9 +76,14 @@ describe('install to an encrypted app home', () => {
     await h.restart({ login: false });
     try {
       const appsDir = path.join(h.userDataDir, 'harbor-apps');
-      const err = await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/plans', { kind: 'install', packageId: 'excalidraw', name: 'bfu-seal', location: { dir: path.join(appsDir, 'excalidraw') } });
-      expect(err.error.message).toMatch(/log in again/i);
+      const req = { kind: 'install', packageId: 'excalidraw', name: 'bfu-seal', location: { dir: path.join(appsDir, 'excalidraw') } };
+      const err = await h.api.expectError(409, 'MACHINE_KEY_LOCKED', 'POST', '/v1/plans', req);
+      expect(err.error.message).toMatch(/restarted/i);
       expect(err.error.nextAction).toMatch(/password/i);
+      // decision 164: the same session types the password once instead of logging out and in
+      await h.api.expectError(422, 'INVALID_REQUEST', 'POST', '/v1/account/unlock', { password: 'not-the-password' });
+      expect(await h.api.expect(200, 'POST', '/v1/account/unlock', { password: ADMIN.password })).toEqual({ unlocked: true });
+      expect((await h.api.plan({ kind: 'install', packageId: 'excalidraw', name: 'bfu-seal', location: { dir: path.join(appsDir, 'excalidraw') } })).location?.defaultKey).toBe(true);
     } finally {
       await h.restart(); // logs in: AFU again
     }

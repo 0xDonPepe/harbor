@@ -227,6 +227,8 @@ const realApi = {
   security: () => call<SecurityDto>('GET', '/v1/account/security'),
   setDisplayName: (name: string | null) => call<{ username: string; displayName: string | null }>('PUT', '/v1/account/name', { name }),
   rotateRecoveryKey: (password: string) => call<RecoveryKeyRotationDto>('POST', '/v1/account/recovery-key', { password }),
+  // decision 164: after a daemon restart, the password unlocks this machine's key in place
+  unlockMachine: (password: string) => call<{ unlocked: boolean }>('POST', '/v1/account/unlock', { password }),
   totpSetup: () => call<TotpSetupDto>('POST', '/v1/account/totp/setup', {}),
   totpEnable: (code: string) => call<void>('POST', '/v1/account/totp/enable', { code }),
   totpDisable: (password: string) => call<void>('POST', '/v1/account/totp/disable', { password }),

@@ -6,7 +6,7 @@ import { chmodSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import type { InstanceSummary, NetworkHttpsDto, SystemDto } from '../../src/contracts/api.js';
+import type { InstanceSummary, NetworkHttpsDto, SetupStatusDto, SystemDto } from '../../src/contracts/api.js';
 import { startHarness, type Harness } from './harness.js';
 import { DIGEST_A, MINIMAL_MANIFEST, writePackage } from '../unit/helpers.js';
 
@@ -92,6 +92,14 @@ describe('LAN HTTPS (local CA + secure addresses)', () => {
     expect(raw.headers.get('content-type')).toContain('pem');
     expect(raw.headers.get('content-disposition')).toContain('harbor-local-ca.crt');
     expect(await raw.text()).toContain('BEGIN CERTIFICATE');
+    // Decision 164: the open setup status names the https hosts, and the probe image answers without a token.
+    const hint = await h.api.expect<SetupStatusDto>(200, 'GET', '/v1/setup', undefined, { authorization: '' });
+    expect(hint.https.enabled).toBe(true);
+    expect(hint.https.hosts).toContain('harbor.local');
+    const probe = await h.api.raw('GET', '/v1/network/https/probe', undefined, { authorization: '' });
+    expect(probe.status).toBe(200);
+    expect(probe.headers.get('content-type')).toBe('image/png');
+    expect(probe.headers.get('cache-control')).toBe('no-store');
     // System + app endpoints carry the secure addresses.
     const sys = await h.api.expect<SystemDto>(200, 'GET', '/v1/system');
     expect(sys.network.https.url).toBe('https://harbor.local/');
@@ -100,6 +108,7 @@ describe('LAN HTTPS (local CA + secure addresses)', () => {
     // Disabling closes the surface again (plain HTTP stays).
     const off = await h.api.expect<NetworkHttpsDto>(200, 'PUT', '/v1/network/https', { enabled: false });
     expect(off).toMatchObject({ enabled: false, url: null });
+    expect((await h.api.expect<SetupStatusDto>(200, 'GET', '/v1/setup', undefined, { authorization: '' })).https).toEqual({ enabled: false, hosts: [] });
     const inst2 = (await h.api.instances()).find((i) => i.packageId === 'excalidraw') as InstanceSummary;
     expect(inst2.endpoints[0]!.urls.lanSecure).toBeUndefined();
     expect(inst2.endpoints[0]!.urls.lan).toMatch(/^http:\/\//);

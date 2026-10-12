@@ -158,7 +158,7 @@ test('store app page, install with plan review, progress tray, Open link; duplic
   // the technical details wait behind Advanced
   await about.getByText('Advanced: name, passphrase, folders, technical details').click();
   await expect(about.locator('code.path')).toContainText('excalidraw/excalidraw');
-  await expect(about.getByRole('link', { name: 'website' })).toBeVisible();
+  await expect(about.getByRole('link', { name: 'Website ↗' })).toHaveAttribute('href', 'https://excalidraw.com');
   // Main address (decision 116) behind Change: only what is set up — this machine, plus the (fake) tailnet; full URLs, no ellipsis.
   await about.getByRole('button', { name: 'Change who can reach Excalidraw' }).click();
   await expect(about.getByRole('group', { name: 'Main address' })).toBeVisible();
@@ -822,7 +822,7 @@ test('rotating wallpapers: on from the first start, a picture with credit appear
   expect(await page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--surfaces-opacity').trim()")).toBe('1');
   expect(await page.evaluate("localStorage.getItem('harbor.surfaces-opacity')")).toBe('1');
   await page.getByRole('button', { name: 'Reset' }).click();
-  expect(await page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--surfaces-opacity').trim()")).toBe('0.82');
+  expect(await page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--surfaces-opacity').trim()")).toBe('0.94');
   await expect(page.getByRole('heading', { name: 'Rotating wallpapers' })).toBeVisible();
   // decision 132: a fresh install starts with the picture of the day already on
   await expect(page.getByRole('switch', { name: 'Rotating wallpapers' })).toBeChecked();
@@ -1145,6 +1145,8 @@ health:
   deadlineSeconds: 30
 ui:
   primaryEndpoint: web
+presentation:
+  source: https://github.com/example/hello-creds
 defaultCredentials:
   username: admin
   password: changeme
@@ -1156,6 +1158,8 @@ defaultCredentials:
   await page.getByRole('dialog').getByRole('button', { name: 'Done' }).click();
   await page.getByRole('button', { name: 'About Hello Creds' }).click();
   const about = page.getByRole('dialog');
+  // decision 164: the manifest's source link leads the install page
+  await expect(about.getByRole('link', { name: /Source code on GitHub/ })).toHaveAttribute('href', 'https://github.com/example/hello-creds');
   await expect(about.getByRole('note')).toContainText('Default login');
   await expect(about.getByRole('note')).toContainText('changeme');
   await expect(about.getByRole('note')).toContainText('change it after the first sign-in');
@@ -1291,4 +1295,82 @@ ui:
   const drawer = page.getByRole('dialog');
   await expect(drawer.getByRole('heading', { name: 'Ports' })).toBeVisible();
   await expect(drawer).toContainText(`forward UDP ${port} on your router`);
+});
+
+test('decision 164: a locked machine key asks for the password in place and carries on with the install', async ({ page }) => {
+  await login(page);
+  // the daemon answers the first plan as if it had restarted since this login (its key is in fact open,
+  // so the real unlock call that follows succeeds and the retried plan goes through)
+  let first = true;
+  await page.route('**/v1/plans', async (route) => {
+    if (first && route.request().method() === 'POST') {
+      first = false;
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: { code: 'MACHINE_KEY_LOCKED', message: 'Harbor restarted since your last login, so its key for encrypted apps is locked', nextAction: 'Type your password' } }) });
+    }
+    return route.continue();
+  });
+  await installFromStore(page, 'Excalidraw');
+  const dlg = page.getByRole('dialog');
+  await expect(dlg.getByRole('heading', { name: 'Type your password to continue' })).toBeVisible();
+  await dlg.getByLabel('Your Harbor password').fill('not-the-password');
+  await dlg.getByRole('button', { name: 'Unlock and continue' }).click();
+  await expect(dlg.getByRole('alert')).toContainText('password is wrong');
+  await dlg.getByLabel('Your Harbor password').fill(ADMIN.password);
+  await dlg.getByRole('button', { name: 'Unlock and continue' }).click();
+  await expect(dlg.getByRole('heading', { name: /^Review install/ })).toBeVisible();
+  await dlg.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.unroute('**/v1/plans');
+});
+
+test('decision 164: Store sections, the catalog line with its refresh icon on top, settings readable and scrolling on their own', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  const head = page.locator('.store-head');
+  await expect(head.getByText(/^App catalog (from|bundled with this Harbor)/)).toBeVisible();
+  await expect(head.getByRole('button', { name: 'Check for new apps', exact: true })).toBeVisible();
+  const sections = page.getByRole('group', { name: 'Store sections' });
+  await sections.getByRole('button', { name: 'Backup places' }).click();
+  await expect(page.getByRole('heading', { name: 'Backup places' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Another disk' })).toBeVisible();
+  await sections.getByRole('button', { name: 'Apps' }).click();
+  await expect(page.getByRole('tablist', { name: 'Categories' })).toBeVisible();
+  // desktop settings: the two columns scroll on their own, the page itself does not
+  await page.goto('/#/settings/storage');
+  await expect(page.locator('.settings-body')).toBeVisible();
+  expect(await page.evaluate("getComputedStyle(document.querySelector('.settings-body')).overflowY")).toBe('auto');
+  expect(await page.evaluate("getComputedStyle(document.querySelector('.settings-nav')).overflowY")).toBe('auto');
+});
+
+test('decision 164: phone settings open as a list, then one section with a way back', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await login(page);
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await nav.getByRole('link', { name: 'Settings' }).click();
+  const list = page.getByRole('navigation', { name: 'Settings sections' });
+  await expect(list).toBeVisible();
+  await expect(page.locator('.settings-body')).toHaveCount(0);
+  await list.getByRole('button', { name: /^Appearance/ }).click();
+  await expect(page.getByRole('heading', { name: 'Look' })).toBeVisible();
+  await expect(list).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to all settings' }).click();
+  await expect(page.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
+  // one Notifications destination in the dock (the bell hides on phones)
+  await expect(page.locator('.bell-btn')).toBeHidden();
+  expect(await page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')).toBe(true);
+});
+
+test('decision 164: a notification brings its own button — Harbor X is available → Install now opens the update', async ({ page }) => {
+  // one deterministic row (the daemon derives the same action for a real harbor-update row)
+  await page.route('**/v1/notifications', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ unread: 1, items: [{ id: 'n-e2e', createdAt: new Date().toISOString(), kind: 'harbor-update', severity: 'info', title: 'Harbor 9.9.9 is available', body: 'Apps keep running.', instanceId: null, read: false, link: '#/settings', actions: [{ label: 'Install now', do: 'update-harbor', route: null }] }] }) })
+      : route.continue(),
+  );
+  await login(page);
+  await page.getByRole('link', { name: 'Notifications', exact: true }).click();
+  await page.getByRole('button', { name: 'Install now: Harbor 9.9.9 is available' }).click();
+  await expect(page).toHaveURL(/#\/settings\/overview$/);
+  await expect(page.getByRole('dialog')).toContainText('verifies its checksum', { timeout: 15_000 });
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.unroute('**/v1/notifications');
 });

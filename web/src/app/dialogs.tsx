@@ -68,7 +68,8 @@ export function PlanDialog({ c }: { c: Console }) {
   const displayName = plan ? (plan.name === plan.packageId ? appName : `${appName} (${plan.name})`) : '';
   const approveLabel = !plan ? '…' : plan.kind === 'remove' ? 'Remove (keep data)' : plan.kind === 'purge' ? 'Delete everything' : plan.kind === 'install' ? (pending.kind === 'restore-app' ? 'Restore here' : 'Install') : plan.kind === 'restore' ? 'Restore now' : plan.kind === 'update' ? 'Update now' : plan.kind === 'expose' ? 'Publish' : plan.kind === 'unexpose' ? 'Withdraw' : plan.kind === 'reconfigure' ? 'Switch' : plan.kind === 'configure' ? 'Apply' : plan.kind === 'seal' ? 'Encrypt now' : plan.kind === 'move' ? 'Move now' : capitalize(plan.kind);
   return (
-    <Dialog title={title} onClose={c.cancel}>
+    <Dialog title={c.locked ? 'Type your password to continue' : title} onClose={c.cancel}>
+      {c.locked && <UnlockPrompt onUnlock={c.unlockAndRetry} />}
       {planError && (
         <p className="error" role="alert">
           {planError}
@@ -233,11 +234,53 @@ export function PlanDialog({ c }: { c: Console }) {
         <button className="btn" onClick={c.cancel}>
           Cancel
         </button>
-        <button className="btn primary" onClick={() => void c.approve(typed, permissionsAccepted)} disabled={!plan || Boolean(planError) || missingSecret || needsPermission} title={missingSecret ? 'Fill in the value the app needs first' : needsPermission ? 'Allow the permissions first' : undefined}>
+        {!c.locked && <button className="btn primary" onClick={() => void c.approve(typed, permissionsAccepted)} disabled={!plan || Boolean(planError) || missingSecret || needsPermission} title={missingSecret ? 'Fill in the value the app needs first' : needsPermission ? 'Allow the permissions first' : undefined}>
           {approveLabel}
-        </button>
+        </button>}
       </div>
     </Dialog>
+  );
+}
+
+// Decision 164: after a daemon restart this machine's key is locked. Instead of "log out and log in", the
+// dialog asks for the password once and carries on with the same install, restore or encryption.
+function UnlockPrompt({ onUnlock }: { onUnlock: (password: string) => Promise<void> }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <form
+      className="stack unlock-prompt"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!password || busy) return;
+        setBusy(true);
+        setError(null);
+        onUnlock(password).then(
+          () => setBusy(false),
+          (err: unknown) => {
+            setBusy(false);
+            setError(err instanceof ApiError ? err.message : String(err));
+          },
+        );
+      }}
+    >
+      <p className="muted">Harbor restarted, so the key that opens your encrypted apps is locked. Your password unlocks it; nothing else changes.</p>
+      <label className="stack">
+        Password
+        <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus aria-label="Your Harbor password" />
+      </label>
+      {error && (
+        <p className="error small" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="row end">
+        <button className="btn primary" type="submit" disabled={!password || busy}>
+          {busy ? 'Unlocking…' : 'Unlock and continue'}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -271,7 +314,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
   const linkSel = (l: CatalogItemDto['links'][number]) => linkPick[l.id] ?? (l.optional ? '' : (linkCandidates(l, instances)[0]?.id ?? ''));
   const links = Object.fromEntries(item.links.filter((l) => linkSel(l)).map((l) => [l.id, { instanceId: linkSel(l) }]));
   const missingLink = item.links.some((l) => !l.optional && !linkSel(l));
-  const [gallery, setGallery] = useState(0);
+  const [gallery, setGallery] = useState<number | null>(null); // decision 164: the enlarged screenshot, if any
   // storage claim id -> host folder ('' = managed volume)
   const [folders, setFolders] = useState<Record<string, string>>({});
   const [picking, setPicking] = useState<string | null>(null); // claim id being chosen
@@ -562,19 +605,58 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
     <Dialog title={item.name} onClose={onClose} wide>
       <div className="app-head">
         <AppIcon packageId={item.id} icon={item.presentation.icon} name={item.name} size={56} />
-        <p className="lead">{item.description}</p>
+        <div className="stack app-head-text">
+          <p className="lead">{item.description}</p>
+          {/* decision 164: the project's own pages, from the manifest; the source code (GitHub) first */}
+          {(item.presentation.source || item.presentation.website) && (
+            <p className="row wrap app-links small">
+              {item.presentation.source && (
+                <a href={item.presentation.source} target="_blank" rel="noopener noreferrer">
+                  {/^https:\/\/github\.com\//.test(item.presentation.source) ? 'Source code on GitHub' : 'Source code'} ↗
+                </a>
+              )}
+              {item.presentation.website && item.presentation.website !== item.presentation.source && (
+                <a href={item.presentation.website} target="_blank" rel="noopener noreferrer">
+                  {!item.presentation.source && /^https:\/\/github\.com\//.test(item.presentation.website) ? 'Project on GitHub' : 'Website'} ↗
+                </a>
+              )}
+              {item.presentation.developer && <span className="muted">by {item.presentation.developer}</span>}
+            </p>
+          )}
+        </div>
       </div>
       {item.presentation.gallery.length > 0 && (
         <div className="gallery">
-          <img src={`/v1/catalog/${item.id}/asset/${item.presentation.gallery[gallery]}`} alt={`${item.name} screenshot ${gallery + 1}`} />
-          {item.presentation.gallery.length > 1 && (
-            <div className="row">
-              {item.presentation.gallery.map((_, i) => (
-                <button key={i} className={`btn ghost ${i === gallery ? 'active' : ''}`} onClick={() => setGallery(i)} aria-label={`Screenshot ${i + 1}`}>
-                  {i + 1}
+          {gallery !== null ? (
+            <figure className="gallery-big">
+              <img src={`/v1/catalog/${item.id}/asset/${item.presentation.gallery[gallery]}`} alt={`${item.name} screenshot ${gallery + 1}`} />
+              <div className="row between">
+                <span className="row">
+                  <button className="btn ghost small" disabled={gallery === 0} onClick={() => setGallery(gallery - 1)} aria-label="Previous screenshot">
+                    ‹
+                  </button>
+                  <span className="muted small">
+                    {gallery + 1} / {item.presentation.gallery.length}
+                  </span>
+                  <button className="btn ghost small" disabled={gallery === item.presentation.gallery.length - 1} onClick={() => setGallery(gallery + 1)} aria-label="Next screenshot">
+                    ›
+                  </button>
+                </span>
+                <button className="btn ghost small" onClick={() => setGallery(null)}>
+                  Close
                 </button>
+              </div>
+            </figure>
+          ) : (
+            <ul className="plain gallery-strip" aria-label={`${item.name} screenshots`}>
+              {item.presentation.gallery.map((g, i) => (
+                <li key={g}>
+                  <button className="gallery-thumb" onClick={() => setGallery(i)} aria-label={`Enlarge screenshot ${i + 1}`}>
+                    <img src={`/v1/catalog/${item.id}/asset/${g}`} alt={`${item.name} screenshot ${i + 1}`} loading="lazy" />
+                  </button>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       )}
@@ -838,14 +920,6 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
             <dd>
               {categoryLabel(item.presentation.category)}
               {item.presentation.developer ? ` · by ${item.presentation.developer}` : ''}
-              {item.presentation.website ? (
-                <>
-                  {' · '}
-                  <a href={item.presentation.website} target="_blank" rel="noopener noreferrer">
-                    website
-                  </a>
-                </>
-              ) : null}
             </dd>
             {item.presentation.releaseNotes && (
               <>

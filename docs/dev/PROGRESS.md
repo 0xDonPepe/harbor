@@ -406,6 +406,16 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Live: harbor-old 0.26.0 → 0.27.0 (screenshots, real install + purge of `excalidraw-uxtest`), then → 0.27.1 re-check; .192 untouched
 - [x] Tests: integration app-homes (location fields, notes vs warnings), addresses (plan LAN URL), purge-domains (used domain left out); e2e review copy, single-place text, drive lines, "Encrypted, except"
 
+## Phase 64 — console round from Carlos's 0.29.0 review (2026-10-12, 0.30.0) ⏳ live
+- [x] Decision 164 (a): notification `actions[]` derived by kind; console buttons in the bell and on Notifications
+- [x] (b) `MACHINE_KEY_LOCKED` + `POST /v1/account/unlock` + `harbor account unlock`; the review dialog asks for the password and retries
+- [x] (c) https by itself: open `GET /v1/setup` `https`, open probe image, CSP `img-src` = certificate hosts, `?skiphttps`
+- [x] (d) manifest `presentation.source` (first accepted by 0.30.0), install-page links, screenshot strip; `catalog:hash` parses YAML
+- [x] (e) Store sections (Apps / Backup places / Your repositories), catalog line + refresh icon on top, hourly checks; Settings columns scroll on their own; phone list → detail, short dock labels, no duplicate bell; surfaces 0.94; Look = Auto/Light/Dark + Picture/Harbor; Overview starts with the version
+- [x] harbor-apps PR #3: 48 screenshots for 16 apps, from the projects' own repos/sites (not merged)
+- [x] Tests: unit 341, integration 220 + 3 skipped, e2e 35
+- [ ] Live: harbor-old after the release (https move with a trusting browser, unlock after a restart)
+
 ## Phase 63 — the VPN pack: fixed UDP ports and permissions (2026-10-12, 0.29.0)
 - [x] Decision 163: manifest `ports:` (fixed UDP, every interface, single-instance) and `permissions:` (net-admin, tun, ip-forwarding); submit `acceptPermissions`, CLI `--accept-permissions`, console checkbox; update-all/auto-update skip new permissions
 - [x] Plan-time port checks (Harbor range, other apps' claims, Docker, a real UDP bind); submit claims them
@@ -462,7 +472,7 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 |---|---|
 | `pnpm typecheck` | pass |
 | `pnpm lint` | pass |
-| `pnpm test` (unit) | 290 passed (2026-10-11, 0.28.0) |
+| `pnpm test` (unit) | 341 passed (2026-10-12, 0.30.0) |
 | `pnpm test:integration` (fake adapter) | 213 passed (0.28.0: official catalog swap without restart, update notification vs auto-update, replayed/older bundle no-op, foreign key refused, minHarbor, updates off; 0.26.0: app backups — places, warm + cold passes, cap, restore in place and on another daemon; 0.25.2: Caddy-rejected config not re-sent, tls/ dir 0750; 0.25.0: move between locations; 0.24.0: seal in place + passphrase change; 0.23.0: repair paths, own tailnet port, exposure check at the health path, several public hostnames per endpoint, links + operator secrets, install, lifecycle, auth incl. remember/sessions, tools, exposure, storage incl. drive guard + auto-start + policy, app-homes install-location + adopt, settings, purge/domains, appearance, packages/updates, git sources, notifications, security/terminal, setup/LAN/self-update, lan-https); 3 live-Docker tests skipped without opt-in |
 | `HARBOR_LIVE_DOCKER_SOCKET=… pnpm test:integration` (Docker Desktop, opt-in) | 3 passed (real Compose/Dockerode path) |
 | `pnpm test:e2e` (Playwright, fake adapter) | 30 passed (0.28.0: Store catalog line; backups: add a place, back up, restore in place, delete the kept copy; publish wizard incl. Add another domain + withdraw one by name, app links + typed-in secret, console: login, store, install wizard incl. Local default + External Format-first + passphrase-after-format, drawer lifecycle, publish wizard, phone width, own folder, settings incl. storage Format-first + format-as-ext4, network secure-addresses card, uninstall incl. purge-reinstall, domains + palette, customize, arrange, rotating wallpapers, upload + update via wizard, terminal/troubleshoot/rename, two-factor, Harbor update card + default login; first-run wizard against a setup-mode daemon) |

@@ -1,6 +1,7 @@
 import type { NotificationDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
 import { Empty } from '../components';
+import { NotificationActions } from '../NotificationActions';
 import type { Console } from '../store';
 
 // Full notifications screen (decision 114): every row, newest first. Each row can be marked read
@@ -61,6 +62,7 @@ export function Notifications({ c, onOpenApp }: { c: Console; onOpenApp: (instan
                   </svg>
                 </button>
               </div>
+              <NotificationActions c={c} item={item} onOpenApp={onOpenApp} />
             </li>
           ))}
         </ul>

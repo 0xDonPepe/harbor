@@ -1008,7 +1008,7 @@ export class OperationRunner {
     await this.engineOrThrow();
     // Decision 120: refuse before anything is created when a default-key home could not get this
     // machine's wrapping (the daemon restarted between plan and apply, and nobody logged in since).
-    if (plan.proposal.location?.defaultKey && !this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before installing an encrypted app', { nextAction: 'Log out and log in with your password once (it unlocks this machine\'s key), then install again.' });
+    if (plan.proposal.location?.defaultKey && !this.ctx.machineKey.unlocked) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then install again.' });
     const pkg = this.planPackage(inst.packageId, inst.revision, plan.proposal.releaseHashes);
     const identity = identityFor(this.ctx.installationId, inst.id);
     const dirs = this.dirs(inst);
@@ -1196,7 +1196,7 @@ export class OperationRunner {
         const machineKey = defaultKey || loginKey ? this.ctx.machineKey.take() : null;
         // Decision 120: never seal a default-key home this machine cannot reopen at login (the plan
         // refuses this too; the daemon may have restarted between plan and apply).
-        if (defaultKey && !machineKey) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before installing an encrypted app', { nextAction: 'Log out and log in with your password once (it unlocks this machine\'s key), then install again.' });
+        if (defaultKey && !machineKey) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then install again.' });
         let wrapped: MachineWrappedKey | null = null;
         if (machineKey) {
           try {
@@ -1704,7 +1704,7 @@ export class OperationRunner {
     if (!loc) throw new HarborError('STATE_CHANGED', 'plan carries no location');
     const crypto = this.ctx.crypto;
     if (!crypto) throw new HarborError('UNSUPPORTED_CAPABILITY', 'this machine has no app sealing', { nextAction: 'Re-run bootstrap so Harbor installs its sealing step.' });
-    if (!this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before encrypting an app', { nextAction: "Log out and log in with your password once (it unlocks this machine's key), then try again." });
+    if (!this.ctx.machineKey.unlocked) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then try again.' });
     if (repo.resources(inst.id).some((r) => r.kind === 'volume' && r.role === '__home__')) throw new HarborError('STATE_CHANGED', `${inst.name} is already encrypted`);
     this.phase(op, 'applying', 'preparing', `verifying the data of ${inst.name} before encrypting it`);
     await this.engineOrThrow();

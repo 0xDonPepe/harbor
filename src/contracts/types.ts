@@ -45,6 +45,7 @@ export interface PackagePresentation {
   gallery?: string[];
   developer?: string;
   website?: string;
+  source?: string;
   releaseNotes?: string;
   sizeHint?: string; // decision 148: plain-words disk need for the install page
   // Home widget (decision 81): JSON the app serves on its own port, proxied by the daemon.

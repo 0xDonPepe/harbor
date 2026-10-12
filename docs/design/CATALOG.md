@@ -229,7 +229,7 @@ size in `catalog.json`, it extracts safely, and the index validates with every l
   serial + size/mtime of `catalog.json`, so reads stay cheap, and the next bundle is compared with the
   seed, not with the damaged folder. A Harbor upgrade
   with a newer seed takes over by itself.
-- Check: a minute after start, then every 6 h, or on demand (`POST /v1/catalog/refresh`,
+- Check: a minute after start, then every hour (6 h before 0.30.0, decision 164), or on demand (`POST /v1/catalog/refresh`,
   `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` first
   (30 s), stop if the serial is not newer, then `catalog.zip` (capped at the size `catalog.json` gives,
   5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,

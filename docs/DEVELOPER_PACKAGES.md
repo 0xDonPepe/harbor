@@ -160,9 +160,10 @@ presentation:
   tagline: Short line shown on the card
   category: productivity         # productivity media files automation network developer ai security finance home other
   icon: icon.svg
-  gallery: [shot-1.png]
+  gallery: [shot-1.png, shot-2.png]   # up to 6 screenshots (png/jpg/webp ≤ 1 MiB); a strip on the install page
   developer: You
   website: https://example.com
+  source: https://github.com/you/my-app   # Harbor ≥ 0.30.0 (declare release.minHarbor: "0.30.0"): "Source code on GitHub" on the install page
   releaseNotes: What changed in this revision (shown before an update)
   sizeHint: About 300 MB, plus your files   # optional, ≤ 120 chars: shown as "Needs …" on the install page
   hideFromHome: false            # true suggests hiding it from Home (helpers without a page); the operator decides

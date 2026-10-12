@@ -6,12 +6,13 @@ import { EyeIcon, EyeOffIcon, Mark } from './app/icons';
 import { AppDrawer, CustomizeDialog, InstallWizard, PlanDialog, PublishWizard, UploadPackageDialog } from './app/dialogs';
 import { Home } from './app/pages/Home';
 import { Notifications } from './app/pages/Notifications';
+import { NotificationActions } from './app/NotificationActions';
 import { Platform } from './app/pages/Platform';
 import { Publishing } from './app/pages/Publishing';
 import { Settings } from './app/pages/Settings';
 import { Store } from './app/pages/Store';
 import { useRoute, type Route } from './app/router';
-import { applySurfacesOpacity, applyTheme, applyWallpaper, applyWallpaperPhoto, readSurfacesOpacity, readTheme, readWallpaper, syncWallpaperPicture } from './app/theme';
+import { applySurfacesOpacity, applyTheme, applyWallpaperPhoto, bootWallpaper, readSurfacesOpacity, readTheme, syncWallpaperPicture } from './app/theme';
 import { isMockUi } from './mock/api';
 import { Palette, usePaletteShortcut } from './app/Palette';
 import { SetupWizard } from './app/Setup';
@@ -20,7 +21,7 @@ import { isFinal, useConsole, type Console } from './app/store';
 
 type View = { kind: 'login' } | { kind: 'console' };
 applyTheme(readTheme());
-applyWallpaper(readWallpaper());
+bootWallpaper();
 applySurfacesOpacity(readSurfacesOpacity());
 void api.hasWallpaper().then(applyWallpaperPhoto);
 
@@ -220,10 +221,11 @@ function Login({ onDone, notice }: { onDone: () => void; notice: string | null }
   );
 }
 
-const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }[] = [
+const NAV: { route: Route; label: string; short: string; icon: (active: boolean) => ReactNode }[] = [
   {
     route: { page: 'home' },
     label: 'Home',
+    short: 'Home',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3.5 10.5 10 4l6.5 6.5" />
@@ -234,6 +236,7 @@ const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }
   {
     route: { page: 'store' },
     label: 'App Store',
+    short: 'Store',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1.5" />
@@ -246,6 +249,7 @@ const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }
   {
     route: { page: 'publishing' },
     label: 'Publishing',
+    short: 'Publish',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="10" cy="10" r="6.5" />
@@ -256,6 +260,7 @@ const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }
   {
     route: { page: 'platform' },
     label: 'Platform',
+    short: 'Platform',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="10" cy="10" r="2.6" />
@@ -266,6 +271,7 @@ const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }
   {
     route: { page: 'notifications' },
     label: 'Notifications',
+    short: 'Alerts',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M10 3.5c-3 0-4.8 2-4.8 5v2.6L3.8 13h12.4l-1.4-1.9V8.5c0-3-1.8-5-4.8-5Z" />
@@ -276,6 +282,7 @@ const NAV: { route: Route; label: string; icon: (active: boolean) => ReactNode }
   {
     route: { page: 'settings' },
     label: 'Settings',
+    short: 'Settings',
     icon: (active) => (
       <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M4 6.5h12M4 10h12M4 13.5h12" />
@@ -360,7 +367,15 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
                   <span className="nav-icon" aria-hidden="true">
                     {n.icon(active)}
                   </span>
-                  <span>{n.label}</span>
+                  <span className="nav-long">{n.label}</span>
+                  <span className="nav-short" aria-hidden="true">
+                    {n.short}
+                  </span>
+                  {n.route.page === 'notifications' && (c.data.notifications?.unread ?? 0) > 0 && (
+                    <span className="badge nav-badge" aria-hidden="true">
+                      {c.data.notifications!.unread > 99 ? '99+' : c.data.notifications!.unread}
+                    </span>
+                  )}
                 </a>
               </li>
             );
@@ -371,7 +386,7 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
           <span className="muted small">{c.data.system ? `Harbor ${c.data.system.version}` : ''}</span>
         </div>
       </nav>
-      <main className="content">
+      <main className={`content ${page === 'settings' ? 'settings-page' : ''}`}>
         <HttpsBanner c={c} go={go} />
         {c.loadError && (
           <p className="error banner" role="alert">
@@ -391,7 +406,7 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
         {page === 'publishing' && <Publishing c={c} onPublish={setPublishing} />}
         {page === 'platform' && <Platform c={c} />}
         {page === 'notifications' && <Notifications c={c} onOpenApp={(id) => setDrawer(c.data.instances.find((i) => i.id === id) ?? null)} />}
-        {page === 'settings' && <Settings c={c} initialSection={route.page === 'settings' ? route.section : undefined} onSection={(s) => go(s === 'overview' ? { page: 'settings' } : { page: 'settings', section: s })} />}
+        {page === 'settings' && <Settings c={c} initialSection={route.page === 'settings' ? route.section : undefined} onSection={(s) => go(s ? { page: 'settings', section: s } : { page: 'settings' })} />}
       </main>
 
       {uploading && (
@@ -571,6 +586,7 @@ function NotificationBell({ c, onOpenApp, onViewAll }: { c: ReturnType<typeof us
                     </svg>
                   </button>
                 </div>
+                <NotificationActions c={c} item={item} onOpenApp={onOpenApp} onDone={() => setOpen(false)} />
               </li>
             ))}
           </ul>

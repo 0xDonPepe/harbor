@@ -1075,6 +1075,16 @@ account
     out(r, () => `Password changed. ${r.revokedSessions} other session(s) logged out.`);
   });
 
+account
+  .command('unlock')
+  .description("after a daemon restart, unlock this machine's key with your password (encrypted installs, restores and backups need it; decision 164)")
+  .option('--stdin', 'read the password from stdin', false)
+  .action(async (opts: { stdin: boolean }) => {
+    const password = opts.stdin ? ((await readStdinAll()).split('\n')[0] ?? '') : await promptHidden('Password: ');
+    const r = await client().post<{ unlocked: boolean }>('/v1/account/unlock', { password });
+    out(r, () => (r.unlocked ? "This machine's key is unlocked." : 'Password accepted; this Harbor has no machine key yet.'));
+  });
+
 const totp = account.command('totp').description('two-factor login (authenticator app)');
 totp
   .command('status')

@@ -19,7 +19,7 @@ export function SetupWizard({ status, onDone }: { status: SetupStatusDto; onDone
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [wallpaper, setWallpaper] = useState<Wallpaper>('harbor');
+  const [wallpaper, setWallpaper] = useState<Wallpaper | null>(null);
   useEffect(() => {
     document.title = 'Set up Harbor';
   }, []);
@@ -140,21 +140,21 @@ export function SetupWizard({ status, onDone }: { status: SetupStatusDto; onDone
         {step === 3 && (
           <div className="stack">
             <h2 id="setup-h">Make it yours</h2>
-            <p className="muted small">Pick a wallpaper (you can change it, or let Harbor rotate photos daily, in Settings → Appearance).</p>
+            <p className="muted small">Pick a background (light or dark, and your own picture, live in Settings → Appearance).</p>
             <ul className="wallpapers" role="listbox" aria-label="Wallpaper">
-              {WALLPAPERS.filter((w) => w !== 'photo').map((w) => (
+              {WALLPAPERS.map((w) => (
                 <li key={w}>
                   <button
                     role="option"
-                    aria-selected={wallpaper === w}
-                    className={`swatch wp-${w} ${wallpaper === w ? 'active' : ''}`}
+                    aria-selected={(wallpaper ?? 'photo') === w}
+                    className={`swatch wp-${w} ${(wallpaper ?? 'photo') === w ? 'active' : ''}`}
                     onClick={() => {
                       applyWallpaper(w);
                       setWallpaper(w);
                     }}
-                    aria-label={`Wallpaper ${w}`}
+                    aria-label={`Wallpaper ${w === 'photo' ? 'Picture of the day' : 'Harbor'}`}
                   >
-                    <span className="swatch-name">{w.charAt(0).toUpperCase() + w.slice(1)}</span>
+                    <span className="swatch-name">{w === 'photo' ? 'Picture of the day' : 'Harbor'}</span>
                   </button>
                 </li>
               ))}

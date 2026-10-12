@@ -1,70 +1,87 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CatalogItemDto, CatalogStatusDto, PackageSourceDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
 import { StoreCard } from '../components';
 import { categoryLabel, fmtAgo } from '../format';
+import { RefreshIcon } from '../icons';
 import type { Console } from '../store';
 import { BackupPlaces } from './Backups';
+
+type StoreTab = 'apps' | 'places' | 'sources';
 
 export function Store({ c, onOpen, onInstall, onUpload }: { c: Console; onOpen: (item: CatalogItemDto) => void; onInstall: (item: CatalogItemDto) => void; onUpload: () => void }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<string>('all');
+  const [tab, setTab] = useState<StoreTab>('apps');
+  const [sources, setSources] = useState<PackageSourceDto[]>([]);
+  const loadSources = () => api.packageSources().then(setSources, () => setSources([]));
+  useEffect(() => {
+    void loadSources();
+    const t = setInterval(() => void loadSources(), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const cats = ['all', ...new Set(c.data.catalog.map((i) => i.presentation.category)), ...(c.data.catalog.some((i) => i.origin === 'local') ? ['mine'] : [])];
   const items = c.data.catalog.filter((i) => (cat === 'all' || (cat === 'mine' ? i.origin === 'local' : i.presentation.category === cat)) && (!q || `${i.name} ${i.description} ${i.presentation.tagline ?? ''}`.toLowerCase().includes(q.toLowerCase())));
   const installedOf = (id: string) => c.data.instances.filter((x) => x.packageId === id && x.installState !== 'retained').length;
+  const tabs: { id: StoreTab; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'places', label: 'Backup places' }, ...(sources.length ? [{ id: 'sources' as const, label: 'Your repositories' }] : [])];
+  const shown = tab === 'sources' && !sources.length ? 'apps' : tab;
   return (
     <section className="card" aria-labelledby="store-h">
-      <div className="row between wrap">
+      <div className="row between wrap store-head">
         <div>
           <h2 id="store-h">App Store</h2>
-          <p className="muted small">{c.data.catalog.length} apps, every image pinned and checked on a real machine. Install with one click; the app runs privately on this computer.</p>
+          <CatalogLine onLoaded={c.refresh} />
         </div>
         <div className="row wrap">
-          <input className="search" type="search" placeholder="Search apps" aria-label="Search apps" value={q} onChange={(e) => setQ(e.target.value)} />
+          {shown === 'apps' && <input className="search" type="search" placeholder="Search apps" aria-label="Search apps" value={q} onChange={(e) => setQ(e.target.value)} />}
           <button className="btn" onClick={onUpload} aria-label="Add your own app">
             + Your own app
           </button>
         </div>
       </div>
-      <div className="row wrap chips" role="tablist" aria-label="Categories">
-        {cats.map((k) => (
-          <button key={k} role="tab" aria-selected={cat === k} className={`chip ${cat === k ? 'active' : ''}`} onClick={() => setCat(k)}>
-            {k === 'all' ? 'All' : k === 'mine' ? 'Your apps' : categoryLabel(k)}
+      {/* decision 164: backup places (and your git repositories) are their own menus, not a footer */}
+      <div className="seg store-tabs" role="group" aria-label="Store sections">
+        {tabs.map((t) => (
+          <button key={t.id} className={`seg-btn ${shown === t.id ? 'active' : ''}`} aria-pressed={shown === t.id} onClick={() => setTab(t.id)}>
+            {t.label}
           </button>
         ))}
       </div>
-      {!c.loaded ? (
-        <p className="muted">Loading…</p>
-      ) : (
-        <ul className="grid store">
-          {items.map((i) => (
-            <li key={i.id} className="store-wrap">
-              <StoreCard item={i} installed={installedOf(i.id)} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} disabled={c.busy} />
-              {i.availability === 'unavailable' && <p className="error small">{i.reason}</p>}
-            </li>
-          ))}
-          {items.length === 0 && <li className="muted">No apps match.</li>}
-        </ul>
+      {shown === 'apps' && (
+        <>
+          <div className="row wrap chips" role="tablist" aria-label="Categories">
+            {cats.map((k) => (
+              <button key={k} role="tab" aria-selected={cat === k} className={`chip ${cat === k ? 'active' : ''}`} onClick={() => setCat(k)}>
+                {k === 'all' ? 'All' : k === 'mine' ? 'Your apps' : categoryLabel(k)}
+              </button>
+            ))}
+          </div>
+          {!c.loaded ? (
+            <p className="muted">Loading…</p>
+          ) : (
+            <ul className="grid store">
+              {items.map((i) => (
+                <li key={i.id} className="store-wrap">
+                  <StoreCard item={i} installed={installedOf(i.id)} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} disabled={c.busy} />
+                  {i.availability === 'unavailable' && <p className="error small">{i.reason}</p>}
+                </li>
+              ))}
+              {items.length === 0 && <li className="muted">No apps match.</li>}
+            </ul>
+          )}
+        </>
       )}
-      <GitSources />
-      <BackupPlaces />
-      <CatalogLine onLoaded={c.refresh} />
+      {shown === 'places' && <BackupPlaces />}
+      {shown === 'sources' && <GitSources sources={sources} reload={loadSources} />}
     </section>
   );
 }
 
 // Repositories Harbor watches as app sources (decision 80): check now, toggle redeploy, forget.
-function GitSources() {
-  const [sources, setSources] = useState<PackageSourceDto[]>([]);
+function GitSources({ sources, reload }: { sources: PackageSourceDto[]; reload: () => Promise<void> }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = () => api.packageSources().then(setSources, () => setSources([]));
-  useEffect(() => {
-    void load();
-    const t = setInterval(() => void load(), 30_000);
-    return () => clearInterval(t);
-  }, []);
-  if (sources.length === 0) return null;
+  const load = reload;
   const act = async (id: string, fn: () => Promise<unknown>) => {
     setBusy(id);
     setError(null);
@@ -80,6 +97,7 @@ function GitSources() {
   return (
     <section aria-labelledby="sources-h" className="git-sources">
       <h3 id="sources-h">Apps from your repositories</h3>
+      <p className="muted small">Harbor watches each branch; a new commit becomes an update.</p>
       {error && <p className="error small">{error}</p>}
       <ul className="plain">
         {sources.map((s) => (
@@ -111,22 +129,33 @@ function GitSources() {
   );
 }
 
-// Decision 158: which official catalog this Harbor uses, and a quiet way to look for a newer one now
-// (Harbor also checks on its own every six hours). No button when updates are off. A stored failure of
-// the automatic check shows on load, so a stuck catalog is never silent.
+// Decision 158: which official catalog this Harbor uses, and a way to look for a newer one now. Decision 164:
+// it sits under the Store's title with a refresh icon; Harbor checks on its own every hour, and this line
+// re-reads the status every few minutes, loading new apps by itself when a newer catalog arrived. A stored
+// failure of the automatic check shows on load, so a stuck catalog is never silent.
 function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
   const [st, setSt] = useState<CatalogStatusDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ text: string; error: boolean } | null>(null);
+  const serial = useRef<number | null>(null);
   useEffect(() => {
-    api.catalogStatus().then(
-      (s) => {
-        setSt(s);
-        if (s.source && s.error) setResult({ text: `Last check failed: ${s.error}`, error: true });
-      },
-      () => setSt(null),
-    );
-  }, []);
+    const read = (first: boolean) =>
+      api.catalogStatus().then(
+        (s) => {
+          setSt(s);
+          if (first && s.source && s.error) setResult({ text: `Last check failed: ${s.error}`, error: true });
+          if (serial.current !== null && s.serial > serial.current) {
+            void onLoaded();
+            setResult({ text: 'New apps and updates loaded', error: false });
+          }
+          serial.current = s.serial;
+        },
+        () => (first ? setSt(null) : undefined),
+      );
+    void read(true);
+    const t = setInterval(() => void read(false), 5 * 60_000);
+    return () => clearInterval(t);
+  }, [onLoaded]);
   if (!st) return null;
   const from = st.createdAt ? new Date(st.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
   const check = async () => {
@@ -139,6 +168,7 @@ function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
         await onLoaded();
         setResult({ text: 'New apps and updates loaded', error: false });
       } else setResult({ text: 'Up to date', error: false });
+      serial.current = next.serial;
       setSt(next);
     } catch (e) {
       setResult({ text: e instanceof Error ? e.message : String(e), error: true });
@@ -151,8 +181,8 @@ function CatalogLine({ onLoaded }: { onLoaded: () => Promise<void> }) {
       <span>{from ? `App catalog from ${from}` : 'App catalog bundled with this Harbor'}</span>
       {st.source && st.checkedAt && <span title={new Date(st.checkedAt).toLocaleString()}>· checked {fmtAgo(st.checkedAt)}</span>}
       {st.source ? (
-        <button className="btn ghost small" disabled={busy} onClick={() => void check()}>
-          {busy ? 'Checking…' : 'Check for new apps'}
+        <button className="btn ghost icon small refresh" disabled={busy} onClick={() => void check()} aria-label={busy ? 'Checking…' : 'Check for new apps'} title="Check for new apps">
+          <RefreshIcon spinning={busy} />
         </button>
       ) : (
         <span>· Catalog updates are off</span>

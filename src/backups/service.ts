@@ -205,7 +205,7 @@ export class BackupService {
 
   private machineKeyOrThrow(): Buffer {
     const k = this.ctx.machineKey.take();
-    if (!k) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login, so it cannot reach its backup key', { nextAction: 'Log in again; backups resume on their own.' });
+    if (!k) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so it cannot reach its backup key', { nextAction: 'Type your password to unlock this machine\'s key (log in again, or run harbor account unlock); backups resume on their own.' });
     return k;
   }
   // The backup key: 32 random bytes, stored only wrapped under the machine key (like the recovery card).

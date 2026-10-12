@@ -8,6 +8,7 @@ import path from 'node:path';
 import { sha256Hex } from '../src/packages/inventory.js';
 import { RELEASE_FILES } from '../src/contracts/release.schema.js';
 import { readCatalogIndex } from '../src/packages/catalog.js';
+import { parseRestrictedYaml } from '../src/packages/yaml.js';
 import { catalogArg } from './catalog-dir.mjs';
 
 let parsed: { rest: string[]; dir: string };
@@ -34,8 +35,9 @@ function refresh(dir: string): { release: Record<string, unknown> & { files: Rec
     if (release.files[f]?.sha256 !== h) { changed = true; release.files[f] = { sha256: h }; }
   }
   // presentation assets referenced by the manifest
-  const manifestText = readFileSync(path.join(dir, 'manifest.yaml'), 'utf8');
-  const assetNames = [...manifestText.matchAll(/^\s*(?:icon:|-)\s*([a-z0-9][a-z0-9._-]*\.(?:svg|png|jpg|jpeg|webp))\s*$/gm)].map((m) => m[1]!);
+  // parsed, not pattern-matched: a flow list (`gallery: [a.png, b.png]`) counts as much as a block list
+  const manifest = parseRestrictedYaml(readFileSync(path.join(dir, 'manifest.yaml')), 'manifest.yaml') as { presentation?: { icon?: string; gallery?: string[] } };
+  const assetNames = [...new Set([...(manifest.presentation?.icon ? [manifest.presentation.icon] : []), ...(manifest.presentation?.gallery ?? [])])];
   const assets: Record<string, { sha256: string }> = {};
   for (const name of assetNames) assets[name] = { sha256: sha256Hex(readFileSync(path.join(dir, name))) };
   if (JSON.stringify(release.assets ?? {}) !== JSON.stringify(assets)) {

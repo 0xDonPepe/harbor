@@ -26,7 +26,7 @@ import { rfc3339, type Clock } from '../util.js';
 // Never touches Docker: installed apps see a new revision as an ordinary update.
 
 export const CATALOG_FIRST_CHECK_MS = 60_000;
-export const CATALOG_CHECK_INTERVAL_MS = 6 * 3600_000;
+export const CATALOG_CHECK_INTERVAL_MS = 3600_000; // decision 164: hourly (was six hours)
 const META_TIMEOUT_MS = 30_000;
 const ZIP_TIMEOUT_MS = 5 * 60_000;
 export const CHECK_DEADLINE_MS = 240_000;
@@ -271,7 +271,7 @@ export class CatalogUpdateService {
     }
   }
 
-  // First check a minute after start (the daemon settles first), then every six hours. Off: no timer.
+  // First check a minute after start (the daemon settles first), then every hour. Off: no timer.
   start(firstDelayMs = CATALOG_FIRST_CHECK_MS, intervalMs = CATALOG_CHECK_INTERVAL_MS): void {
     this.stop();
     if (!this.deps.url) return;

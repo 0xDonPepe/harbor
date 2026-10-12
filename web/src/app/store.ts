@@ -73,6 +73,9 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const [pending, setPending] = useState<Action | null>(null);
   const [plan, setPlan] = useState<PlanDto | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
+  // decision 164: the daemon restarted and this machine's key is locked; the review dialog asks for the password
+  const [locked, setLocked] = useState(false);
+  const lastApprove = useRef<{ secrets?: Record<string, string>; acceptPermissions: boolean }>({ acceptPermissions: false });
   const [watching, setWatching] = useState<OperationDto | null>(null);
   const [lastDone, setLastDone] = useState<OperationDto | null>(null);
   const key = useRef<string | null>(null);
@@ -123,10 +126,20 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     return () => clearInterval(t);
   }, [watching, refresh, onAuthLost]);
 
+  const failed = (e: unknown) => {
+    if (e instanceof ApiError && e.code === 'MACHINE_KEY_LOCKED') {
+      setLocked(true);
+      setPlanError(null);
+      return;
+    }
+    setPlanError(e instanceof ApiError ? `${e.message} ${e.nextAction}` : String(e));
+  };
+
   const start = async (action: Action) => {
     setPending(action);
     setPlan(null);
     setPlanError(null);
+    setLocked(false);
     try {
       // Strip the passphrase for the plan call: the daemon validates it but
       // never stores it in the plan. It travels with approve() instead.
@@ -141,7 +154,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       key.current = newIdempotencyKey();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return onAuthLost();
-      setPlanError(e instanceof ApiError ? `${e.message} ${e.nextAction}` : String(e));
+      failed(e);
     }
   };
 
@@ -149,6 +162,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const approve = async (secrets?: Record<string, string>, acceptPermissions = false) => {
     if (!plan || submitting.current) return;
     submitting.current = true;
+    lastApprove.current = { ...(secrets ? { secrets } : {}), acceptPermissions };
     try {
       const k = key.current ?? (key.current = newIdempotencyKey());
       const r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions);
@@ -158,7 +172,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       void refresh();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return onAuthLost();
-      setPlanError(e instanceof ApiError ? `${e.message} ${e.nextAction}` : String(e));
+      failed(e);
     } finally {
       submitting.current = false;
     }
@@ -168,13 +182,23 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     setPending(null);
     setPlan(null);
     setPlanError(null);
+    setLocked(false);
+  };
+
+  // Unlock with the password, then carry on where it stopped (plan again, or approve again). Throws on a
+  // wrong password so the prompt can say so.
+  const unlockAndRetry = async (password: string) => {
+    await api.unlockMachine(password);
+    setLocked(false);
+    if (plan) await approve(lastApprove.current.secrets, lastApprove.current.acceptPermissions);
+    else if (pending) await start(pending);
   };
 
   // Small settings writes (launcher order, an app's look, wallpaper) apply optimistically and re-sync.
   const patchData = useCallback((fn: (d: Data) => Data) => setData(fn), []);
 
   const busy = Boolean(watching && !isFinal(watching)) || data.system?.busyOperationId != null;
-  return { data, loaded, loadError, pending, plan, planError, watching, lastDone, busy, start, approve, cancel, refresh, patchData, dismiss: () => { setWatching(null); setLastDone(null); } };
+  return { data, loaded, loadError, pending, plan, planError, locked, unlockAndRetry, watching, lastDone, busy, start, approve, cancel, refresh, patchData, dismiss: () => { setWatching(null); setLastDone(null); } };
 }
 
 export type Console = ReturnType<typeof useConsole>;

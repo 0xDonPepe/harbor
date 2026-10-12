@@ -8,7 +8,7 @@ import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permiss
 import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
-import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
 import { lanAppHost, lanNames, lanUrl } from '../system/lan.js';
 import { caPem, ensureTlsCerts, lanHttpsHosts, readTlsState, reconcileLanHttps } from '../system/lan-https.js';
@@ -473,7 +473,7 @@ export class ApplicationService {
   }
 
   notifications(unreadOnly: boolean): NotificationsDto {
-    const items = this.ctx.repo.notifications({ unreadOnly }).map((n) => ({ id: n.id, createdAt: n.createdAt, kind: n.kind, severity: n.severity, title: n.title, body: n.body, instanceId: n.instanceId, read: n.readAt !== null, link: notificationLink(n.kind) }));
+    const items = this.ctx.repo.notifications({ unreadOnly }).map((n) => ({ id: n.id, createdAt: n.createdAt, kind: n.kind, severity: n.severity, title: n.title, body: n.body, instanceId: n.instanceId, read: n.readAt !== null, link: notificationLink(n.kind), actions: notificationActions(n.kind, n.instanceId) }));
     return { items, unread: this.ctx.repo.unreadNotificationCount() };
   }
   markNotificationRead(id: string): NotificationsDto {
@@ -590,6 +590,11 @@ export class ApplicationService {
   // material (trusting it is the point); the key never leaves tls/ (0600).
   httpsEnabled(): boolean {
     return this.ctx.config.lan.enabled && (this.ctx.repo.setting<boolean>('network.httpsEnabled') ?? false);
+  }
+  // Decision 164: names the Harbor certificate covers while LAN HTTPS is on (the console's https probe targets).
+  httpsHosts(): string[] {
+    if (!this.httpsEnabled()) return [];
+    return readTlsState(this.ctx.config.stateDir)?.hosts ?? [];
   }
   networkHttps(): NetworkHttpsDto {
     const enabled = this.httpsEnabled();
@@ -1097,7 +1102,7 @@ export class ApplicationService {
       let machineWrapped: MachineWrappedKey | undefined;
       if (next === null || loginKey) {
         const machineKey = this.ctx.machineKey.take();
-        if (!machineKey) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again first', { nextAction: "Log out and log in with your password once (it unlocks this machine's key), then retry." });
+        if (!machineKey) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then retry.' });
         try {
           machineWrapped = wrapMasterKeyForMachine(masterKey, machineKey);
         } finally {
@@ -1690,7 +1695,7 @@ export class ApplicationService {
           // Decision 120: a default-key home must get this machine's wrapping or it would open only with
           // the recovery key after its next lock. The key is in memory only after a password login since
           // the daemon started; a remembered session after a restart/self-update does not unseal it.
-          if (!this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before installing an encrypted app', { nextAction: 'Log out and log in with your password once (it unlocks this machine\'s key), then install again.' });
+          if (!this.ctx.machineKey.unlocked) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then install again.' });
           location = { dir, defaultKey: true };
         } else {
           if (typeof pass !== 'string' || pass.length < 8) throw new HarborError('INVALID_REQUEST', 'the app encryption passphrase must be at least 8 characters', { nextAction: 'Choose a passphrase (or a generated recovery key) of 8+ characters, or install without one and rely on your Harbor recovery key.' });
@@ -2217,7 +2222,7 @@ export class ApplicationService {
     if (existing && !existing.purgedAt) throw new HarborError('NAME_CONFLICT', 'that app is already on this machine', { nextAction: 'Restore it from its own Backups tab instead.' });
     // An app fully uninstalled here keeps its row for history: the restored copy gets a fresh identity.
     const instanceId = existing ? ids.uuid() : req.instanceId;
-    if (!this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before restoring an app', { nextAction: 'Log out and log in with your password once, then try again.' });
+    if (!this.ctx.machineKey.unlocked) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then try again.' });
     const point = backups.resolvePoint(req.instanceId, req.runId, req.targetId);
     const pkgId = tagValue(point.snapshot.tags, 'pkg') ?? '';
     let pkg: LoadedPackage;
@@ -2281,7 +2286,7 @@ export class ApplicationService {
     const plain = resources.filter((r) => r.kind === 'volume' && !r.metadata?.['homePath']).sort((a, b) => a.role.localeCompare(b.role));
     const folders = resources.filter((r) => r.kind === 'bind');
     if (!plain.length) throw new HarborError('INVALID_STATE', `${inst.name} keeps no data in Harbor volumes${folders.length ? ' (only in your own folders, which Harbor never moves)' : ''}; there is nothing to seal`);
-    if (!this.ctx.machineKey.unlocked) throw new HarborError('INVALID_STATE', 'Harbor restarted since your last login: log in again before encrypting an app', { nextAction: 'Log out and log in with your password once (it unlocks this machine\'s key), then try again.' });
+    if (!this.ctx.machineKey.unlocked) throw new HarborError('MACHINE_KEY_LOCKED', 'Harbor restarted since your last login, so its key for encrypted apps is locked', { nextAction: 'Type your password to unlock this machine\'s key (the console asks; or run harbor account unlock), then try again.' });
     const dir = this.resolveInstallLocation(path.posix.join(this.ctx.config.userDataDir, 'harbor-apps', inst.packageId), repo.listInstances(), inst.packageId);
     const proposal: PlanProposal = {
       packageId: inst.packageId,
@@ -2684,5 +2689,47 @@ export function isProxyAddress(s: string): boolean {
 export function notificationLink(kind: string): string | null {
   if (kind === 'drive-attention' || kind.startsWith('device-') || kind === 'storage-missing') return '#/settings/storage';
   if (kind.startsWith('backup-')) return '#/settings/backups';
+  if (kind === 'disk-pressure') return '#/settings/storage';
+  if (kind === 'exposure-degraded') return '#/publishing';
+  if (kind === 'delivery-failed') return '#/settings/notifications';
+  if (kind === 'harbor-update') return '#/settings';
   return null;
+}
+
+// Decision 164: each kind of notification brings its own call to action (first = primary). Derived, not
+// stored, like the link; an action that needs an app only appears when the row names one.
+export function notificationActions(kind: string, instanceId: string | null): NotificationActionDto[] {
+  const route = (label: string, to: string): NotificationActionDto => ({ label, do: 'route', route: to });
+  const app = (label: string, d: NotificationActionDto['do']): NotificationActionDto[] => (instanceId ? [{ label, do: d, route: null }] : []);
+  switch (kind) {
+    case 'harbor-update':
+      return [{ label: 'Install now', do: 'update-harbor', route: null }];
+    case 'update-available':
+      return app('Update now', 'update-app');
+    case 'source-commit':
+      return app('Update now', 'update-app');
+    case 'app-degraded':
+    case 'tailnet-moved':
+    case 'link-needs-provider':
+    case 'operation-failed':
+      return app('Open app', 'open-app');
+    case 'home-locked':
+      return app('Unlock', 'open-app');
+    case 'backup-failed':
+    case 'backup-skipped':
+    case 'backup-stale':
+      return [...app('Back up now', 'back-up-now'), route('Open Backups', '#/settings/backups')];
+    case 'backup-target':
+      return [route('Open Backups', '#/settings/backups')];
+    case 'exposure-degraded':
+      return [...app('Open app', 'open-app'), route('Open Publishing', '#/publishing')];
+    case 'delivery-failed':
+      return [route('Check channels', '#/settings/notifications')];
+    case 'disk-pressure':
+      return [route('See storage', '#/settings/storage')];
+    case 'storage-missing':
+      return [...app('Open app', 'open-app'), route('Open Storage', '#/settings/storage')];
+    default:
+      return kind === 'drive-attention' || kind.startsWith('device-') ? [route('Open Storage', '#/settings/storage')] : [];
+  }
 }

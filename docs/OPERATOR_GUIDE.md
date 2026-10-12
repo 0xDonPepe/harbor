@@ -282,7 +282,7 @@ own backup key (so the nightly runs need no one; it works after the first login 
 Harbor made, on any machine, even with plain `restic` (the words, lowercase, single spaces, are the
 password).
 
-**1. Add a place** (Settings → Backups → *Add a place*, or App Store → *Backup places*):
+**1. Add a place** (Settings → Backups → *Add a place*, or App Store → *Backup places* tab):
 
 | Place | You fill in | Notes |
 |---|---|---|
@@ -566,19 +566,22 @@ The console's **Settings** page covers what a household operator needs after boo
 | Section | What you can do |
 |---|---|
 | Account | change the administrator password (every other logged-in browser or CLI is signed out); *Remember this browser* (30-day session), the session list, *Log out of other sessions*, *Log out*; *What should Home call you?* sets the greeting name Home shows ("Good evening, Carlos") — the login name stays the credential, clearing it falls back to the login name |
-| Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note |
+| Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note. Once a browser trusts the certificate, opening `http://harbor.local/` moves to `https://harbor.local/` by itself (Harbor checks the browser really trusts it first, so an untrusted device stays on http with no warning page). To stay on plain http in one tab anyway, add `?skiphttps` to the address (`http://harbor.local/?skiphttps`); `?skiphttps=false` undoes it |
 | Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; log out of the tailnet |
 | Public addresses | the wizard for publishing on the internet: this machine's public address, your domains with a DNS check (*Points here* / *Points elsewhere* / *No DNS record yet*), which app uses each, re-check and forget; certificates are automatic |
 | Remote access (details) | tailnet addresses, node key expiry, link to the Tailscale admin console; the auth key you used is single-use and is not stored |
 | Storage | disks with free space, removable drives (mount/eject, auto-mount/auto-start toggles), the Harbor data folder (`/srv/harbor`, where Harbor may create folders for you), folders currently used by apps, and a folder browser with *Create folder here* |
-| Overview | the landing page: your machine's name, what it runs on, Harbor version, uptime, storage/memory/temperature, *Restart* and *Shut down* (each asks first), and the wallpaper picker |
-| Appearance | theme (match device / dark / light), wallpaper presets, your own picture (PNG/JPEG/WebP up to 6 MB), or **rotating wallpapers**: Harbor itself fetches a new picture on a schedule from Bing or Wikimedia Commons (no account) or from your favourite subreddits (needs a free Reddit "script" app key; Settings walks you through it). The picture and its credit show on Home. |
+| Overview | the landing page: the **Harbor version first**, with *Update to x.y.z* when a release is out, then your machine's name, what it runs on, uptime, storage/memory/temperature, *Restart* and *Shut down* (each asks first), the Look picker and the automatic app-update default |
+| Appearance | **Look**: Harbor in *Auto* (follows the device), *Light* or *Dark*, over the *Picture of the day* (or your own picture) or flat *Harbor*; *Readability over pictures* (how solid cards are, per browser); your own picture (PNG/JPEG/WebP up to 6 MB), or **rotating wallpapers**: Harbor itself fetches a new picture on a schedule from Bing or Wikimedia Commons (no account) or from your favourite subreddits (needs a free Reddit "script" app key; Settings walks you through it). The picture and its credit show on Home. |
 | Advanced access | a **terminal** on the machine (shell of the Harbor service account: `docker`, `harbor …`), the SSH forwarding lines with copy buttons, and the CLI equivalents |
 | Troubleshoot | Harbor's own log (systemd journal) and each app's container logs, copyable |
 | Account (two-factor) | turn on a 6-digit authenticator code at login (QR code or typed key); turn off with the password; lost the app? on the machine: `sudo /opt/harbor/bin/harbor account totp reset --local --config /etc/harbor/harbor.json` |
 | Overview (name) | rename the machine (shown in Settings and the browser tab) |
 
 The same actions exist as commands: `harbor account set-password`, `harbor account name [name]` (show or set the Home greeting name; empty clears it), `harbor tailscale login [--authkey-stdin]`, `harbor tailscale logout`, `harbor network https` / `harbor network https on|off` / `harbor network ca`, `harbor storage`, `harbor domains [add|check|forget]`, `harbor purge`.
+
+On a desktop the section list and the section scroll separately. On a phone Settings opens as a list;
+tap a section to open it, and *‹ Settings* goes back.
 
 Search everything with **⌘K / Ctrl+K** (or `/`): installed apps open on Enter, store apps show their page, settings sections jump straight there.
 
@@ -592,6 +595,12 @@ install) is gone for good, while a row for a problem that still exists (a missin
 on the next check, because the condition is still true. When more than 30 rows pile up, a
 **View all** button opens the full history in a dialog.
 
+Each notification brings its own button: *Harbor x.y.z is available* → **Install now** (opens Overview
+with the update's confirm), an app update → **Update now** (the usual review), a failed backup →
+**Back up now** and **Open Backups**, a drive or full disk → **Open Storage**, an app that stopped
+answering → **Open app**, a channel that failed → **Check channels**. On a phone the bell lives in the
+bottom bar as the *Alerts* tab, with the unread count on it.
+
 ### 4c. Make it yours: arrange and customise the launcher
 
 - **Arrange**: drag an icon with the mouse, or press and hold it on a phone, and drop it where you want it. *Arrange* (top right of Home) turns on a jiggle mode where the arrow keys also move the focused app; *Done* or Esc leaves it. The order is saved on the machine, so every device sees the same home screen.
@@ -601,7 +610,9 @@ on the next check, because the condition is still true. When more than 30 rows p
   the App Store, Publishing, Platform, `harbor list` and notifications. A package can suggest it
   (`presentation.hideFromHome`); your choice wins. API-only apps have no *Open* button, only addresses.
 - **Wallpaper**: a fresh install starts with Bing's picture of the day (keyless, daily, credit on Home);
-  offline it keeps the last picture or the flat preset. Existing installations keep their choice.
+  offline it keeps the last picture or flat Harbor. The other backgrounds are flat *Harbor* (light or dark,
+  with the theme) and your own picture; the old Dusk/Forest/Plain presets are gone (a browser that had one
+  shows the picture).
 - CLI: `harbor look <app> --name Photos --glyph 📷 --color #3366ff`, `harbor look <app> --hide` / `--show`, `harbor look <app> --reset`; `harbor wallpaper`, `harbor wallpaper set --on --source bing|wikimedia|reddit [--subreddits a,b] [--every 24] [--reddit-client-id ID --reddit-secret-stdin]`, `harbor wallpaper next`; `harbor power restart|shutdown`.
 - **Restart / Shut down** work because bootstrap installs a small polkit rule that lets the Harbor service account ask the system for exactly those two actions. On an installation bootstrapped before v0.5.0, run `sudo /opt/harbor/bin/harbor bootstrap --yes` once to add it; Settings tells you when it is missing.
 
@@ -628,7 +639,8 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   on disk is damaged later, Harbor sets it aside and uses the catalog it shipped with until a good one
   arrives.
 - **New apps and app updates arrive on their own.** Harbor looks a minute after it starts and then every
-  6 hours. To look now: App Store → **Check for new apps** (bottom of the page), or `harbor catalog refresh`.
+  hour (0.30.0; it was 6 hours), and an open App Store picks a new catalog up within minutes. To look now:
+  the refresh icon next to *App catalog from …* under the App Store title, or `harbor catalog refresh`.
   No restart is needed, and running apps are not touched.
 - **What happens to installed apps**: a newer version shows up like any update (the *updates available*
   card and the blue ↑). If an app has *Update this app automatically* on, Harbor updates it by itself,
@@ -837,7 +849,7 @@ Notes:
 | `PLAN_STALE` (409) | A newer app catalog (or a new upload of the package) arrived between the review and the moment Harbor started the change. Nothing was changed: the app runs as before (an install leaves nothing behind). Review the plan again; it now shows the new version. |
 | `IDEMPOTENCY_CONFLICT` | The key was used for another request, or the plan was already submitted; poll the returned operation id. |
 | `READINESS_TIMEOUT` | App did not answer within its manifest deadline. `harbor inspect`, `docker logs <container>`. Resources kept; `remove` to clean up. |
-| "Harbor restarted since your last login: log in again before installing an encrypted app" | After Harbor restarts (an update, a reboot) your remembered browser session still works, but the key that lets this machine reopen encrypted apps at login is loaded only by a password login. Log out, log in with your password, and install again. Harbor refuses rather than sealing an app that only your recovery key could reopen. |
+| *Type your password to continue* while installing, restoring or encrypting an app (CLI: "Harbor restarted since your last login, so its key for encrypted apps is locked", exit 3) | After Harbor restarts (an update, a reboot) your remembered browser session still works, but the key that lets this machine reopen encrypted apps is unlocked only by your password. Type it in the dialog and Harbor carries on with the same install; from a terminal run `harbor account unlock`. Harbor refuses rather than sealing an app that only your recovery key could reopen. |
 | `DATA_MISSING` / `SECRET_MISSING` | Retained volume or key gone/replaced. Restore from your backup; Harbor will not create replacements. For an app folder on a removable drive, see §4a1 (re-insert, restore with marker, or adopt the replacement). |
 | `OWNERSHIP_CONFLICT` | A same-named resource exists that Harbor did not create for this instance. Inspect manually. |
 | `DOCKER_UNAVAILABLE` (503) | `systemctl status docker`. |

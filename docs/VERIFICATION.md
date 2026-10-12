@@ -1,6 +1,6 @@
 # Verification report
 
-Harbor local preview, now at 0.28.0; each section names the version it checked. This report lists what actually ran, where, with which versions,
+Harbor local preview, now at 0.30.0; each section names the version it checked. This report lists what actually ran, where, with which versions,
 and the outcome. Nothing here is asserted without a recorded run. Live runs are stored under
 `docs/evidence/<run-id>/` (report.md, report.json, bootstrap logs, screenshots, exported files).
 
@@ -219,6 +219,33 @@ Fake-adapter and unit evidence only (no live run of these fixes yet):
 - `pnpm test:e2e` 29 passed (unchanged console).
 - `pnpm catalog:verify`: nextcloud revision 4 (hashes refreshed, qualification `pending` until a
   droplet run).
+
+## 3v. Console round: notification buttons, unlock in place, https by itself, Store/Settings layout (2026-10-12, Harbor 0.30.0, decision 164)
+
+**Local gate only** (fake adapter; no live run yet — see the last bullet):
+
+- **Gate:** `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 341 passed (new: `notification-actions.test.ts` —
+  harbor-update → *Install now*, app actions only with an instance, backup failures retry then link, drives and
+  disks → Storage, unknown kinds → none; `ui-csp.test.ts` — CSP unchanged with LAN HTTPS off, `img-src` gains
+  exactly the certificate hosts incl. an IPv6 literal, a name with `;` is dropped; `https-redirect.test.ts` — the
+  target keeps path/query/route and drops `skiphttps`, never moves a host the certificate does not cover or a page
+  already on https, `?skiphttps` sticks per tab and `=false` clears it); `pnpm test:integration` 220 passed + 3
+  live-Docker skipped (`app-homes.test.ts`: after a restart the plan answers 409 `MACHINE_KEY_LOCKED`, a wrong
+  password on `POST /v1/account/unlock` is 422, the right one returns `{unlocked: true}` and the same plan then
+  succeeds with `defaultKey`; `lan-https.test.ts`: the open `GET /v1/setup` names the https hosts while HTTPS is on
+  and `{enabled: false, hosts: []}` after, the open probe answers `image/png`, `no-store`); `pnpm build && pnpm
+  test:e2e` 35 passed (new: the review dialog asks for the password on `MACHINE_KEY_LOCKED`, says *password is
+  wrong*, then carries on to *Review install*; Store sections + catalog line with refresh icon under the title +
+  Backup places tab; desktop Settings columns `overflow-y: auto`; phone Settings list → section → *‹ Settings*,
+  no bell in the dock, no horizontal scroll; a harbor-update row's *Install now* lands on `#/settings/overview`
+  with the update confirm open; the install page's *Source code on GitHub* link from `presentation.source`);
+  `catalog:verify` fixtures 9 ok; `catalog:hash --check` ok (fixtures, and all 139 apps of the harbor-apps
+  screenshots branch); `pnpm openapi -- --check` current (102 paths).
+- Screenshots in design mode (`pnpm dev:ui`, 1370 px and 390 px) checked by eye: Settings, Store, install page,
+  Notifications, Appearance, phone list and section.
+- The probe PNG decodes (1x1, IHDR/IDAT/IEND CRCs valid).
+- **Not yet live:** the https move needs a browser that trusts a real box's CA (harbor-old after the release), and
+  the unlock prompt after a real daemon restart.
 
 ## 3u. Fixed UDP ports and permissions: the VPN pack (2026-10-12, Harbor 0.29.0, decision 163)
 

@@ -101,6 +101,17 @@
         }
       }
     },
+    "/v1/network/https/probe": {
+      "get": {
+        "description": "A 1x1 PNG the console loads over https to learn whether this browser trusts Harbor's certificate (decision 164).",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/v1/system/update": {
       "get": {
         "description": "Installed version, newest release, and the state of an update in progress.",
@@ -1260,6 +1271,37 @@
                     "maxLength": 1024
                   },
                   "newPassword": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/account/unlock": {
+      "post": {
+        "description": "Unlock this machine's key with the administrator password after a daemon restart (decision 164), so encrypted installs, restores and backups work without logging out and in. Wrong passwords count against the login limits.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 1024

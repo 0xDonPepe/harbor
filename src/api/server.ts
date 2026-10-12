@@ -61,6 +61,12 @@ declare module 'fastify' {
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{8,128}$/;
 // style-src allows inline styles for the terminal (xterm.js injects a stylesheet); scripts stay strict.
 const UI_CSP = "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+// Decision 164: while LAN HTTPS is on, images may also load from the certificate's own names (the https probe).
+export function uiCsp(httpsHosts: string[]): string {
+  const extra = httpsHosts.filter((h) => /^[A-Za-z0-9.:-]{1,253}$/.test(h)).map((h) => ` https://${h.includes(':') ? `[${h}]` : h}`).join('');
+  return extra ? UI_CSP.replace("img-src 'self' data:", `img-src 'self' data:${extra}`) : UI_CSP;
+}
+const PROBE_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 
 const errorBodySchema = {
   type: 'object',
@@ -175,8 +181,14 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   // --- first-run setup (open while no administrator exists; guarded by the installer's setup code)
   app.get('/v1/setup', { schema: { description: 'Whether this Harbor still needs its first administrator, plus what the setup wizard shows.', security: [] } }, async () => {
     const sys = service.system();
-    return { needed: setup.needed(), hostname: osHostname(), deviceName: sys.deviceName, lan: sys.lan, tailscale: await tailscaleFacts(), version: sys.version };
+    const hosts = service.httpsHosts();
+    return { needed: setup.needed(), hostname: osHostname(), deviceName: sys.deviceName, lan: sys.lan, tailscale: await tailscaleFacts(), version: sys.version, https: { enabled: hosts.length > 0, hosts } };
   });
+  // Decision 164: a 1x1 image the console on plain http loads from https://<host>/ — it only loads when the
+  // browser trusts Harbor's certificate, and then the console moves to https on its own.
+  app.get('/v1/network/https/probe', { schema: { description: 'A 1x1 PNG the console loads over https to learn whether this browser trusts Harbor\'s certificate (decision 164).', security: [] } }, async (_req, reply) =>
+    reply.header('content-type', 'image/png').header('cache-control', 'no-store').send(PROBE_PNG),
+  );
   app.post(
     '/v1/setup',
     {
@@ -411,6 +423,12 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
       const b = req.body as { currentPassword: string; newPassword: string };
       return sessions.changePassword(req.bearer!, b.currentPassword, b.newPassword);
     },
+  );
+
+  app.post(
+    '/v1/account/unlock',
+    { preHandler: requireAuth, schema: { description: 'Unlock this machine\'s key with the administrator password after a daemon restart (decision 164), so encrypted installs, restores and backups work without logging out and in. Wrong passwords count against the login limits.', body: { type: 'object', additionalProperties: false, required: ['password'], properties: { password: { type: 'string', minLength: 1, maxLength: 1024 } } } } },
+    async (req) => sessions.unlock((req.body as { password: string }).password, req.ip),
   );
 
   // --- two-factor authentication (TOTP)
@@ -1085,12 +1103,12 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
       index: ['index.html'],
       cacheControl: false,
       setHeaders: (reply) => {
-        reply.header('content-security-policy', UI_CSP);
+        reply.header('content-security-policy', uiCsp(service.httpsHosts()));
       },
     });
     app.setNotFoundHandler((req: FastifyRequest, reply: FastifyReply) => {
       if (req.method === 'GET' && !req.url.startsWith('/v1/') && (req.headers.accept ?? '').includes('text/html')) {
-        return reply.header('content-security-policy', UI_CSP).sendFile('index.html');
+        return reply.header('content-security-policy', uiCsp(service.httpsHosts())).sendFile('index.html');
       }
       return reply.status(404).send(new HarborError('NOT_FOUND', `no route ${req.method} ${req.url}`).toBody());
     });

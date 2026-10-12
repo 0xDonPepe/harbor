@@ -296,6 +296,8 @@ export const MANIFEST_SCHEMA = {
         gallery: { type: 'array', maxItems: 6, items: { type: 'string', pattern: '^[a-z0-9][a-z0-9._-]{0,63}\\.(png|jpg|jpeg|webp)$' } },
         developer: plainText(80),
         website: { type: 'string', pattern: '^https://[^\\s<>"]{1,200}$' },
+        // decision 164: the project's source code (its GitHub repository, preferably), linked on the install page
+        source: { type: 'string', pattern: '^https://[^\\s<>"]{1,200}$' },
         releaseNotes: plainText(1000),
         // decision 148: plain-words disk need shown on the install page, e.g. "About 2 GB, plus your photos"
         sizeHint: plainText(120),

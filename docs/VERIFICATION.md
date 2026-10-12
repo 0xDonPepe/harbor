@@ -323,9 +323,9 @@ Signing removed (local, fake adapter):
 - harbor-apps (branch `nosign`): `scripts/sign.mjs`, `scripts/check-bundle.mjs` and `keys/` deleted;
   `.github/workflows/ci.yml` is two jobs (verify, release) and parses as YAML; not run on GitHub Actions.
 
-Not verified: the harbor-apps workflow on GitHub Actions, a download from
-GitHub on a real box, the 6-hour timer on a running daemon, and an upgrade from 0.27.x picking up the
-seed. These need the first harbor-apps release and a live run on a test machine or a droplet.
+Not verified at that point: the harbor-apps workflow on GitHub Actions, a download from GitHub on a
+real box, and an upgrade from 0.27.x picking up the seed — all done live afterwards (see "Live, GitHub +
+harbor-old (2026-10-12)" below); the 6-hour timer is still unexercised.
 
 Catalog compatibility (decision 159), local only (no UI, route or schema change; e2e not re-run):
 - `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 311 passed (new `package-features`: the walk finds 189
@@ -346,7 +346,7 @@ Catalog compatibility (decision 159), local only (no UI, route or schema change;
   non-empty `--out` refused. `pnpm package --skip-build` the same way (now through `catalog-fetch.mjs`)
   built an archive with the 17-app seed; the archive was deleted afterwards.
 
-Not verified: the `official-catalog` CI job on GitHub Actions (it needs the first harbor-apps release).
+The `official-catalog` CI job ran on GitHub Actions after the first harbor-apps release (passed; see the live entry below).
 
 No-signing merged onto the compat-hardened main (decisions 158 + 159), local, fake adapter:
 - `pnpm lint`, `pnpm typecheck` pass; `pnpm test` 321 passed (43 files; `catalog-fetch` extracts a local
@@ -372,6 +372,24 @@ Console + presentation only; no engine, route or schema change. Local, fake adap
 - `pnpm test` 262 passed (data-folder free space, `sizeHint` through import); `pnpm catalog:verify`
   with 17 `sizeHint`s (hashes refreshed; qualification unchanged — presentation only).
 - Viewed in `pnpm dev:ui` at 1280 and 390 px wide.
+**Live, GitHub + harbor-old (2026-10-12), 0.28.0:** harbor-apps CI ran on GitHub Actions for the first
+time (verify 18 s, release 22 s) and published `c1791783123` (17 apps, `catalog.zip` 151844 bytes +
+`catalog.json`, no signature). Harbor's own release job then built v0.28.0 with that catalog as the seed
+(the `official-catalog` CI job failed once before the first catalog existed, as expected, and passed on
+re-run). `pnpm catalog:fetch` on a laptop resolved the tag, checked the zip against `catalog.json`, and
+`catalog:verify` loaded all 17. On harbor-old: `sudo harbor self-update apply --to 0.28.0` from the
+GitHub release; the same 12 containers stayed up throughout ("Up 37 hours" before and after); the seed
+in `/opt/harbor/catalog` is `c1791783123` (17 apps + `index.json` + `catalog.json`, no `.sig`) and
+`release.json` records it as official. 61 s after start the daemon asked GitHub and logged "app catalog
+is up to date" (serial 1791783123). Real download path: the seed's serial was set to 1 by hand and the
+daemon restarted; 61 s later it logged "app catalog updated … from 1", wrote
+`/var/lib/harbor/catalog/1791783123/` (byte-identical to the seed apart from that serial) and
+`current.json`, without a restart. The seed was restored and the download removed; the next check said
+up to date again; no error lines; console `/healthz` 200. Not exercised live: the Store's *Check for new
+apps* button and `harbor catalog status|refresh` (the box's CLI session had expired and the admin
+password is the owner's), an app update arriving through a downloaded catalog (covered by the
+integration test), and the 6-hour timer.
+
 **Live, harbor-old (2026-10-11):** self-update 0.26.0 → 0.27.0 → 0.27.1 from the GitHub releases,
 the same 12 containers running throughout. Driven with Playwright at 1280 and 390 px: with the ext4
 USB stick mounted from the page, 0.27.0 made the 14 GB stick Immich's default; 0.27.1 keeps *This

@@ -11,6 +11,7 @@
 // Evidence: docs/evidence/vm-<timestamp>/report.json + report.md + screenshots/exports.
 // Fixtures create only test-owned resources (names prefixed harbor-test-) and clean them up.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
@@ -1069,6 +1070,41 @@ const B10 = step('B10', 'Negative: invalid hostname, duplicate hostname, unknown
   return { details: { invalidHostname: bad.json?.error, duplicate: dup.json?.error, alreadyExposed: again.json?.error }, notes: ['invalid hostname -> INVALID_REQUEST; duplicate hostname -> NAME_CONFLICT; second public exposure of the same endpoint -> INVALID_STATE; exactly one route was added'] };
 });
 
+// Decision 165 (found 2026-10-12, live on a real box): with LAN mode and the public proxy both on, anyone on the
+// internet reached the console by sending `Host: harbor.local` to the forwarded port 80. Turn LAN mode on here
+// (a cloud box needs --lan-force) and ask from THIS machine — a public client — and from the box itself.
+const hostRequest = (ip, host, pathName) => new Promise((resolve) => {
+  const req = httpRequest({ host: ip, port: 80, path: pathName, method: 'GET', headers: { host }, timeout: 15_000 }, (res) => {
+    let body = '';
+    res.on('data', (c) => (body += c));
+    res.on('end', () => resolve({ status: res.statusCode ?? 0, body }));
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', (e) => resolve({ status: 0, body: '', error: e.message }));
+  req.end();
+});
+const B11 = step('B11', 'LAN names answer only local peers: Host: harbor.local from the internet never reaches the console', async () => {
+  const b = target.ssh(`cd /root && ./${ARCHIVE_DIR}/bin/harbor bootstrap --yes --with-tools --with-public-proxy --lan --lan-force 2>&1`, { timeoutMs: 1800_000 });
+  ev.file('bootstrap-4-lan.log', b.stdout + b.stderr);
+  if (b.code !== 0) throw new Error('bootstrap re-run with --lan failed');
+  await waitFor(async () => (await fetch(`${UI}/healthz`)).ok, { timeoutMs: 120_000, intervalMs: 1000, what: 'daemon after LAN bootstrap' });
+  const lanRoute = await waitFor(() => {
+    const cfg = JSON.parse(ssh('curl -s http://127.0.0.1:2019/config/'));
+    const r = cfg?.apps?.http?.servers?.harbor_lan?.routes?.[0];
+    return r?.match?.[0]?.remote_ip ? r : null;
+  }, { timeoutMs: 180_000, intervalMs: 3000, what: 'Caddy LAN route with a remote_ip matcher' });
+  const isConsole = (r) => /"needed"\s*:/.test(r.body) || /"version"\s*:/.test(r.body);
+  const fromInternet = await hostRequest(target.hostForTunnels, 'harbor.local', '/v1/setup');
+  const fromInternetIp = await hostRequest(target.hostForTunnels, `127.0.0.1:18000`, '/v1/setup');
+  const fromBox = JSON.parse(ssh(`curl -s --max-time 10 -H 'Host: harbor.local' http://127.0.0.1/v1/setup`) || '{}');
+  if (isConsole(fromInternet) || isConsole(fromInternetIp)) throw new Error(`the console answered a public client: ${JSON.stringify({ fromInternet, fromInternetIp })}`);
+  if (fromBox.needed === undefined) throw new Error(`the console no longer answers its LAN name on the box itself: ${JSON.stringify(fromBox)}`);
+  return {
+    details: { remoteIpRanges: lanRoute.match[0].remote_ip.ranges, fromInternet: { status: fromInternet.status, error: fromInternet.error ?? null }, fromInternetIp: { status: fromInternetIp.status, error: fromInternetIp.error ?? null } },
+    notes: [`Caddy harbor_lan route carries remote_ip (${lanRoute.match[0].remote_ip.ranges.length} ranges); Caddy accepted the config`, `public client with Host: harbor.local -> HTTP ${fromInternet.status || fromInternet.error} (not the console)`, 'the box itself (loopback peer) still gets the console for harbor.local'],
+  };
+});
+
 const B02 = step('B02', 'Tailnet exposure of Excalidraw (same port) and B03 Harbor UI on the tailnet', async () => {
   const ts = cliOk(target, ['tools']).find((t) => t.id === 'tailscale');
   if (ts?.installationState !== 'installed') {
@@ -1125,7 +1161,7 @@ Files in this directory: report.json (full details), bootstrap logs, screenshots
 
 async function main() {
   await localPortsFree();
-  const steps = EXPOSURE ? [A01, A02, A03, A04, A05, A06, A07, A08, A11, A12, A10, A13, A14, B01, B04, B05, B07, B10, B02, C01, A09, B09, A15] : [A01, A02, A03, A04, A05, A06, A07, A08, A11, A12, A10, A13, A14, C01, A09, A15];
+  const steps = EXPOSURE ? [A01, A02, A03, A04, A05, A06, A07, A08, A11, A12, A10, A13, A14, B01, B04, B05, B07, B10, B02, C01, A09, B09, B11, A15] : [A01, A02, A03, A04, A05, A06, A07, A08, A11, A12, A10, A13, A14, C01, A09, A15];
   if (!should('A01')) await openTunnels();
   for (const s of steps) await s();
   if (should('A16')) {

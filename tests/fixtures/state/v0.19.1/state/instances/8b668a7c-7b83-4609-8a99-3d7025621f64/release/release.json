@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "id": "excalidraw",
+    "revision": "1"
+  },
+  "files": {
+    "manifest.yaml": {
+      "sha256": "d56880164b688df8b510ec4df887378a6632578f77197d5dd9691db5d564cc13"
+    },
+    "compose.yaml": {
+      "sha256": "a124871669ae72208b17a2ea1393a2c5e935bc3500e6518c78c2bd6c0a2d2176"
+    },
+    "README.md": {
+      "sha256": "e6108640cfdf5134ef00cf674cd2b2f287b93d8be6dc3d95dc3f7c9810e0f344"
+    }
+  },
+  "images": {
+    "web": {
+      "reference": "excalidraw/excalidraw@sha256:f7ee194addd607bf831d2af0f0a34463dd4225e426cf35199ef0b12a803398e9",
+      "repository": "excalidraw/excalidraw",
+      "tag": "latest",
+      "platform": "linux/amd64",
+      "platformDigest": "sha256:4542f30bea392b833822d0e7db4fa2220e6706ca962c082add2665159fa91758",
+      "imageCreated": "2026-05-06T21:19:58Z",
+      "source": "https://hub.docker.com/r/excalidraw/excalidraw"
+    }
+  },
+  "qualification": {
+    "status": "passed",
+    "date": "2026-10-04",
+    "node": "v24.12.0",
+    "dockerEngine": "29.8.2",
+    "dockerCompose": "5.6.0",
+    "hostOs": "Ubuntu 24.04.5 LTS x86_64",
+    "appVersions": {
+      "web": "latest"
+    },
+    "notes": [
+      "Digest resolved 2026-09-14 via registry API (scripts/registry.mjs digest docker.io/excalidraw/excalidraw:latest).",
+      "Image config: ExposedPorts 80/tcp, no declared volumes.",
+      "Live run vm-2026-09-14T18-40-00: passed",
+      "Fresh Ubuntu 24.04 x86-64 DigitalOcean droplet; A01-A16 all passed; browser demos recorded in the run directory",
+      "Live catalog run catalog-2026-10-04T03-29-24: passed (healthy after 58s; page title \"Excalidraw Whiteboard\"; health 200)"
+    ]
+  },
+  "assets": {
+    "icon.svg": {
+      "sha256": "a302ff90d3c0cf5a46cbe113ede075fcf685a0726f490dec1a82f02bb87e87c2"
+    }
+  }
+}

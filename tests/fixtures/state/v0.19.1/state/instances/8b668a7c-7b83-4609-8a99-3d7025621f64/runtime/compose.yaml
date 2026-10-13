@@ -1,0 +1,26 @@
+name: "hb_8b668a7c7b8346098a993d7025621f64"
+services:
+  web:
+    image: "excalidraw/excalidraw@sha256:f7ee194addd607bf831d2af0f0a34463dd4225e426cf35199ef0b12a803398e9"
+    restart: "unless-stopped"
+    labels:
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "8b668a7c-7b83-4609-8a99-3d7025621f64"
+      io.harbor.preview/service: "web"
+      io.harbor.preview/kind: "application"
+    networks:
+      - "default"
+    ports:
+      - target: 80
+        published: "47310"
+        host_ip: "127.0.0.1"
+        protocol: "tcp"
+        mode: "host"
+networks:
+  default:
+    name: "hb_8b668a7c7b8346098a993d7025621f64_default"
+    driver: "bridge"
+    labels:
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "8b668a7c-7b83-4609-8a99-3d7025621f64"
+      io.harbor.preview/kind: "network"

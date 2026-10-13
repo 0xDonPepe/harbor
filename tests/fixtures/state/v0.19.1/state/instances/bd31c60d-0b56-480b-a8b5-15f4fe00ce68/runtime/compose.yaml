@@ -1,0 +1,26 @@
+name: "hb_bd31c60d0b56480ba8b515f4fe00ce68"
+services:
+  web:
+    image: "ghcr.io/alam00000/bentopdf-simple@sha256:3d62b8f8eece5fe947026ac3925ff08fda245b3d6ba2c3916b94da91e0010c74"
+    restart: "unless-stopped"
+    labels:
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "bd31c60d-0b56-480b-a8b5-15f4fe00ce68"
+      io.harbor.preview/service: "web"
+      io.harbor.preview/kind: "application"
+    networks:
+      - "default"
+    ports:
+      - target: 8080
+        published: "47313"
+        host_ip: "127.0.0.1"
+        protocol: "tcp"
+        mode: "host"
+networks:
+  default:
+    name: "hb_bd31c60d0b56480ba8b515f4fe00ce68_default"
+    driver: "bridge"
+    labels:
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "bd31c60d-0b56-480b-a8b5-15f4fe00ce68"
+      io.harbor.preview/kind: "network"

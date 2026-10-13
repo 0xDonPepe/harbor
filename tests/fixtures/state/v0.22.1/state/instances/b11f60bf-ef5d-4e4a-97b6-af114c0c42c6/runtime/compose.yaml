@@ -1,0 +1,37 @@
+name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6"
+services:
+  web:
+    image: "neosmemo/memos@sha256:71a5b4738d1bed96e92112004054f0888e92791b64eb78afd79077c96e6f9327"
+    restart: "unless-stopped"
+    labels:
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "b11f60bf-ef5d-4e4a-97b6-af114c0c42c6"
+      io.harbor.preview/service: "web"
+      io.harbor.preview/kind: "application"
+    networks:
+      - "default"
+    environment:
+      MEMOS_MODE: "prod"
+      MEMOS_PORT: "5230"
+    ports:
+      - target: 5230
+        published: "47311"
+        host_ip: "127.0.0.1"
+        protocol: "tcp"
+        mode: "host"
+    volumes:
+      - type: "volume"
+        source: "data"
+        target: "/var/opt/memos"
+networks:
+  default:
+    name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6_default"
+    driver: "bridge"
+    labels:
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "b11f60bf-ef5d-4e4a-97b6-af114c0c42c6"
+      io.harbor.preview/kind: "network"
+volumes:
+  data:
+    name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6_data"
+    external: true

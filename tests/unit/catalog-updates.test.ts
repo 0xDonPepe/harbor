@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FakeFetcher, type FetchResult } from '../../src/appearance/fetcher.js';
@@ -77,9 +77,9 @@ describe('official catalog updates (decision 158)', () => {
     expect(s.packages).toBe(Object.keys(JSON.parse(readFileSync(path.join(seed, 'index.json'), 'utf8')).packages).length);
     expect(svc.activeDir()).toBe(path.join(root, '1760000000'));
     expect(JSON.parse(readFileSync(path.join(root, 'current.json'), 'utf8'))).toEqual({ serial: 1_760_000_000 });
-    // catalog.json is kept verbatim next to the extracted catalog (nothing else is added)
+    // catalog.json and its signature are kept verbatim next to the extracted catalog (nothing else is added)
     expect(readFileSync(path.join(root, '1760000000', 'catalog.json'))).toEqual(server.releases.get(1_760_000_000)!.bundle.meta);
-    expect(existsSync(path.join(root, '1760000000', 'catalog.json.sig'))).toBe(false);
+    expect(readFileSync(path.join(root, '1760000000', 'catalog.json.sig'))).toEqual(server.releases.get(1_760_000_000)!.bundle.sig);
     // same store object, next read sees the new revision
     expect(store.list().find((i) => i.id === 'excalidraw')).toMatchObject({ revision: '2', origin: 'bundled', availability: 'available' });
     expect(store.load('excalidraw').revision).toBe('2');
@@ -318,6 +318,47 @@ describe('decision 168: a downloaded catalog is used only when a pinned key sign
     expect(await svc.refresh()).toMatchObject({ serial: 100, origin: 'downloaded', error: null });
     expect(fetcher.requests.map((r) => r.url).filter((u) => u.includes('latest'))).toEqual([]);
   });
+
+  it('a mirror read across a publish (two bundles mixed) starts over once; a tag-pinned check never needs to', async () => {
+    const MIRROR = 'https://mirror.example.test/harbor-catalog';
+    // a mirror that switches from `from` to `to` right after serving the file `flipAfter`
+    const mixing = (from: TestBundle, to: TestBundle, flipAfter: string) => {
+      const fetcher = new FakeFetcher();
+      let current = from;
+      fetcher.on(`${MIRROR}/`, (url) => {
+        const name = url.slice(MIRROR.length + 1);
+        const b = current;
+        if (name === flipAfter) current = to;
+        if (name === 'catalog.json') return bin(b.meta);
+        if (name === 'catalog.zip') return bin(b.zip);
+        if (name === 'catalog.json.sig') return bin(b.sig);
+        return bin('missing', 404);
+      });
+      return fetcher;
+    };
+    const base = catalogFiles(REPO_CATALOG);
+    const older = buildBundle(bumpRevision(base, 'excalidraw', '2'), { serial: 100 });
+    const newer = buildBundle(bumpRevision(base, 'excalidraw', '3'), { serial: 200 });
+    // the newer bundle lands between catalog.json and its signature (the signature does not match)
+    const a = mixing(older, newer, 'catalog.json');
+    expect(await setup({ url: MIRROR, fetcher: a }).svc.refresh()).toMatchObject({ serial: 200, origin: 'downloaded', error: null });
+    expect(a.requests.filter((r) => r.url.endsWith('/catalog.json'))).toHaveLength(2);
+    // ... or between the signature and the archive (the checksum does not match)
+    const b = mixing(older, newer, 'catalog.json.sig');
+    expect(await setup({ url: MIRROR, fetcher: b }).svc.refresh()).toMatchObject({ serial: 200, origin: 'downloaded', error: null });
+    expect(b.requests.filter((r) => r.url.endsWith('/catalog.zip'))).toHaveLength(2);
+    // a mirror that keeps serving a bad signature is still refused after the one retry
+    const bad = new FakeFetcher();
+    bad.on(`${MIRROR}/`, (url) => (url.endsWith('/catalog.json') ? bin(older.meta) : url.endsWith('.sig') ? bin(newer.sig) : bin(older.zip)));
+    expect((await setup({ url: MIRROR, fetcher: bad }).svc.refresh()).error).toMatch(/does not match its catalog\.json\.sig/);
+    expect(bad.requests.filter((r) => r.url.endsWith('/catalog.json'))).toHaveLength(2);
+    // the GitHub layout pins the tag: a wrong archive is an error at once, without a second try
+    const gh = setup();
+    gh.server.publish(buildBundle(bumpRevision(base, 'excalidraw', '5'), { serial: 400 }), { zip: older.zip });
+    expect((await gh.svc.refresh()).error).toMatch(/does not match its catalog\.json checksum|larger than/);
+    expect(gh.server.count('catalog.zip')).toBe(1);
+    expect(gh.server.count('catalog.json')).toBe(1);
+  });
 });
 
 describe('a downloaded catalog counts only while it is intact (decision 158 review)', () => {
@@ -333,7 +374,9 @@ describe('a downloaded catalog counts only while it is intact (decision 158 revi
     await before.refresh();
     expect(before.status()).toMatchObject({ serial: 9_000_000, origin: 'downloaded' });
 
-    writeFileSync(path.join(root, '9000000', 'catalog.json'), '{damaged');
+    const damaged = Buffer.from('{damaged');
+    writeFileSync(path.join(root, '9000000', 'catalog.json'), damaged);
+    writeFileSync(path.join(root, '9000000', 'catalog.json.sig'), signDetached(damaged, TEST_SIGNER.privatePem)); // signed, still damaged
     const { warns, log } = recorder();
     const after = new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, fetcher: server.fetcher, clock: systemClock, log, keys: TEST_KEYS });
     expect(after.activeDir()).toBe(seed);
@@ -374,19 +417,56 @@ describe('a downloaded catalog counts only while it is intact (decision 158 revi
     writeFileSync(file, original);
     expect(svc.activeDir()).toBe(path.join(root, '100'));
 
-    writeFileSync(file, JSON.stringify({ ...meta, serial: 101 }));
+    const sigFile = path.join(root, '100', 'catalog.json.sig');
+    const originalSig = readFileSync(sigFile);
+    const signed = (text: string) => {
+      writeFileSync(file, text);
+      writeFileSync(sigFile, signDetached(Buffer.from(text), TEST_SIGNER.privatePem));
+    };
+    signed(JSON.stringify({ ...meta, serial: 101 }));
     expect(svc.activeDir()).toBe(seed);
-    writeFileSync(file, JSON.stringify({ ...meta, schemaVersion: 2 }));
+    signed(JSON.stringify({ ...meta, schemaVersion: 2 }));
     expect(svc.activeDir()).toBe(seed);
+    writeFileSync(sigFile, originalSig);
     writeFileSync(file, original);
     renameSync(file, path.join(root, '100', 'meta.bak'));
     expect(svc.activeDir()).toBe(seed);
     renameSync(path.join(root, '100', 'meta.bak'), file);
     expect(svc.activeDir()).toBe(path.join(root, '100'));
-    // an edit that keeps it valid and naming the same serial still counts: an integrity check on local state
-    // (the signature is checked once, at download)
+    // an edit that keeps it valid and naming the same serial no longer verifies with the stored signature
     writeFileSync(file, JSON.stringify({ ...meta, commit: 'feedfacefeedfacefeedfacefeedfacefeedface' }));
+    expect(svc.activeDir()).toBe(seed);
+    writeFileSync(file, original);
     expect(svc.activeDir()).toBe(path.join(root, '100'));
+  });
+
+  it('decision 168: a folder without a valid stored catalog.json.sig (downloaded unsigned by Harbor 0.31 or older) falls back to the seed', async () => {
+    const { seed, stateDir, server, offer, root } = setup();
+    const first = new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, fetcher: server.fetcher, clock: systemClock, log: quiet, keys: TEST_KEYS });
+    offer(100, '2');
+    await first.refresh();
+    const sigFile = path.join(root, '100', 'catalog.json.sig');
+    const good = readFileSync(sigFile);
+    // what an older Harbor left: the folder without a signature
+    renameSync(sigFile, `${sigFile}.bak`);
+    const warns: string[] = [];
+    const log = { ...quiet, warn: (m: string) => void warns.push(m) };
+    const after = new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, fetcher: server.fetcher, clock: systemClock, log, keys: TEST_KEYS });
+    expect(after.activeDir()).toBe(seed);
+    expect(warns).toEqual(['the downloaded app catalog 100 is not signed (its catalog.json is not signed (no catalog.json.sig)); using the catalog bundled with Harbor']);
+    // signed by a key this Harbor does not pin, or garbage
+    writeFileSync(sigFile, signDetached(readFileSync(path.join(root, '100', 'catalog.json')), testKeyPair('stranger-FIXTURE').privatePem));
+    expect(after.activeDir()).toBe(seed);
+    writeFileSync(sigFile, 'x'.repeat(5000));
+    expect(after.activeDir()).toBe(seed);
+    writeFileSync(sigFile, good);
+    expect(after.activeDir()).toBe(path.join(root, '100'));
+    // the real pinned keys never accept a test-signed folder
+    expect(new CatalogUpdateService({ seedDir: seed, stateDir, url: URL_BASE, fetcher: server.fetcher, clock: systemClock, log: quiet }).activeDir()).toBe(seed);
+    // with the folder retired, the next check downloads the signed bundle again (compared with the seed)
+    rmSync(sigFile);
+    expect(await after.refresh()).toMatchObject({ serial: 100, origin: 'downloaded', error: null });
+    expect(readFileSync(sigFile)).toEqual(good);
   });
 
   it('refuses a bundle dated more than a day ahead of the clock, without downloading its archive', async () => {

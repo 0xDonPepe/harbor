@@ -53,8 +53,10 @@ is typed on the terminal.
   The installer takes the newest release; pinning is for troubleshooting only. Releases older than 0.17.0 said
   "installed encrypted" and were not — do not install them (`docs/releases/v0.17.0.md`).
   Releases older than 0.32.0 are not signed: the installer refuses them unless you add `HARBOR_ALLOW_UNSIGNED=1`
-  next to `HARBOR_VERSION` (it then warns loudly). The same switch lets `HARBOR_ARCHIVE` install an archive you
-  built yourself without a signing key. A signature that is there but does not match is always refused.
+  next to `HARBOR_VERSION` (it then warns loudly). A local `HARBOR_ARCHIVE` needs its `SHA256SUMS.sig` next to
+  it; for an archive you built yourself without a signing key, extract it and run
+  `sudo ./harbor-<version>-linux-x64/bin/harbor bootstrap --yes` instead. A signature that is there but does not
+  match is always refused.
 - Lost the setup code? On the machine: `sudo /opt/harbor/bin/harbor setup-code --config /etc/harbor/harbor.json`.
 
 **LAN mode** means the console (port 80) and every app port answer to any device on your local network,
@@ -749,8 +751,10 @@ before a byte is installed ("is not signed", "does not match its SHA256SUMS.sig"
 downgrades"). Going back on purpose is a root command on the machine:
 `sudo /opt/harbor/bin/harbor self-update apply --to <version> --allow-downgrade` (add `--allow-unsigned` for a
 release older than 0.32.0, which was published before signing existed). `--allow-unsigned` also lets
-`--archive <file>` install an archive you built yourself without `SHA256SUMS.sig`; a signature that is there but
-wrong is always refused. Neither flag works in the update the console starts.
+`--archive <file>` install an archive you built yourself without `SHA256SUMS.sig`; a GitHub release from 0.32.0 on
+always needs its signature, and a signature that is there but wrong is always refused. Neither flag works in the
+update the console starts. While a new release is still being uploaded (its signature comes last), Settings
+says "Harbor x.y.z is still being published" and offers the update a few minutes later.
 
 If the new release fails to start, Harbor puts the previous one back by itself: the running
 release is snapshotted before the update, the console is polled after the restart, and on

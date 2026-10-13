@@ -18,12 +18,13 @@
 #   HARBOR_REPO=owner/name   GitHub repository (default carlosalaniz/harbor)
 #   HARBOR_ARCHIVE=/path/harbor-X.Y.Z-linux-x64.tar.gz   install from a local archive (with SHA256SUMS and
 #                            SHA256SUMS.sig next to it) instead of GitHub
-#   HARBOR_ALLOW_UNSIGNED=1  accept a release without SHA256SUMS.sig: only with an explicit HARBOR_VERSION older
-#                            than 0.32.0 (the first signed release) or a local HARBOR_ARCHIVE you built yourself.
-#                            A signature that does not verify is always refused.
+#   HARBOR_ALLOW_UNSIGNED=1  accept a release without SHA256SUMS.sig: only together with an explicit
+#                            HARBOR_VERSION older than 0.32.0 (the first signed release), downloaded from GitHub.
+#                            A signature that does not verify is always refused. (An archive you built yourself
+#                            has no signature: extract it and run `sudo ./bin/harbor bootstrap --yes` instead.)
 #
 # Signature (decision 168): SHA256SUMS.sig is the Ed25519 signature of SHA256SUMS by Harbor's release key; the
-# public half is below. The installer verifies it with openssl BEFORE it trusts the checksum, and stops otherwise.
+# public halves are below. The installer verifies it with openssl BEFORE it trusts the checksum, and stops otherwise.
 set -euo pipefail
 
 REPO="${HARBOR_REPO:-carlosalaniz/harbor}"
@@ -32,8 +33,10 @@ LAN="${HARBOR_LAN:-auto}"
 WORK=/root/harbor-install
 FIRST_SIGNED=0.32.0
 
-# Harbor's release public key (src/release-keys.ts, key harbor-2026-10). Keep the two equal.
-HARBOR_RELEASE_KEY='-----BEGIN PUBLIC KEY-----
+# Harbor's release public keys, one PEM block each, in the order of src/release-keys.ts (harbor-2026-10). A
+# signature counts when any of them verifies it, so a rotation adds the next key here first. Keep the two equal
+# (tests/unit/signing.test.ts checks it).
+HARBOR_RELEASE_KEYS='-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAm1Nz4bx1UpDvo+pvgAweZveNPi8c9dH2ze/kPaLPtXA=
 -----END PUBLIC KEY-----'
 
@@ -41,12 +44,56 @@ say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# verify_sig <sums-file> <base64-sig-file> <work-dir>: 0 when the release key signed the exact bytes of <sums-file>.
+# verify_sig <sums-file> <base64-sig-file> <work-dir>: 0 when one of the release keys signed the exact bytes of
+# <sums-file>.
 verify_sig() {
-  printf '%s\n' "$HARBOR_RELEASE_KEY" > "$3/harbor-release-key.pem"
+  rm -f "$3"/harbor-release-key-*.pem
+  printf '%s\n' "$HARBOR_RELEASE_KEYS" | awk -v dir="$3" '/-----BEGIN PUBLIC KEY-----/ { n++ } n { print > (dir "/harbor-release-key-" n ".pem") }'
   openssl base64 -d -A -in "$2" -out "$3/SHA256SUMS.sig.bin" 2>/dev/null || return 1
   [ "$(wc -c < "$3/SHA256SUMS.sig.bin" | tr -d ' ')" = "64" ] || return 1
-  openssl pkeyutl -verify -pubin -inkey "$3/harbor-release-key.pem" -rawin -in "$1" -sigfile "$3/SHA256SUMS.sig.bin" >/dev/null 2>&1
+  for key in "$3"/harbor-release-key-*.pem; do
+    [ -f "$key" ] || continue
+    if openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$1" -sigfile "$3/SHA256SUMS.sig.bin" >/dev/null 2>&1; then return 0; fi
+  done
+  return 1
+}
+
+# fetch_sig <url> <out>: download SHA256SUMS.sig. A 404 (a release from before 0.32.0) leaves no file; any other
+# failure stops the install (fail closed: a network error must not look like "unsigned").
+fetch_sig() {
+  rm -f "$2"
+  sig_http=$(curl -sSL --max-time 30 -o "$2" -w '%{http_code}' "$1") || true
+  case "$sig_http" in
+    200) ;;
+    404) rm -f "$2" ;;
+    *)   rm -f "$2"; die "could not download SHA256SUMS.sig of Harbor $VERSION (HTTP ${sig_http:-000}); nothing was installed" ;;
+  esac
+}
+
+# check_release_sig <dir>: decide on <dir>/SHA256SUMS before its checksum is trusted. Sets SIGNED, or stops.
+#   signed + verifies                                              -> "signature OK"
+#   signed + does not verify                                       -> stop, always
+#   unsigned + HARBOR_ALLOW_UNSIGNED=1 + explicit older HARBOR_VERSION (GitHub download) -> loud warning, go on
+#   unsigned otherwise                                             -> stop
+check_release_sig() {
+  if [ -f "$1/SHA256SUMS.sig" ]; then
+    verify_sig "$1/SHA256SUMS" "$1/SHA256SUMS.sig" "$1" || die "SHA256SUMS of Harbor $VERSION does not match its signature (SHA256SUMS.sig): the files were changed, or signed by a key Harbor does not trust. Nothing was installed."
+    SIGNED="signature OK"
+  elif [ -n "${HARBOR_ARCHIVE:-}" ]; then
+    die "$HARBOR_ARCHIVE has no SHA256SUMS.sig next to it; refusing an unsigned archive. For an archive you built yourself, extract it and run: sudo ./harbor-$VERSION-linux-x64/bin/harbor bootstrap --yes"
+  elif [ "${HARBOR_ALLOW_UNSIGNED:-0}" = "1" ] && [ -n "${HARBOR_VERSION:-}" ] && version_lt "$VERSION" "$FIRST_SIGNED"; then
+    warn "##############################################################################"
+    warn "HARBOR_ALLOW_UNSIGNED=1: Harbor $VERSION has NO signature (SHA256SUMS.sig)."
+    warn "Nothing proves this archive is an official Harbor release. Installing it anyway."
+    warn "##############################################################################"
+    SIGNED="UNSIGNED (HARBOR_ALLOW_UNSIGNED=1)"
+  elif version_lt "$VERSION" "$FIRST_SIGNED" && [ -n "${HARBOR_VERSION:-}" ]; then
+    die "Harbor $VERSION is older than $FIRST_SIGNED, the first signed release. To install it anyway, on purpose: HARBOR_VERSION=$VERSION HARBOR_ALLOW_UNSIGNED=1"
+  elif version_lt "$VERSION" "$FIRST_SIGNED"; then
+    die "the newest Harbor release ($VERSION) is older than $FIRST_SIGNED, the first signed release, and has no signature. If Harbor $FIRST_SIGNED is being published right now, try again in a few minutes. Nothing was installed."
+  else
+    die "Harbor $VERSION has no SHA256SUMS.sig; refusing an unsigned release. Nothing was installed."
+  fi
 }
 
 # version_lt A B: 0 when release version A is older than B (x.y.z, numeric per part)
@@ -111,30 +158,12 @@ else
   cd "$WORK"
   curl -fSL --progress-bar -o "$ARCHIVE" "$BASE/$ARCHIVE"
   curl -fsSL -o SHA256SUMS "$BASE/SHA256SUMS"
-  SIG_HTTP=$(curl -sSL --max-time 30 -o SHA256SUMS.sig -w '%{http_code}' "$BASE/SHA256SUMS.sig" || echo 000)
-  case "$SIG_HTTP" in
-    200) ;;
-    404) rm -f SHA256SUMS.sig ;;
-    *)   rm -f SHA256SUMS.sig; die "could not download SHA256SUMS.sig of Harbor $VERSION (HTTP $SIG_HTTP); nothing was installed" ;;
-  esac
+  fetch_sig "$BASE/SHA256SUMS.sig" SHA256SUMS.sig
 fi
 cd "$WORK"
 say "Verifying $ARCHIVE"
 # The signature first: SHA256SUMS is only trusted once Harbor's release key vouches for its exact bytes.
-if [ -f SHA256SUMS.sig ]; then
-  verify_sig SHA256SUMS SHA256SUMS.sig "$WORK" || die "SHA256SUMS of Harbor $VERSION does not match its signature (SHA256SUMS.sig): the files were changed, or signed by a key Harbor does not trust. Nothing was installed."
-  SIGNED="signature OK"
-elif [ "${HARBOR_ALLOW_UNSIGNED:-0}" = "1" ] && { [ -n "${HARBOR_ARCHIVE:-}" ] || { [ -n "${HARBOR_VERSION:-}" ] && version_lt "$VERSION" "$FIRST_SIGNED"; }; }; then
-  warn "##############################################################################"
-  warn "HARBOR_ALLOW_UNSIGNED=1: Harbor $VERSION has NO signature (SHA256SUMS.sig)."
-  warn "Nothing proves this archive is an official Harbor release. Installing it anyway."
-  warn "##############################################################################"
-  SIGNED="UNSIGNED (HARBOR_ALLOW_UNSIGNED=1)"
-elif version_lt "$VERSION" "$FIRST_SIGNED"; then
-  die "Harbor $VERSION is older than $FIRST_SIGNED, the first signed release. To install it anyway, on purpose: HARBOR_VERSION=$VERSION HARBOR_ALLOW_UNSIGNED=1"
-else
-  die "Harbor $VERSION has no SHA256SUMS.sig; refusing an unsigned release. Nothing was installed."
-fi
+check_release_sig "$WORK"
 grep " $ARCHIVE\$" SHA256SUMS | sha256sum -c - >/dev/null || die "checksum mismatch for $ARCHIVE"
 rm -rf "harbor-${VERSION}-linux-x64"
 tar -xzf "$ARCHIVE"

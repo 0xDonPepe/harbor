@@ -280,11 +280,13 @@ function HarborUpdate({ c }: { c: Console }) {
           <p className="muted small">
             {st.available && st.latest
               ? `Version ${st.latest.version} is available${st.latest.publishedAt ? ` (released ${new Date(st.latest.publishedAt).toLocaleDateString()})` : ''}.`
-              : st.error
-                ? `Could not check for updates: ${st.error}`
-                : st.checkedAt
-                  ? `Up to date · checked ${new Date(st.checkedAt).toLocaleTimeString()}`
-                  : 'Not checked yet.'}
+              : st.pending
+                ? `${st.pending}.`
+                : st.error
+                  ? `Could not check for updates: ${st.error}`
+                  : st.checkedAt
+                    ? `Up to date · checked ${new Date(st.checkedAt).toLocaleTimeString()}`
+                    : 'Not checked yet.'}
           </p>
         </div>
         <div className="row wrap">

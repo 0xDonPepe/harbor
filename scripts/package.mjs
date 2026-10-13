@@ -21,6 +21,11 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { extractCatalog, fetchCatalogBundle, loadCatalogLibs } from './catalog-fetch.mjs';
+import { takeSigningEnv } from './signing-env.mjs';
+
+// The private key leaves process.env before anything else runs: no child process (pnpm build, tar, pnpm install)
+// inherits it. Only this script reads it, once, to sign SHA256SUMS.
+const signingEnv = takeSigningEnv(process.env);
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
@@ -33,7 +38,7 @@ const stage = path.join(releaseDir, 'stage', name);
 const skipBuild = process.argv.includes('--skip-build');
 const requireSignature = process.argv.includes('--require-signature');
 const requireSignedCatalog = requireSignature && process.env.HARBOR_REQUIRE_SIGNED_CATALOG === '1';
-if (requireSignature && !process.env.HARBOR_SIGNING_KEY?.trim() && !process.env.HARBOR_SIGNING_KEY_FILE?.trim()) {
+if (requireSignature && !signingEnv.HARBOR_SIGNING_KEY?.trim() && !signingEnv.HARBOR_SIGNING_KEY_FILE?.trim()) {
   console.error('--require-signature: set HARBOR_SIGNING_KEY (the PEM text, CI secret) or HARBOR_SIGNING_KEY_FILE; no release archive was built');
   process.exit(1);
 }
@@ -69,13 +74,10 @@ const { bundleLib, catalogLib, signLib, keys } = catalogLibs;
 // release every box refuses.
 let signingKey = null;
 try {
-  signingKey = signLib.signingKeyFromEnv(process.env);
-  if (signingKey) {
-    const id = signLib.pinnedKeyIdFor(signingKey, keys);
-    if (id) console.log(`signing with pinned key ${id}`);
-    else if (requireSignature) throw new Error('the signing key is not one Harbor pins (src/release-keys.ts): boxes would refuse this release');
-    else console.warn('warning: the signing key is not one Harbor pins (src/release-keys.ts): boxes will refuse this archive');
-  }
+  const chosen = signLib.releaseSigningKey(signingEnv, { require: requireSignature, keys });
+  signingKey = chosen?.pem ?? null;
+  if (chosen?.keyId) console.log(`signing with pinned key ${chosen.keyId}`);
+  else if (chosen) console.warn('warning: the signing key is not one Harbor pins (src/release-keys.ts): boxes will refuse this archive');
 } catch (e) {
   console.error(`${e.message}; no release archive was built`);
   process.exit(1);

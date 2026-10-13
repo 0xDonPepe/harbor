@@ -1548,7 +1548,7 @@ selfUpdateCmd
   .option('--repo <owner/name>', 'GitHub repository', 'carlosalaniz/harbor')
   .option('--archive <file>', 'use a local archive instead of downloading (SHA256SUMS and SHA256SUMS.sig must sit next to it)')
   .option('--allow-downgrade', 'ROOT, by hand: install a release older than the running one', false)
-  .option('--allow-unsigned', 'ROOT, by hand: accept a release or archive without SHA256SUMS.sig (a bad signature is still refused)', false)
+  .option('--allow-unsigned', 'ROOT, by hand: accept a local --archive, or a release older than 0.32.0, without SHA256SUMS.sig (a bad signature is still refused)', false)
   .action(async (opts: { to: string; repo: string; archive?: string; allowDowngrade: boolean; allowUnsigned: boolean }) => {
     const { applySelfUpdate, refuseFlagsInUnit, SUMS_FILE, SUMS_SIG_FILE } = await import('../bootstrap/selfupdate-apply.js');
     refuseFlagsInUnit(process.env, opts);
@@ -1738,7 +1738,7 @@ function catalogStatusText(s: CatalogStatusDto): string {
 
 function selfUpdateText(s: SelfUpdateStatusDto): string {
   const lines = [`Installed: Harbor ${s.current}`];
-  if (s.latest) lines.push(`Newest release: ${s.latest.version}${s.latest.publishedAt ? ` (${s.latest.publishedAt.slice(0, 10)})` : ''}${s.available ? ' — UPDATE AVAILABLE (harbor self-update start)' : ' — up to date'}`);
+  if (s.latest) lines.push(`Newest release: ${s.latest.version}${s.latest.publishedAt ? ` (${s.latest.publishedAt.slice(0, 10)})` : ''}${s.available ? ' — UPDATE AVAILABLE (harbor self-update start)' : s.pending ? ` — ${s.pending}` : ' — up to date'}`);
   else lines.push(s.error ? `Could not check: ${s.error}` : 'Not checked yet (harbor self-update check)');
   if (s.applying) lines.push(`Update ${s.applying.version}: ${s.applying.state} — ${s.applying.message} (${s.applying.at})`);
   return lines.join('\n');

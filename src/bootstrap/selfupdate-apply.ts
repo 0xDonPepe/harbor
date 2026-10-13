@@ -18,8 +18,9 @@ import { exec, execOk } from './exec.js';
 // Never a downgrade (decision 168): a target older than the running release is refused unless root passes
 // --allow-downgrade by hand. The unit the console starts (polkit) cannot pass it: its ExecStart is
 // `apply --to %i`, and the CLI refuses every --allow-* flag inside that unit (HARBOR_SELF_UPDATE_UNIT=1).
-// --allow-unsigned (root, by hand) only accepts a MISSING signature (a local dev archive, or a release older
-// than 0.32.0, the first signed one); a signature that does not verify is always refused.
+// --allow-unsigned (root, by hand) only accepts a MISSING signature, and only for a local --archive (a dev build)
+// or a GitHub release older than 0.32.0 (the first signed one): a release from 0.32.0 on always needs its
+// SHA256SUMS.sig (CI publishes every one with it), and a signature that does not verify is always refused.
 //
 // Rollback (decision 101): before touching /opt/harbor, the current release tree is snapshotted to
 // /root/harbor-updates/previous/ (release.json proves it is a Harbor release). After bootstrap, the
@@ -61,7 +62,8 @@ export interface ApplyOptions {
   running: string;
   // root only, typed by hand: install a release older than the running one
   allowDowngrade?: boolean;
-  // root only, typed by hand: accept a release (or local archive) WITHOUT SHA256SUMS.sig; a bad signature still fails
+  // root only, typed by hand: accept a local archive, or a release older than 0.32.0, WITHOUT SHA256SUMS.sig;
+  // a bad signature still fails
   allowUnsigned?: boolean;
   // tests: throwaway keys instead of the pinned ones
   keys?: readonly ReleaseKey[];
@@ -84,18 +86,22 @@ export function checkTargetVersion(version: string, running: string, allowDowngr
 
 // Signature first (SHA256SUMS is only trusted once a pinned key verifies its exact bytes), then the archive
 // checksum. Returns the archive's sha256 and the key that signed (null: accepted unsigned with --allow-unsigned).
-export function verifyReleaseFiles(input: { version: string; name: string; archive: Buffer; sums: Buffer; sig: Buffer | null }, opts: { allowUnsigned?: boolean; keys?: readonly ReleaseKey[] } = {}): { sha256: string; signedBy: string | null } {
+// `local`: the files come from --archive (root's own files), not from the GitHub release.
+export function verifyReleaseFiles(input: { version: string; name: string; archive: Buffer; sums: Buffer; sig: Buffer | null; local?: boolean }, opts: { allowUnsigned?: boolean; keys?: readonly ReleaseKey[] } = {}): { sha256: string; signedBy: string | null } {
   const keys = opts.keys ?? RELEASE_KEYS;
   const verdict = checkSignature(input.sums, input.sig, keys);
+  const older = compareVersions(input.version, FIRST_SIGNED_RELEASE) < 0;
   let signedBy: string | null = null;
   if (verdict.ok) signedBy = verdict.keyId;
-  else if (!(verdict.reason === 'missing' && opts.allowUnsigned)) {
+  else if (!(verdict.reason === 'missing' && opts.allowUnsigned && (input.local || older))) {
     const nextAction =
       verdict.reason !== 'missing'
         ? 'Nothing was changed. Do not install this release; report it to the Harbor maintainers.'
-        : compareVersions(input.version, FIRST_SIGNED_RELEASE) < 0
-          ? `Harbor releases before ${FIRST_SIGNED_RELEASE} are not signed. To install one on purpose, run on the machine: ${manualInstallCommand(input.version)}`
-          : `Nothing was changed. Every release Harbor's CI publishes carries ${SUMS_SIG_FILE}. For an archive you built yourself, run the apply step by hand as root with --allow-unsigned.`;
+        : input.local
+          ? `Nothing was changed. ${SUMS_SIG_FILE} must sit next to the archive. For an archive you built yourself, add --allow-unsigned (root, by hand).`
+          : older
+            ? `Harbor releases before ${FIRST_SIGNED_RELEASE} are not signed. To install one on purpose, run on the machine: ${manualInstallCommand(input.version)}`
+            : `Nothing was changed. Every release from ${FIRST_SIGNED_RELEASE} on carries ${SUMS_SIG_FILE}; if this one stays without it, do not install it.`;
     throw new HarborError('OPERATION_FAILED', `refusing Harbor ${input.version}: ${signatureProblem(`${SUMS_FILE} of Harbor ${input.version}`, SUMS_SIG_FILE, verdict.reason, keys)}`, { nextAction });
   }
   const expected = input.sums
@@ -117,6 +123,15 @@ export function refuseFlagsInUnit(env: Record<string, string | undefined>, flags
   if (used.length) throw new HarborError('INVALID_REQUEST', `${used.join(' and ')} cannot be used by the update the console starts`, { nextAction: 'Run the apply step by hand as root on the machine.' });
 }
 
+// The files of a local --archive: SHA256SUMS and (when there) SHA256SUMS.sig from beside it.
+export function readLocalRelease(local: { archive: string; sums: string; sig: string }): { archive: Buffer; sums: Buffer; sig: Buffer | null; local: true } {
+  if (!existsSync(local.archive)) throw new HarborError('INVALID_REQUEST', `${local.archive} not found`);
+  if (!existsSync(local.sums)) throw new HarborError('INVALID_REQUEST', `${SUMS_FILE} must sit next to ${local.archive}`);
+  const sig = existsSync(local.sig) ? readFileSync(local.sig) : null;
+  if (sig && sig.length > MAX_SIGNATURE_BYTES) throw new HarborError('OPERATION_FAILED', `${local.sig} is larger than ${MAX_SIGNATURE_BYTES} bytes: not a signature`);
+  return { archive: readFileSync(local.archive), sums: readFileSync(local.sums), sig, local: true };
+}
+
 export async function applySelfUpdate(version: string, repo: string, log: (m: string) => void, local: { archive: string; sums: string; sig: string } | undefined, opts: ApplyOptions): Promise<void> {
   if (!RELEASE_VERSION.test(version)) throw new HarborError('INVALID_REQUEST', `not a release version: ${version}`);
   if (typeof process.getuid === 'function' && process.getuid() !== 0) throw new HarborError('INVALID_REQUEST', 'self-update apply must run as root (it is started by harbor-self-update@.service)');
@@ -127,11 +142,10 @@ export async function applySelfUpdate(version: string, repo: string, log: (m: st
   mkdirSync(WORK, { recursive: true, mode: 0o700 });
   const archive = path.join(WORK, name);
   try {
-    let files: { archive: Buffer; sums: Buffer; sig: Buffer | null };
+    let files: { archive: Buffer; sums: Buffer; sig: Buffer | null; local?: boolean };
     if (local) {
       writeStatus(version, 'downloading', `using local archive ${local.archive}`);
-      if (!existsSync(local.sums)) throw new HarborError('INVALID_REQUEST', `${SUMS_FILE} must sit next to ${local.archive}`);
-      files = { archive: readFileSync(local.archive), sums: readFileSync(local.sums), sig: existsSync(local.sig) ? readFileSync(local.sig) : null };
+      files = readLocalRelease(local);
     } else {
       writeStatus(version, 'downloading', `downloading ${name} from GitHub`);
       const sums = await download(`${base}/${SUMS_FILE}`, 64 * 1024);
@@ -145,6 +159,7 @@ export async function applySelfUpdate(version: string, repo: string, log: (m: st
     const checked = verifyReleaseFiles({ version, name, ...files }, { ...(opts.allowUnsigned ? { allowUnsigned: true } : {}), ...(opts.keys ? { keys: opts.keys } : {}) });
     if (checked.signedBy) log(`signature verified (${SUMS_SIG_FILE}, key ${checked.signedBy})`);
     else log(`WARNING: --allow-unsigned: ${SUMS_FILE} of ${version} carries no signature; installing it on root's word`);
+    // nothing is written before the signature and the checksum both check out
     log(`checksum verified (${checked.sha256.slice(0, 16)}…)`);
     writeFileSync(archive, files.archive, { mode: 0o600 });
     const dir = path.join(WORK, name.replace(/\.tar\.gz$/, ''));

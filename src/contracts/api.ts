@@ -604,7 +604,9 @@ export interface PackageImportResultDto {
 export interface SelfUpdateStatusDto {
   current: string;
   latest: { version: string; publishedAt: string | null; notes: string | null; url: string | null } | null;
-  available: boolean;
+  available: boolean; // a newer release whose archive, SHA256SUMS and SHA256SUMS.sig are all published
+  // a newer release that cannot be installed yet (its files are still being uploaded), in plain words; else null
+  pending?: string | null;
   checkedAt: string | null;
   error: string | null;
   // set while (or after) an update runs; written by the root apply step, so it survives the daemon restart.

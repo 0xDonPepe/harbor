@@ -98,11 +98,11 @@ describe('Harbor self-update', () => {
     expect((await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {})).available).toBe(false);
     await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/system/update/apply', {});
     const next = st0.current.replace(/\d+$/, (n) => String(Number(n) + 1));
-    // decision 168: a newer release without SHA256SUMS.sig is offered but never started
+    // decision 168: a newer release without SHA256SUMS.sig (still uploading) is not offered, and never started
     h.releaseFeed.info = { version: next, tag: `v${next}`, publishedAt: null, notes: null, url: null, archiveUrl: `https://example.com/harbor-${next}-linux-x64.tar.gz`, sumsUrl: 'https://example.com/SHA256SUMS', sigUrl: null };
-    expect((await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {})).available).toBe(true);
+    expect(await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {})).toMatchObject({ available: false, pending: `Harbor ${next} is still being published (SHA256SUMS.sig not uploaded yet); Harbor offers it once its signed files are all there` });
     const unsigned = await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/system/update/apply', {});
-    expect(JSON.stringify(unsigned)).toContain('is not signed');
+    expect(JSON.stringify(unsigned)).toContain('is still being published');
     expect(h.unitStarter.started).toEqual([]);
     h.releaseFeed.info = { version: next, tag: `v${next}`, publishedAt: '2026-09-16T00:00:00Z', notes: 'Shiny', url: 'https://example.com/r', archiveUrl: `https://example.com/harbor-${next}-linux-x64.tar.gz`, sumsUrl: 'https://example.com/SHA256SUMS', sigUrl: 'https://example.com/SHA256SUMS.sig' };
     const avail = await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {});

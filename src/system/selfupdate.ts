@@ -25,6 +25,14 @@ export interface ReleaseInfo {
   sumsUrl: string | null;
   sigUrl: string | null; // SHA256SUMS.sig (decision 168): a release without it is never applied from the console
 }
+
+// Why a newer release cannot be installed yet, or null when it is complete. CI uploads the archive, SHA256SUMS
+// and SHA256SUMS.sig one after another, so a release seen mid-upload is "still being published", not alarming.
+export function releaseNotReady(r: ReleaseInfo): string | null {
+  const missing = [r.archiveUrl ? null : archiveName(r.version), r.sumsUrl ? null : 'SHA256SUMS', r.sigUrl ? null : 'SHA256SUMS.sig'].filter((x): x is string => x !== null);
+  if (!missing.length) return null;
+  return `Harbor ${r.version} is still being published (${missing.join(', ')} not uploaded yet); Harbor offers it once its signed files are all there`;
+}
 export interface ReleaseFeed {
   latest(): Promise<ReleaseInfo | null>;
 }
@@ -124,12 +132,21 @@ export class SelfUpdateService {
     mkdirSync(path.dirname(this.statusFile), { recursive: true, mode: 0o755 });
     writeFileSync(this.statusFile, JSON.stringify(s), { mode: 0o644 });
   }
+  // A newer release only: the console path never downgrades (decision 168).
+  private newer(): ReleaseInfo | null {
+    const latest = this.latestInfo;
+    return latest && compareVersions(latest.version, this.current) > 0 ? latest : null;
+  }
   status(): SelfUpdateStatusDto {
     const latest = this.latestInfo;
+    const newer = this.newer();
+    const pending = newer ? releaseNotReady(newer) : null;
     return {
       current: this.current,
       latest: latest ? { version: latest.version, publishedAt: latest.publishedAt, notes: latest.notes, url: latest.url } : null,
-      available: Boolean(latest && compareVersions(latest.version, this.current) > 0),
+      // newer AND complete (archive, SHA256SUMS, SHA256SUMS.sig): only then is an update offered
+      available: Boolean(newer && !pending),
+      pending,
       checkedAt: this.checkedAt,
       error: this.error,
       applying: this.readApplying(),
@@ -158,18 +175,18 @@ export class SelfUpdateService {
     this.timer = null;
   }
   async apply(actor: string): Promise<SelfUpdateStatusDto> {
+    // Decision 168: the console path never downgrades (an older or equal release is "no newer release"), and
+    // starts only a complete release: the root step verifies SHA256SUMS.sig with the pinned keys, so one without
+    // it is not started at all (the root step would refuse it, after a download).
+    const target = this.newer();
+    if (!target) throw new HarborError('INVALID_STATE', 'no newer Harbor release is known', { nextAction: 'Check for updates first.' });
     const st = this.status();
-    if (!st.available || !this.latestInfo) throw new HarborError('INVALID_STATE', 'no newer Harbor release is known', { nextAction: 'Check for updates first.' });
-    if (st.applying && (st.applying.state === 'requested' || st.applying.state === 'downloading' || st.applying.state === 'installing') && st.applying.version === this.latestInfo.version) {
+    if (st.applying && (st.applying.state === 'requested' || st.applying.state === 'downloading' || st.applying.state === 'installing') && st.applying.version === target.version) {
       throw new HarborError('BUSY', `an update to ${st.applying.version} is already running`);
     }
-    if (!this.latestInfo.archiveUrl || !this.latestInfo.sumsUrl) throw new HarborError('INVALID_STATE', `release ${this.latestInfo.version} has no archive for this platform yet`, { nextAction: 'Try again later; the release assets may still be uploading.' });
-    // Decision 168: the root step verifies SHA256SUMS.sig with the pinned keys; a release without one is not
-    // started at all (the root step would refuse it, after a download).
-    if (!this.latestInfo.sigUrl) throw new HarborError('INVALID_STATE', `release ${this.latestInfo.version} is not signed (no SHA256SUMS.sig); Harbor only installs signed releases`, { nextAction: 'Try again later; the release assets may still be uploading. If it stays unsigned, do not install it.' });
-    // never a downgrade from the console (available already means newer; this keeps it so if that changes)
-    if (compareVersions(this.latestInfo.version, this.current) <= 0) throw new HarborError('INVALID_STATE', `Harbor ${this.latestInfo.version} is not newer than the running ${this.current}`);
-    const version = this.latestInfo.version;
+    const pending = releaseNotReady(target);
+    if (pending) throw new HarborError('INVALID_STATE', pending, { nextAction: 'Try again in a few minutes.' });
+    const version = target.version;
     this.writeApplying({ version, state: 'requested', message: `requested by ${actor}; downloading ${archiveName(version)}`, at: rfc3339(this.clock.now()) });
     this.log.warn(`self-update to ${version} requested by ${actor}`);
     try {

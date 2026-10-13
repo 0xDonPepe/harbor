@@ -86,9 +86,11 @@ export function pinnedKeyIdFor(privateKeyPem: string, keys: readonly ReleaseKey[
 }
 
 // HARBOR_SIGNING_KEY (the PEM text, how CI passes the secret) or HARBOR_SIGNING_KEY_FILE (a path). Null = unset.
+// The secret is the multi-line PEM exactly as the key file holds it: no `\n` unescaping, so harbor-apps' openssl
+// step (which writes the secret verbatim) and this read accept the same secret (docs/design/SIGNING.md).
 export function signingKeyFromEnv(env: Record<string, string | undefined>, read: (file: string) => string = (f) => readFileSync(f, 'utf8')): string | null {
   const text = env.HARBOR_SIGNING_KEY?.trim();
-  if (text) return text.replace(/\\n/g, '\n') + '\n';
+  if (text) return text + '\n';
   const file = env.HARBOR_SIGNING_KEY_FILE?.trim();
   if (!file) return null;
   try {
@@ -96,6 +98,20 @@ export function signingKeyFromEnv(env: Record<string, string | undefined>, read:
   } catch (e) {
     throw new Error(`HARBOR_SIGNING_KEY_FILE ${file} cannot be read (${(e as Error).message})`, { cause: e });
   }
+}
+
+// The release build's signing decision (scripts/package.mjs). Null: no key and none required (an unsigned dev
+// archive). `require` (--require-signature, CI): a missing key, or a key Harbor does not pin, throws, so CI can
+// never publish a release every box would refuse. keyId null: a key that is not pinned, allowed only without `require`.
+export function releaseSigningKey(env: Record<string, string | undefined>, opts: { require: boolean; keys?: readonly ReleaseKey[]; read?: (file: string) => string }): { pem: string; keyId: string | null } | null {
+  const pem = signingKeyFromEnv(env, opts.read);
+  if (!pem) {
+    if (opts.require) throw new Error('--require-signature: set HARBOR_SIGNING_KEY (the PEM text, CI secret) or HARBOR_SIGNING_KEY_FILE');
+    return null;
+  }
+  const keyId = pinnedKeyIdFor(pem, opts.keys ?? RELEASE_KEYS);
+  if (!keyId && opts.require) throw new Error('the signing key is not one Harbor pins (src/release-keys.ts): boxes would refuse this release');
+  return { pem, keyId };
 }
 
 // Sign `file` into `file.sig` and check the result with the pinned keys. Returns the key id that verifies it,

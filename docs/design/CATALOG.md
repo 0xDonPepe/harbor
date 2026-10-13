@@ -226,10 +226,12 @@ size in `catalog.json`, it extracts safely, and the index validates with every l
 - Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
   (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
   pointer parses, its `index.json` exists, its serial beats the seed's, and its stored `catalog.json`
-  still parses and names that folder's serial (= the pointer); otherwise the seed (logged once as
-  "damaged"). This is an integrity re-check of the stored folder, not a trust check. It is cached by
-  serial + size/mtime of `catalog.json`, so reads stay cheap, and the next bundle is compared with the
-  seed, not with the damaged folder. A Harbor upgrade
+  still verifies with the `catalog.json.sig` stored beside it (0.32.0, decision 168), parses and names that
+  folder's serial (= the pointer); otherwise the seed (logged once as "damaged" or "not signed"). The
+  signature re-check also retires a folder that Harbor 0.31 or older downloaded unsigned: after the update to
+  0.32.0 the box uses its seed until the first check (a minute later) downloads the newest signed bundle. It is
+  cached by serial + size/mtime of `catalog.json` and `catalog.json.sig`, so reads stay cheap, and the next
+  bundle is compared with the seed, not with the damaged folder. A Harbor upgrade
   with a newer seed takes over by itself.
 - Check: a minute after start, then every hour (6 h before 0.30.0, decision 164), or on demand (`POST /v1/catalog/refresh`,
   `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Resolve `releases/latest` once
@@ -241,7 +243,9 @@ size in `catalog.json`, it extracts safely, and the index validates with every l
   5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
   prune all but the new folder and the one it replaced. The whole check has one deadline of 240 s (each
   step gets at most what is left), below the CLI's 300 s wait for the response. A `catalog.url` that is not
-  a `…/releases/latest/download` URL (a mirror) is read as is, signature required the same way. Any failure leaves the active catalog
+  a `…/releases/latest/download` URL (a mirror) is read as is, signature required the same way; there a publish
+  between two reads can still mix two bundles (a signature or checksum that does not match), so a mirror check
+  that sees one starts over once. Any failure leaves the active catalog
   as it was and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
   The Store's catalog line shows a stored failure on load ("Last check failed: …", role=status) and
   "· checked <relative time>", so a stuck automatic check is never silent.

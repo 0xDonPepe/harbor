@@ -84,7 +84,8 @@ for (const [svc, img] of Object.entries(images)) {
     tag,
     platform: r.platform,
     platformDigest: r.platformDigest,
-    ...(existing?.appVersion ? { appVersion: existing.appVersion } : { appVersion: tag.replace(/^v/, '') }),
+    // an author's appVersion stays while the tag does; a new tag is a new version (decision 175)
+    ...(existing?.appVersion && existing.tag === tag ? { appVersion: existing.appVersion } : { appVersion: tag.replace(/^v/, '') }),
     ...(r.config?.created ? { imageCreated: r.config.created.replace(/\.\d+Z$/, 'Z') } : {}),
     source: sourceFor(r.repository),
   };

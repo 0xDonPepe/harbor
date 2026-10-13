@@ -27,6 +27,7 @@ import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type Caddy
 import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
 import { HTTPS_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState, runtimeLanAccess } from '../system/lan-https.js';
 import { splitOneTime } from '../state/one-time.js';
+import { packageVersionOf } from '../packages/version.js';
 import type { ExposureRow, PrimaryExposure } from '../state/repo.js';
 import bcrypt from 'bcryptjs';
 
@@ -153,6 +154,13 @@ export class OperationRunner {
         repo.bumpGeneration(inst.id);
         repo.addEvent({ operationId: op.id, instanceId: inst.id, phase: 'succeeded', message: `${op.kind} succeeded` });
       });
+      // Decision 176: an update nobody clicked says it happened (a failed one is reported below, rolled back).
+      const u = plan.proposal.update;
+      if (op.kind === 'update' && plan.actor === 'auto-update' && u) {
+        const label = inst.displayName ?? inst.name;
+        const what = u.fromVersion && u.toVersion && u.fromVersion !== u.toVersion ? `from ${u.fromVersion} to ${u.toVersion}` : `to revision ${u.toRevision}${u.toVersion ? ` (${u.toVersion})` : ''}`;
+        this.ctx.notifier.notify({ kind: 'app-updated', severity: 'info', title: `${label} was updated automatically`, body: `${label} now runs ${what}.${u.releaseNotes ? ` ${u.releaseNotes}` : ''} Its data, addresses and ports stayed.`, instanceId: inst.id, dedupeKey: `app-updated:${op.id}` });
+      }
     } catch (e) {
       if (e instanceof InterruptedError) {
         this.ctx.log.warn(`${op.kind} interrupted by shutdown; left in state ${repo.operation(op.id)?.state} for recovery`, { operationId: op.id });
@@ -1686,7 +1694,7 @@ export class OperationRunner {
       const containers = await this.upAndRecord(op, inv, identity, updated);
       await this.checkReadiness(op, next, updated, containers);
       repo.updateInstance(inst.id, { installState: 'installed', everInstalled: true, desired: 'running', runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
-      this.event(op, 'checking', `${inst.name} now runs revision ${next.revision}${next.manifest.release.version ? ` (${next.manifest.release.version})` : ''}`);
+      this.event(op, 'checking', `${inst.name} now runs revision ${next.revision}${packageVersionOf(next) ? ` (${packageVersionOf(next)})` : ''}`);
       await this.afterProviderEndpointsChanged(op, updated, before.endpoints, sink);
       this.opResult = { fromRevision: u.fromRevision, toRevision: u.toRevision, rolledBack: false };
       const shown = shownOnce(next, values).filter((x) => !inst.secrets.some((r) => r.id === x.id));

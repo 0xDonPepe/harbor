@@ -72,6 +72,8 @@ test('home shows the system strip and an empty launcher; store lists real packag
 
   await page.getByRole('link', { name: 'App Store' }).click();
   for (const name of ['Excalidraw', 'BentoPDF']) await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+  // decision 174: the card shows the app's own version (BentoPDF names none in its manifest: its image's, from release.json)
+  await expect(page.getByRole('button', { name: 'About BentoPDF' })).toContainText('v2.8.8');
   // Icons are served by the daemon from hashed package assets (SVG, sandboxed).
   const icon = page.locator('.tile.store img').first();
   const src = await icon.getAttribute('src');
@@ -903,7 +905,8 @@ ${notes ? `  releaseNotes: ${JSON.stringify(notes)}\n` : ''}`;
   await dlg.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('tab', { name: 'Your apps' }).click();
   const card = page.locator('.tile.store').filter({ hasText: 'Hello E2E' });
-  await expect(card).toContainText('Your app · 1.1');
+  await expect(card).toContainText('Your app');
+  await expect(card.locator('.store-ver')).toHaveText('v1.1'); // decision 174: the app's own version, on its own
   await card.getByRole('button', { name: 'Install Hello E2E', exact: true }).click();
   const wiz = page.getByRole('dialog');
   await expect(wiz.getByRole('region', { name: 'Storage' })).toBeVisible();
@@ -936,6 +939,7 @@ ${notes ? `  releaseNotes: ${JSON.stringify(notes)}\n` : ''}`;
   const review = page.getByRole('dialog');
   await expect(review).toContainText('Review update');
   await expect(review).toContainText('1 image change');
+  await expect(review).toContainText('from v1.1 to v1.2');
   await review.getByRole('button', { name: 'Update now' }).click();
   await expect(page.getByRole('heading', { name: /Hello E2E is up to date/ })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('heading', { name: '1 update available' })).toHaveCount(0);

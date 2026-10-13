@@ -252,6 +252,13 @@ If the new release does not start or answer, Harbor puts the previous release ba
 the operation fails with a clear message and the app keeps running as before. Data migrations are the
 app's own business: Harbor never touches the contents of a volume.
 
+**The version people see** (decision 174): the Store, the app page and update prompts show `release.version`
+when the manifest has it, word for word. Without it, Harbor shows the version `release.json` records for the image of
+the service behind `ui.primaryEndpoint` (`images.<svc>.appVersion`, which `catalog-pin.mjs` writes from the tag: `v1.2.3`
+→ `1.2.3`), with an image variant dropped (`34.0.4-apache` → 34.0.4). So most packages need no `release.version` at
+all; write one when the main image's tag is not the version people know (a `latest`-only image, an umbrella version
+for several images). The revision stays what makes an update: the version is only shown.
+
 The same mechanism updates built-in apps: a new official catalog (§10) carries a higher revision, and
 every installed app from that package shows an update (or updates itself, where the operator turned on
 automatic updates). This no longer waits for a Harbor release.
@@ -433,6 +440,34 @@ tools from the Harbor checkout. They find `../harbor-apps/apps` on their own; ot
 4. Try it: `HARBOR_DEV_CATALOG=../harbor-apps/apps pnpm dev` shows the whole catalog in the dev console.
 5. Open a pull request on harbor-apps. Its CI runs `catalog:verify` and `catalog:hash --check` with
    published Harbor releases' own loaders (see *minHarbor* below).
+
+**Upstream updates are automatic (decision 175).** harbor-apps' `updates.yml` runs every day with the latest
+Harbor release: `pnpm catalog:upstream check` finds newer tags of each app's images, `apply` moves the package to them
+(re-pinned, revision + 1, the old version replaced by the new one in `release.version` and the release notes), and
+`pnpm catalog:smoke` proves it on the runner's Docker with Harbor's own engine (install the current revision, update,
+fresh install). Patch and minor moves land on main; majors (0.x minor too) open a pull request; failures open an
+issue with Harbor's events and the containers' logs. How it chooses:
+
+- Only tags of the **same shape** as the pinned one compete: `v0.11.3` against `v0.12.0`, never `v0.12.0-cuda`,
+  `latest` or a date tag. A tag must be at least 2 days old, publish linux/amd64 and be newer than the pinned image.
+- Images from one publisher on one tag **move together** (Immich's server and machine-learning), to a tag all have.
+- `infrastructure` services, and databases whatever their role (postgres, mariadb, mysql, redis, valkey, mongo…),
+  **stay on their major** version: a database major needs a data migration Harbor does not do.
+- `updates.json` at the harbor-apps root steers it per app: `"hold": ["database"]` (never move those services),
+  `"skip": "<why>"` (leave the app alone), `"match": {"web": "^2\\."}` (new tags must also match), `"note"`.
+
+Try it locally (Docker Desktop is fine; nothing is published):
+
+```sh
+pnpm catalog:upstream check --only open-webui,immich          # what it would move
+cp -R ../harbor-apps/apps /tmp/base && cp -R ../harbor-apps/apps /tmp/next
+pnpm catalog:upstream apply --catalog /tmp/next freshrss web=1.30.1
+pnpm catalog:smoke --docker-socket ~/.docker/run/docker.sock --catalog /tmp/next --base /tmp/base freshrss --out /tmp/smoke.json
+```
+
+`--record` writes the passed result into the package's qualification (CI does this; never by hand). The smoke run
+installs a required own folder into an empty temp folder and typed-in secrets with throwaway values; an app with a
+required link to another app is reported as "needs a manual check".
 
 **minHarbor (decision 161).** An app states the oldest Harbor release it runs on in its own manifest:
 

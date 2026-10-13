@@ -97,6 +97,7 @@ describe('your own apps: upload, install, update, rollback, remove', () => {
     expect(r.replacedRevision).toBe('1');
     expect(r.updatable).toEqual([{ instanceId: before.id, name: 'hello', fromRevision: '1' }]);
     const withUpdate = (await byName('hello'))!;
+    expect(withUpdate.version).toBe('0.1.0'); // decision 174: the installed revision's version, not the catalog's
     expect(withUpdate.updateAvailable).toEqual({ revision: '2', version: '0.2.0', releaseNotes: 'Faster and shinier' });
     const plan = await h.api.plan({ kind: 'update', instanceId: before.id });
     expect(plan.kind).toBe('update');
@@ -108,6 +109,7 @@ describe('your own apps: upload, install, update, rollback, remove', () => {
     expect(op.result).toMatchObject({ fromRevision: '1', toRevision: '2', rolledBack: false });
     const after = (await byName('hello'))!;
     expect(after.revision).toBe('2');
+    expect(after.version).toBe('0.2.0');
     expect(after.updateAvailable).toBeNull();
     expect(after.endpoints[0]!.hostPort).toBe(port);
     expect(after.runtime).toBe('running');
@@ -139,6 +141,7 @@ describe('your own apps: upload, install, update, rollback, remove', () => {
     expect(msgs).toMatch(/is back on revision 2/);
     const after = (await byName('hello'))!;
     expect(after.revision).toBe('2');
+    expect(after.version).toBe('0.2.0');
     expect(after.installState).toBe('installed');
     expect(after.runtime).toBe('running');
     expect(after.updateAvailable?.revision).toBe('3');

@@ -678,7 +678,9 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
 ## 4d. Your own apps and updates
 
 - **Upload a package**: App Store → *+ Your own app* (or `harbor packages add my-app.zip`). A package is a zip with `manifest.yaml`, `compose.yaml`, optionally `README.md`, an icon and screenshots; see [DEVELOPER_PACKAGES.md](DEVELOPER_PACKAGES.md) for the template. Harbor validates it, pins the images by digest, and lists it under *Your apps*. Install it like any other app. Check a folder before you zip or push it with `harbor packages validate <folder>` (the daemon's own validators, offline, no login).
-- **Update an app**: when a newer revision of its package exists (you uploaded one, or a newer official catalog arrived — see below), Home shows an *updates available* card and the app's tile gets a blue ↑. Press **Update**, review the plan (which images change, what is added), approve. Data, ports and addresses stay. If the new version fails to start, Harbor rolls back to the previous one automatically and tells you. CLI: `harbor list` (UPDATE column), `harbor update <name>`.
+- **Versions** (0.33.0): App Store cards and the app's page show the app's own version (*v0.12.0*), next to Harbor's package revision (*rev 3*, which only counts Harbor's releases of the package). `harbor list` has a VERSION column, `harbor catalog` too.
+- **Update an app**: when a newer revision of its package exists (you uploaded one, or a newer official catalog arrived — see below), Home shows an *updates available* card and the app's tile gets a blue ↑, with the versions it moves between (*v0.11.3 → v0.12.0*). Press **Update**, review the plan (which images change, what is added), approve. Data, ports and addresses stay. If the new version fails to start, Harbor rolls back to the previous one automatically and tells you. CLI: `harbor list` (UPDATE column), `harbor update <name>`.
+- **Automatic updates** (the app's page: *Update this app automatically…*; off by default; Settings → Overview sets the default for new installs): Harbor updates the app by itself when a new version arrives. If the app backs up somewhere (its Backups tab), Harbor makes a fresh backup first and only then updates, so a new version that changes the app's data can still be undone by restoring that backup. If the backup fails, the update waits (notification *… was not updated automatically*, with the reason) and Harbor tries again a few hours later; *Update now* skips the backup. A finished automatic update says so in Notifications (*… was updated automatically*); a failed one is rolled back and reported, and Harbor does not try that version again (even after a restart) until a newer one arrives.
 - **Remove an uploaded package**: from its App Store page once no app installed from it exists (`harbor packages remove <id>`).
 
 ### Where the built-in apps come from (the official catalog)
@@ -694,6 +696,12 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
   the machine's clock. Anything else is ignored and the current catalog stays. If a downloaded catalog
   on disk is damaged later, Harbor sets it aside and uses the catalog it shipped with until a good one
   arrives.
+- **The official apps follow their projects' releases** (0.33.0): every day the catalog repository looks for newer
+  releases of each app, moves the app to the newest one and proves it on a real machine first (it installs the
+  current version, updates it, checks it stays healthy, then installs the new version from nothing). Small updates
+  (patch and minor) are published on their own; bigger ones (a new major version, or 0.x minor ones such as
+  Open WebUI 0.11 → 0.12) wait for a person to review the project's upgrade notes. Databases inside an app stay on
+  their major version. The app's page says *tested on a real machine* for these too.
 - **New apps and app updates arrive on their own.** Harbor looks a minute after it starts and then every
   hour (0.30.0; it was 6 hours), and an open App Store picks a new catalog up within minutes. To look now:
   the refresh icon next to *App catalog from …* under the App Store title, or `harbor catalog refresh`.

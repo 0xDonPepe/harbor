@@ -73,3 +73,15 @@ export function monogram(name: string): string {
 export function categoryLabel(c: string): string {
   return { productivity: 'Productivity', media: 'Media', files: 'Files', automation: 'Automation', network: 'Network', developer: 'Developer', ai: 'AI', security: 'Security', finance: 'Finance', home: 'Home', other: 'Other' }[c] ?? 'Other';
 }
+
+// Decision 174: an app's own version, the way people write it ("v0.12.0"; free text stays as the author wrote it).
+export function fmtVersion(v: string): string {
+  return /^\d/.test(v) ? `v${v}` : v;
+}
+
+// What an update changes, version first: "v0.11.3 → v0.12.0" when both versions are known and differ,
+// else Harbor's package revisions (a repackaging of the same version, or a package that names no version).
+export function updateLine(from: { revision: string; version: string | null }, to: { revision: string; version: string | null }): string {
+  if (from.version && to.version && from.version !== to.version) return `${fmtVersion(from.version)} → ${fmtVersion(to.version)}`;
+  return `revision ${from.revision} → ${to.revision}${to.version ? ` (${fmtVersion(to.version)})` : ''}`;
+}

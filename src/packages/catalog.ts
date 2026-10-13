@@ -9,6 +9,7 @@ import { parseReleaseInventory, sha256Hex, verifyInventory } from './inventory.j
 import { validateManifestReferences, validateManifestShape } from './manifest.js';
 import { isNeedsHarbor, missingHarbor, needsHarborError, peekMinHarbor } from './min-harbor.js';
 import { parseRestrictedYaml } from './yaml.js';
+import { packageVersionOf } from './version.js';
 
 const MAX_README_BYTES = 256 * 1024;
 
@@ -155,7 +156,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         name: pkg.manifest.metadata.name,
         description: pkg.manifest.metadata.description,
         revision: pkg.revision,
-        version: pkg.manifest.release.version ?? null,
+        version: packageVersionOf(pkg),
         origin,
         availability: 'available',
         reason: null,
@@ -185,7 +186,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         name: peek?.manifest.metadata.name ?? id,
         description: peek?.manifest.metadata.description ?? '',
         revision: index.packages[id]!.revision,
-        version: peek?.manifest.release.version ?? null,
+        version: peek ? packageVersionOf(peek) : null,
         origin,
         availability: 'unavailable',
         reason: e instanceof HarborError ? e.message : 'invalid package',

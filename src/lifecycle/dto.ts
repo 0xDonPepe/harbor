@@ -10,7 +10,7 @@ export function eventDto(e: EventRow): EventDto {
   return { cursor: String(e.cursor), at: e.at, phase: e.phase, message: e.message };
 }
 
-export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; hiddenFromHome?: boolean; apiOnly?: boolean; ports?: InstanceSummary['ports'] } = { icon: null, category: 'other' }): InstanceSummary {
+export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; hiddenFromHome?: boolean; apiOnly?: boolean; ports?: InstanceSummary['ports']; version?: string | null } = { icon: null, category: 'other' }): InstanceSummary {
   return {
     id: i.id,
     name: i.name,
@@ -19,6 +19,7 @@ export function instanceSummary(i: InstanceRow, packageName: string, primaryEndp
     icon: look.icon,
     category: look.category,
     revision: i.revision,
+    version: look.version ?? null,
     desired: i.desired,
     installState: i.installState,
     runtime: i.runtime,

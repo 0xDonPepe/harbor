@@ -169,6 +169,7 @@ export function mockInstances(): InstanceSummary[] {
     icon: null,
     category: 'productivity',
     revision: '1',
+    version: null as string | null,
     desired: 'running' as const,
     observedAt: t,
     primaryEndpoint: 'web',
@@ -216,7 +217,8 @@ export function mockInstances(): InstanceSummary[] {
       readiness: 'healthy',
       endpoints: [endpoint(18082)],
       usage: { cpuPercent: 34, memoryBytes: 900 * MiB, sampledAt: t },
-      updateAvailable: { revision: '2', version: 'v1.2.0', releaseNotes: 'Faster search' },
+      version: '3.2.1',
+      updateAvailable: { revision: '2', version: '3.3.1', releaseNotes: 'Faster search' },
     },
     // decision 170: a second copy of Immich — both tiles name their copy, the Store offers a third
     {

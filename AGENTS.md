@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **174**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **177**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -61,7 +61,9 @@ tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live su
                 fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store);
                 fixtures/state/<tag>/ = FROZEN state dirs written by old releases (upgrade-jump test, decision 172)
 scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_CATALOG_DIR, default
-                ../harbor-apps/apps), catalog-fetch.mjs (downloads the latest catalog over HTTPS + checks
+                ../harbor-apps/apps), catalog-upstream.ts + upstream-tags.ts (the harbor-apps update bot: newer
+                upstream tags, apply them; decision 175), catalog-smoke.ts (one app on a real Docker engine:
+                install old → update → fresh install), catalog-fetch.mjs (downloads the latest catalog over HTTPS + checks
                 the zip against its catalog.json), openapi.ts, package.mjs (ships that catalog as the seed), vm/ controllers
 docs/           OPERATOR_GUIDE.md (user manual), DEVELOPER_PACKAGES.md (package authoring),
                 VERIFICATION.md (evidence log), FUTURE.md (deliberately not built), TODO.md (wanted, not built yet),
@@ -133,8 +135,8 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (478)
-   pnpm test:integration        # 285 + 3 live-Docker skipped (~5 min)
+   pnpm test                    # unit (491)
+   pnpm test:integration        # 288 + 3 live-Docker skipped (~5 min)
    pnpm build && pnpm test:e2e  # 38 Playwright (~2 min, ports 18500/18700)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
@@ -142,7 +144,7 @@ Key separations (do not blur them):
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **174**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **177**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -190,7 +192,14 @@ The non-negotiable subset:
   needs a Harbor newer than 0.28.0 declares `release.minHarbor: "x.y.z"` in its manifest (decision 161;
   at least 0.28.2, a published Harbor release); `pnpm catalog:bundle` copies it into the index entry, and
   `pnpm catalog:plan` groups apps by it for the harbor-apps CI. Qualification (`passed`) only comes from
-  `scripts/vm/qualify-catalog.mjs --catalog <dir>` on a droplet — never stamp it by hand.
+  `scripts/vm/qualify-catalog.mjs --catalog <dir>` on a droplet, or from `pnpm catalog:smoke --record` (Harbor's
+  engine on a real Docker host; the harbor-apps update bot runs it on GitHub's x86-64 runners, decision 175) —
+  never stamp it by hand.
+- **Upstream updates are automatic** (decision 175): harbor-apps `updates.yml` runs `catalog:upstream` +
+  `catalog:smoke` daily; patch/minor moves land on main, majors (0.x minor included) open a PR, failures an
+  issue. Steer it with harbor-apps `updates.json` (`hold` services, `skip` apps, `match` tags), not by editing
+  the workflow. It uses the LATEST Harbor release's scripts, so a change to `catalog-upstream`/`catalog-smoke`
+  reaches it only after a Harbor release.
 - **Forbidden**: secrets in the package, interpolation/`$` tricks, symlinks/`..` paths,
   remote images in presentation, rendering package text as HTML (served sandboxed).
 - **Changing the format itself** (a schema in `src/contracts/manifest.schema.ts`, `compose.schema.ts` or

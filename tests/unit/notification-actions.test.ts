@@ -10,6 +10,9 @@ describe('notification actions', () => {
   it('app actions appear only when the row names an app', () => {
     expect(notificationActions('update-available', 'i1')).toEqual([{ label: 'Update now', do: 'update-app', route: null }]);
     expect(notificationActions('update-available', null)).toEqual([]);
+    // decision 176: automatic updates say what happened
+    expect(notificationActions('app-updated', 'i1')).toEqual([{ label: 'Open app', do: 'open-app', route: null }]);
+    expect(notificationActions('auto-update-held', 'i1')).toEqual([{ label: 'Update now', do: 'update-app', route: null }, { label: 'Open Backups', do: 'route', route: '#/settings/backups' }]);
     expect(notificationActions('home-locked', 'i1')[0]).toMatchObject({ label: 'Unlock', do: 'open-app' });
   });
   it('a failed backup retries first, then points at Backups', () => {

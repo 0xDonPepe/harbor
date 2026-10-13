@@ -5,7 +5,7 @@ import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
 import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, appLabel, copiesOf, endpointUrlHere, openUrl } from './components';
 import { defaultCopyName, installView, nameProblem } from './copies';
-import { categoryLabel, fmtBytes, fmtTime } from './format';
+import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './format';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
 
@@ -166,6 +166,12 @@ export function PlanDialog({ c }: { c: Console }) {
                 </span>
               </li>
             ))}
+            {plan.update && (
+              <li>
+                <span className="fact-k">Version</span>
+                <span>{updateLine({ revision: plan.update.fromRevision, version: plan.update.fromVersion }, { revision: plan.update.toRevision, version: plan.update.toVersion })}</span>
+              </li>
+            )}
             {plan.update && (
               <li>
                 <span className="fact-k">Changes</span>
@@ -1017,8 +1023,8 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
                 <dt>Version</dt>
                 <dd>
                   {[
-                    item.version ? `Version ${item.version}` : null,
-                    `package revision ${item.revision}`,
+                    item.version ? `Version ${item.version.replace(/^v(?=\d)/, '')}` : null,
+                    `Harbor package revision ${item.revision}`,
                     item.origin === 'local' ? 'your own upload' : item.qualification === 'passed' ? 'tested on a real machine' : 'not yet tested on a real machine',
                   ]
                     .filter(Boolean)
@@ -1445,7 +1451,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
         <InstanceIcon inst={inst} size={72} />
         <div>
           <p className="lead">
-            {inst.packageName} <span className="muted small">· {inst.name} · rev {inst.revision}</span>
+            {inst.packageName} <span className="muted small">· {inst.name} · {inst.version ? `${fmtVersion(inst.version)} · ` : ''}rev {inst.revision}</span>
           </p>
           <StatusPill inst={inst} />
           <span className="muted small"> · observed {fmtTime(inst.observedAt)}</span>
@@ -1544,8 +1550,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             <strong>Update available</strong>
             <span className="muted small">
               {' '}
-              revision {inst.revision} → {upd.revision}
-              {upd.version ? ` (${upd.version})` : ''}
+              {updateLine(inst, upd)}
               {upd.releaseNotes ? ` · ${upd.releaseNotes}` : ''}
             </span>
             <p className="muted small">Your data, addresses and ports stay. If the new version does not start, Harbor puts the current one back.</p>
@@ -1566,7 +1571,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             }}
             aria-label={`Automatic updates for ${inst.name}`}
           />
-          <span className="muted small">Update this app automatically when a new version arrives (rolls back if it does not start)</span>
+          <span className="muted small">Update this app automatically when a new version arrives. Harbor backs it up first if it has a backup place, and puts the current version back if the new one does not start.</span>
         </label>
       )}
       {!retained && (
@@ -1876,7 +1881,7 @@ function humanSummary(plan: PlanDto, n: string): string {  switch (plan.kind) {
     case 'seal':
       return `Harbor will encrypt ${n} in place: it stops, its data is copied into a sealed home at ${plan.location?.dir ?? 'the Harbor data folder'}, and it starts again on the sealed copy. The plain copy is deleted only after that works.`;
     case 'update':
-      return `Harbor will update ${n} to revision ${plan.update?.toRevision ?? plan.revision}${plan.update?.toVersion ? ` (${plan.update.toVersion})` : ''}. Data, ports and addresses stay; if the new release does not start, the previous one is put back automatically.`;
+      return `Harbor will update ${n} ${updateSentence(plan)}. Data, ports and addresses stay; if the new release does not start, the previous one is put back automatically.`;
     case 'relink':
       return `Harbor will attach the private links of ${n} again with only the names it gives them. Nothing is recreated; each link drops for a moment.`;
   }
@@ -2200,4 +2205,12 @@ export function DefaultLogin({ creds }: { creds: { username: string; password: s
       <p className="muted small">{creds.note ?? 'This login is the same for everyone who installs this app; anyone who reaches it can use it until you change it.'}</p>
     </div>
   );
+}
+
+// "from v0.11.3 to v0.12.0" when both versions are known and differ (decision 174), else the revisions.
+function updateSentence(plan: PlanDto): string {
+  const u = plan.update;
+  if (!u) return `to revision ${plan.revision}`;
+  if (u.fromVersion && u.toVersion && u.fromVersion !== u.toVersion) return `from ${fmtVersion(u.fromVersion)} to ${fmtVersion(u.toVersion)}`;
+  return `from revision ${u.fromRevision} to ${u.toRevision}${u.toVersion ? ` (${fmtVersion(u.toVersion)})` : ''}`;
 }

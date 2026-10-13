@@ -67,6 +67,9 @@ export interface InstanceSummary {
   icon: string | null; // asset name inside the package; served at /v1/catalog/{packageId}/asset/{icon}
   category: string;
   revision: string;
+  // decision 174: the app's own version of the installed revision (manifest release.version, else the main
+  // image's version from release.json); null when the package does not say
+  version: string | null;
   desired: Desired;
   installState: InstallState;
   runtime: Runtime;

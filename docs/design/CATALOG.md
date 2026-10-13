@@ -360,3 +360,47 @@ published catalog release on carlosalaniz/harbor-apps?".
 **Why.** Umbrel's `manifestVersion` is the minimum OS, set by hand, and Umbrel only started enforcing it
 on app updates in Aug 2026 (umbrel commit 36fa892d5e); StartOS stamps the minimum OS at pack time.
 Harbor takes StartOS's stamping and Umbrel's grow-only format.
+
+## 11. The catalog follows upstream releases (added 2026-10-13, v0.33.0, decisions 174–175)
+
+**What people see.** The Store shows each app's own version (decision 174): the manifest's `release.version`, else
+the `appVersion` of the main endpoint's image in `release.json` (variant suffix dropped). The 17 original packages
+never wrote `release.version`, so Open WebUI read "revision 1" while it was 0.11.3; nothing in the packages changed.
+
+**Who moves the versions.** harbor-apps `.github/workflows/updates.yml`, daily (decision 175):
+
+```
+find  (read)   latest Harbor release → pnpm catalog:upstream check --policy updates.json
+               → leave out updates that already have an open PR/issue (marker <!-- harbor-update: id svc=tag… -->)
+               → at most 8 apps, patch first
+try   (read)   per app: catalog:upstream apply → catalog:verify (that Harbor) → catalog:smoke --record
+               → artifact: git diff of apps/<id>/ + meta.json (result passed|failed|skipped|invalid|apply-failed)
+land  (write)  no package or Harbor code; patch must touch only plain files under apps/<id>/
+               passed patch/minor → commit on main (index.json revision via jq), then gh workflow run ci.yml
+               passed major       → branch updates/<id> + PR (or an issue with the compare link when Actions
+                                    may not open PRs), ci.yml dispatched on the branch
+               failed             → issue with Harbor's events and the containers' last log lines
+```
+
+ci.yml is unchanged: a dispatch on main checks, bundles, signs and publishes exactly like a push.
+GITHUB_TOKEN pushes start no workflows, hence the explicit dispatch.
+
+**Choosing a tag** (`scripts/upstream-tags.ts`, pure, `tests/unit/upstream-tags.test.ts`): same shape (digit runs
+replaced, same count), numerically newer, never a version→date switch; level = first differing place, one place
+further for 0.x (0.11 → 0.12 is major) and 0.0.x always major. Infrastructure services and known databases stay
+within their major. Lockstep groups = same registry owner + same current tag; a group takes the newest tag every
+member has. A candidate must resolve for linux/amd64, be at least `minAgeDays` (2) old and newer than the pinned
+image (that check removed old date tags like heimdall's 2021.11.28 in the first full run).
+
+**Proving it** (`scripts/catalog-smoke.ts`): the daemon in-process with the real Dockerode adapter and `docker
+compose`, a throwaway state dir, one-app catalogs. With `--base`: install the current revision, close the daemon
+(the app keeps running), start it on the new catalog, update; the update must succeed without a rollback. Then purge
+and install the new revision fresh. Each phase ends with a settle window (60 s in CI): every container running with
+no restart, Harbor's readiness not unhealthy. Only resources labelled with the run's installation id are removed.
+A pass with `--record` writes `qualification: passed` (host = the runner: Ubuntu 24.04 x86-64, its Docker and
+Compose versions) and refreshes the hashes. GitHub's runners are disposable x86-64 Ubuntu machines; the droplet's
+`qualify-catalog.mjs` stays the deeper check (systemd bootstrap, browser, sealed homes).
+
+**Not covered yet.** A floating tag (`postgres:16`, `redis:7`) whose digest moved is not refreshed (same tag, no
+newer shape); a major PR is reviewed by a person against the project's upgrade notes; apps with a required link
+to another app are reported as needing a manual check.

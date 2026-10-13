@@ -3,7 +3,7 @@ import type { CatalogItemDto, HostStorageDto, InstanceSummary, SystemMetricsDto,
 import { api } from '../../api';
 import { AppIcon, InstanceIcon, Pill, appLabel, copyName, openUrl } from '../components';
 import { ArrowUpIcon, EllipsisIcon } from '../icons';
-import { fmtBytes, fmtUptime, plainStatus } from '../format';
+import { fmtBytes, fmtUptime, plainStatus, updateLine } from '../format';
 import { useReorder } from '../reorder';
 import type { Console } from '../store';
 
@@ -126,7 +126,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 <span className="row">
                   <InstanceIcon inst={i} size={28} />
                   <span>
-                    <strong>{appLabel(i, data.instances)}</strong> <span className="muted small">{i.revision} → {i.updateAvailable!.revision}{i.updateAvailable!.version ? ` (${i.updateAvailable!.version})` : ''}</span>
+                    <strong>{appLabel(i, data.instances)}</strong> <span className="muted small">{updateLine(i, i.updateAvailable!)}</span>
                     {i.updateAvailable!.releaseNotes && <span className="muted small"> · {i.updateAvailable!.releaseNotes}</span>}
                   </span>
                 </span>
@@ -309,7 +309,7 @@ function AppIconTile({ inst, all = [], onDetails, reorder }: { inst: InstanceSum
       )}
       {!arranging && <WidgetLine inst={inst} />}
       {inst.updateAvailable && !arranging && (
-        <span className="update-dot" title={`Update available: revision ${inst.updateAvailable.revision}`} aria-label={`Update available for ${inst.name}`}>
+        <span className="update-dot" title={`Update available: ${updateLine(inst, inst.updateAvailable)}`} aria-label={`Update available for ${inst.name}`}>
           <ArrowUpIcon />
         </span>
       )}

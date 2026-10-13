@@ -45,6 +45,11 @@ import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
 import { retainedExposures } from './retained-exposures.js';
 import { instanceDir, loadReleaseSnapshot, secretExists } from './instance-dir.js';
+import { packageVersionOf } from '../packages/version.js';
+
+// Decision 176: an automatic update waits for its backup this long, and after a failed backup tries again this much later.
+const AUTO_UPDATE_BACKUP_DEADLINE_MS = 6 * 60 * 60_000;
+const AUTO_UPDATE_BACKUP_RETRY_MS = 4 * 60 * 60_000;
 
 export interface SubmitResult {
   operation: OperationRow;
@@ -185,9 +190,8 @@ export class ApplicationService {
         if (i.packageId !== s.packageId || i.installState !== 'installed' || i.activeOperationId) continue;
         const upd = this.updateFor(i, current);
         if (!upd) continue;
-        const attempt = `${i.id}:${upd.revision}`;
-        if (this.autoUpdateAttempts.has(attempt)) continue;
-        this.autoUpdateAttempts.add(attempt);
+        if (this.autoTried()[i.id] === upd.revision) continue;
+        this.setAutoTried(i.id, upd.revision);
         try {
           const plan = await this.createPlan({ kind: 'update', instanceId: i.id }, 'git-source');
           this.submit(plan.id, this.ctx.ids.uuid(), 'git-source');
@@ -446,17 +450,20 @@ export class ApplicationService {
     return { started, skipped };
   }
   // Called by the observer: submit updates for auto-enabled instances (actor auto-update).
-  // Each (instance, revision) is attempted once — a rolled-back update must not loop.
-  private autoUpdateAttempts = new Set<string>();
+  // Each (instance, revision) is attempted once — a rolled-back update must not loop. Decision 176: the
+  // attempt is remembered in the `updates.autoTried` setting, so a restart does not retry it either; and an
+  // app that backs up somewhere gets a fresh restore point first (an update can migrate data in a way the
+  // image rollback cannot undo). A backup that fails holds the update and says so; it is tried again later.
+  private autoBackups = new Map<string, { revision: string; since: string; heldUntil: number | null }>();
   async runAutoUpdates(): Promise<void> {
     const current = this.currentRevisionsSafe();
     for (const i of this.ctx.repo.listInstances()) {
       if (!i.autoUpdate || i.installState !== 'installed' || i.activeOperationId) continue;
       const upd = this.updateFor(i, current);
       if (!upd) continue;
-      const attempt = `${i.id}:${upd.revision}`;
-      if (this.autoUpdateAttempts.has(attempt)) continue;
-      this.autoUpdateAttempts.add(attempt);
+      if (this.autoTried()[i.id] === upd.revision) continue;
+      if (this.preUpdateBackup(i, upd.revision) !== 'go') continue;
+      this.setAutoTried(i.id, upd.revision);
       try {
         const plan = await this.createPlan({ kind: 'update', instanceId: i.id }, 'auto-update');
         this.submit(plan.id, this.ctx.ids.uuid(), 'auto-update');
@@ -465,6 +472,48 @@ export class ApplicationService {
         this.ctx.log.warn(`auto-update of ${i.name} could not start: ${(e as Error).message}`);
       }
     }
+  }
+  private autoTried(): Record<string, string> {
+    return this.ctx.repo.setting<Record<string, string>>('updates.autoTried') ?? {};
+  }
+  private setAutoTried(instanceId: string, revision: string | null): void {
+    const all = this.autoTried();
+    if (revision === null) delete all[instanceId];
+    else all[instanceId] = revision;
+    this.ctx.repo.setSetting('updates.autoTried', all);
+  }
+  // 'go' when the app does not back up, or a backup that started after the update was seen finished well.
+  private preUpdateBackup(i: InstanceRow, revision: string): 'go' | 'wait' {
+    const backups = this.ctx.backups;
+    if (!backups || !backups.appPolicy(i.id).enabled) return 'go';
+    const label = i.displayName ?? i.name;
+    const now = Date.now();
+    const held = (why: string): 'wait' => {
+      this.autoBackups.set(i.id, { revision, since: this.ctx.repo.now(), heldUntil: now + AUTO_UPDATE_BACKUP_RETRY_MS });
+      this.ctx.notifier.notify({ kind: 'auto-update-held', severity: 'warning', title: `${label} was not updated automatically`, body: `Harbor backs ${label} up before an automatic update, and that backup did not succeed: ${why} It tries again in a few hours; Update from the app page skips the backup.`, instanceId: i.id, dedupeKey: `auto-update-held:${i.id}` });
+      return 'wait';
+    };
+    const pending = this.autoBackups.get(i.id);
+    if (pending && pending.revision === revision && pending.heldUntil !== null && now < pending.heldUntil) return 'wait';
+    if (!pending || pending.revision !== revision || pending.heldUntil !== null) {
+      try {
+        backups.runNow(i.id);
+      } catch (e) {
+        return held(e instanceof HarborError && e.nextAction ? `${e.message}. ${e.nextAction}` : e instanceof Error ? e.message : String(e));
+      }
+      this.autoBackups.set(i.id, { revision, since: this.ctx.repo.now(), heldUntil: null });
+      this.ctx.log.info(`auto-update of ${i.name}: backing it up first`, { instanceId: i.id, to: revision });
+      return 'wait';
+    }
+    const run = this.ctx.repo.backupRuns({ instanceId: i.id, kind: 'backup', limit: 5 }).find((r) => r.startedAt >= pending.since);
+    if (!run || run.state === 'running') {
+      if (now - Date.parse(pending.since) > AUTO_UPDATE_BACKUP_DEADLINE_MS) return held('it did not finish within six hours.');
+      return 'wait';
+    }
+    if (run.state === 'failed' || run.state === 'skipped') return held(run.message ?? `the backup ${run.state === 'failed' ? 'failed' : 'was skipped'}.`);
+    this.autoBackups.delete(i.id);
+    this.ctx.notifier.resolve(`auto-update-held:${i.id}`);
+    return 'go';
   }
 
   // ---- notifications (decision 77)
@@ -809,15 +858,15 @@ export class ApplicationService {
     return this.ctx.packages.list().map((item) => ({ ...item, proposedName: proposeName(item.id, taken).name }));
   }
 
-  private packageMeta(i: InstanceRow): { name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
-    const from = (pkg: LoadedPackage) => ({ ports: fixedPortsOf(pkg.manifest), hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
+  private packageMeta(i: InstanceRow): { version: string | null; name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
+    const from = (pkg: LoadedPackage) => ({ version: pkg.revision === i.revision ? packageVersionOf(pkg) : null, ports: fixedPortsOf(pkg.manifest), hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
     try {
       return from(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'release'), i.packageId));
     } catch {
       try {
         return from(this.ctx.packages.load(i.packageId));
       } catch {
-        return { name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], hideFromHome: false, apiOnly: false, ports: [] };
+        return { version: null, name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], hideFromHome: false, apiOnly: false, ports: [] };
       }
     }
   }
@@ -854,9 +903,9 @@ export class ApplicationService {
 
   // Read-time look that is not a column: links, operator secrets and Hide from Home (decision 131: the
   // operator's per-app choice in the `home.hidden` setting wins over the package's suggestion).
-  private extraLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
+  private extraLook(i: InstanceRow, meta: { version: string | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { version: string | null; hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
     const choice = this.ctx.repo.setting<Record<string, boolean>>('home.hidden')?.[i.id];
-    return { ...this.linkLook(i, meta), hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports };
+    return { ...this.linkLook(i, meta), version: meta.version, hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports };
   }
 
   private linkLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[] }): { links: AppLinkDto[]; linkedBy: InstanceSummary['linkedBy']; operatorSecrets: InstanceSummary['operatorSecrets'] } {
@@ -2012,6 +2061,8 @@ export class ApplicationService {
       ...Object.keys(next.release.images).map((svc) => ({ service: svc, from: current.release.images[svc]?.reference ?? '(new service)', to: next.release.images[svc]!.reference })),
       ...Object.keys(next.release.builds ?? {}).map((svc) => ({ service: svc, from: current.release.builds?.[svc] ? `built from ${current.release.builds[svc]!.commit.slice(0, 12)}` : '(new service)', to: `built from ${next.release.builds![svc]!.commit.slice(0, 12)}` })),
     ].filter((x) => x.from !== x.to);
+    const fromVersion = packageVersionOf(current);
+    const toVersion = packageVersionOf(next);
     const proposal: PlanProposal = {
       packageId: inst.packageId,
       revision: next.revision,
@@ -2026,7 +2077,7 @@ export class ApplicationService {
       secrets: plannedSecrets(next.manifest, keptSecrets),
       links,
       changes: [
-        `Update ${pkgName} "${inst.name}" from revision ${inst.revision}${current.manifest.release.version ? ` (${current.manifest.release.version})` : ''} to revision ${next.revision}${next.manifest.release.version ? ` (${next.manifest.release.version})` : ''}`,
+        `Update ${pkgName} "${inst.name}" from revision ${inst.revision}${fromVersion ? ` (${fromVersion})` : ''} to revision ${next.revision}${toVersion ? ` (${toVersion})` : ''}`,
         'Keep the name, addresses, ports, data volumes, your folders and secrets',
         'Stop and delete the current containers (the previous release is kept for an automatic rollback)',
         ...images.map((i) => `Image ${i.service}: ${i.from} -> ${i.to}`),
@@ -2046,7 +2097,7 @@ export class ApplicationService {
         ...(next.manifest.presentation?.releaseNotes ? [`Release notes: ${next.manifest.presentation.releaseNotes}`] : []),
       ],
       releaseHashes: next.hashes,
-      update: { fromRevision: inst.revision, toRevision: next.revision, fromVersion: current.manifest.release.version ?? null, toVersion: next.manifest.release.version ?? null, images, newSecrets, newStorage: newStorage.map((s) => s.id), newEndpoints: fresh.map((e) => e.id), releaseNotes: next.manifest.presentation?.releaseNotes ?? null },
+      update: { fromRevision: inst.revision, toRevision: next.revision, fromVersion, toVersion, images, newSecrets, newStorage: newStorage.map((s) => s.id), newEndpoints: fresh.map((e) => e.id), releaseNotes: next.manifest.presentation?.releaseNotes ?? null },
     };
     const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'update', instanceId: inst.id, proposal, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
     repo.insertPlan(plan);
@@ -2824,6 +2875,9 @@ export function notificationActions(kind: string, instanceId: string | null): No
       return app('Update now', 'update-app');
     case 'source-commit':
       return app('Update now', 'update-app');
+    case 'auto-update-held':
+      return [...app('Update now', 'update-app'), route('Open Backups', '#/settings/backups')];
+    case 'app-updated':
     case 'app-degraded':
     case 'tailnet-moved':
     case 'link-needs-provider':

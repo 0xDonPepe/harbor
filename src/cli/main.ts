@@ -294,7 +294,7 @@ program
     const { items } = await client().get<{ items: InstanceSummary[] }>('/v1/instances');
     out(items, () =>
       items.length
-        ? table([['NAME', 'PACKAGE', 'UPDATE', 'INSTALL', 'DESIRED', 'RUNTIME', 'READINESS', 'ENCRYPTED', 'URL', 'ID'], ...items.map((i) => { const ep = i.endpoints.find((e) => e.id === i.primaryEndpoint); const u = ep ? (ep.urls[ep.primary as keyof typeof ep.urls] ?? ep.urls.loopback) : '-'; return [i.name, `${i.packageId}@${i.revision}`, i.updateAvailable ? `-> ${i.updateAvailable.revision}${i.updateAvailable.version ? ` (${i.updateAvailable.version})` : ''}` : '-', i.installState, i.desired, i.runtime, i.readiness, encryptedCell(i.home), u, i.id]; })])
+        ? table([['NAME', 'PACKAGE', 'VERSION', 'UPDATE', 'INSTALL', 'DESIRED', 'RUNTIME', 'READINESS', 'ENCRYPTED', 'URL', 'ID'], ...items.map((i) => { const ep = i.endpoints.find((e) => e.id === i.primaryEndpoint); const u = ep ? (ep.urls[ep.primary as keyof typeof ep.urls] ?? ep.urls.loopback) : '-'; return [i.name, `${i.packageId}@${i.revision}`, i.version ?? '-', i.updateAvailable ? `-> ${i.updateAvailable.revision}${i.updateAvailable.version ? ` (${i.updateAvailable.version})` : ''}` : '-', i.installState, i.desired, i.runtime, i.readiness, encryptedCell(i.home), u, i.id]; })])
         : 'No instances.',
     );
   });

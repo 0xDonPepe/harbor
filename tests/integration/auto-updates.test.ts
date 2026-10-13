@@ -90,6 +90,10 @@ describe('automatic updates and update-all (decision 78)', () => {
     // the auto-update ran under the auto-update actor
     const op = await h.api.expect<{ actor?: string; kind: string }>(200, 'GET', `/v1/operations/${auto.operationId}`);
     expect(op.kind).toBe('update');
+    // decision 176: it says it happened; the manual app gets the usual "update available" row instead
+    const n = await h.api.expect<{ items: { kind: string; title: string; body: string }[] }>(200, 'GET', '/v1/notifications');
+    expect(n.items.find((x) => x.kind === 'app-updated')).toMatchObject({ title: 'autoapp was updated automatically', body: expect.stringContaining('from 0.1.0 to 0.2.0') });
+    expect(n.items.filter((x) => x.kind === 'update-available').map((x) => x.title)).toEqual(['Update for manualapp']);
   });
 
   it('update-all submits one update per eligible app through the queue', async () => {

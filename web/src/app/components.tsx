@@ -3,7 +3,7 @@ import { appUrlFrom, type EndpointUrls } from './app-url';
 import { copiesOf, copyName, storeAction } from './copies';
 import type { CatalogItemDto, FolderListingDto, HostStorageDto, InstanceSummary, OperationDto } from '../../../src/contracts/api';
 import { api } from '../api';
-import { fmtBytes, fmtTime, monogram, plainStatus } from './format';
+import { fmtBytes, fmtTime, fmtVersion, monogram, plainStatus } from './format';
 
 export { copiesOf, copyName };
 
@@ -120,7 +120,12 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
           <p className="row wrap badges">
             {installed > 0 && <Pill tone="ok">{installed === 1 ? 'Installed' : `${installed} installed`}</Pill>}
             {installed === 0 && removed.length > 0 && <Pill tone="muted">Removed · data kept</Pill>}
-            {item.origin === 'local' && <Pill tone="info">Your app{item.version ? ` · ${item.version}` : ''}</Pill>}
+            {item.origin === 'local' && <Pill tone="info">Your app</Pill>}
+            {item.version && (
+              <span className="muted small store-ver" title={`App version ${item.version} · Harbor package revision ${item.revision}`}>
+                {fmtVersion(item.version)}
+              </span>
+            )}
             {item.qualification !== 'passed' && item.availability === 'available' && (
               <Pill tone={item.qualification === 'blocked' ? 'warn' : 'muted'}>{item.qualification === 'blocked' ? 'Live check failed' : 'Not yet live-checked'}</Pill>
             )}

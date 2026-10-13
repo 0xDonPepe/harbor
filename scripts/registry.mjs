@@ -84,21 +84,35 @@ async function token(registry, repo, origin = false) {
   return j.token ?? j.access_token;
 }
 
-async function get(registry, repo, p, tok, accept) {
-  const at = (h, t) => fetch(`https://${h}/v2/${repo}/${p}`, { headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}), Accept: accept ?? ACCEPT } });
-  let res = await at(host(registry), tok);
-  if (res.status === 404 && host(registry) !== registry) res = await at(registry, await token(registry, repo, true));
+// A registry that says "too many requests" (GHCR during a long tag list, Docker Hub) is asked again a few
+// times, as long as it asks to wait (Retry-After) or 1, 2, 4, 8 s; then the 429 stands.
+async function fetchPatiently(url, init) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, init);
+    if ((res.status !== 429 && res.status !== 503) || attempt >= 4) return res;
+    const after = Number(res.headers.get('retry-after'));
+    await res.body?.cancel();
+    await new Promise((r) => setTimeout(r, Number.isFinite(after) && after > 0 ? Math.min(after, 30) * 1000 : 1000 * 2 ** attempt));
+  }
+}
+
+async function get(registry, repo, p, tok, accept, origin = false) {
+  const at = (h, t) => fetchPatiently(`https://${h}/v2/${repo}/${p}`, { headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}), Accept: accept ?? ACCEPT } });
+  let res = await at(origin ? registry : host(registry), tok);
+  if (res.status === 404 && !origin && host(registry) !== registry) res = await at(registry, await token(registry, repo, true));
   if (!res.ok) throw new Error(`GET ${registry}/v2/${repo}/${p} -> ${res.status} ${await res.text()}`);
   return res;
 }
 
+// Tag lists always come from the registry itself: a pull-through mirror only knows the tags it cached, and
+// Docker Hub counts manifest reads against its pull limit, not tag lists (the catalog bot, decision 175).
 export async function listTags(ref) {
   const { registry, repo } = parseRef(ref);
-  const tok = await token(registry, repo);
+  const tok = await token(registry, repo, true);
   const tags = [];
   let next = `tags/list?n=1000`;
   while (next) {
-    const res = await get(registry, repo, next, tok, 'application/json');
+    const res = await get(registry, repo, next, tok, 'application/json', true);
     const j = await res.json();
     tags.push(...(j.tags ?? []));
     const link = res.headers.get('link');

@@ -145,10 +145,16 @@ export class Observer {
   private notifyUpdatesAndDisk(): void {
     try {
       const current = this.ctx.packages.currentRevisions();
+      const tried = this.ctx.repo.setting<Record<string, string>>('updates.autoTried') ?? {};
       for (const i of this.ctx.repo.listInstances()) {
         if (i.purgedAt || i.installState !== 'installed') continue;
         const cur = current.get(i.packageId);
         const key = cur ? `update:${i.id}:${cur.revision}` : null;
+        // decision 176: an app that updates itself says so when it did (or could not); no "update available" first
+        if (key && i.autoUpdate && tried[i.id] !== cur!.revision) {
+          this.ctx.notifier.resolve(key);
+          continue;
+        }
         if (key && compareRevisions(cur!.revision, i.revision) > 0) {
           this.ctx.notifier.notify({ kind: 'update-available', severity: 'info', title: `Update for ${i.displayName ?? i.name}`, body: `Revision ${i.revision} → ${cur!.revision}${cur!.version ? ` (${cur!.version})` : ''}. Update from the app drawer or Home; your data stays.`, instanceId: i.id, dedupeKey: key });
         } else if (key) this.ctx.notifier.resolve(key);

@@ -52,8 +52,15 @@ plaintext on disk.
       passphrase or the Harbor-password wrapping, decision 94/112); refuse targets that cannot seal
       (non-ext4). Console *Move to…* in the drawer + `harbor move <app> --location <dir>`.
       Pairs with `harbor seal` (§1): plain → sealed first, then move.
+- [x] *(0.33.0, decisions 174–176)* **App versions in the Store; the catalog follows upstream releases; safer
+      automatic updates.** Versions next to revisions; harbor-apps `updates.yml` + `catalog:upstream` + `catalog:smoke`;
+      automatic updates back the app up first.
+- [ ] **Floating tags.** The update bot only moves to a newer tag of the same shape. Images pinned on a floating tag
+      (`postgres:16`, `redis:7`, `latest`) get patch releases under the same name: compare the pinned digest with
+      the tag's current one and re-pin when it moved (a patch-level update through the same smoke test).
+- [ ] **Major updates with upgrade notes.** A major PR from the bot links the release, but nobody reads the notes for
+      you: link the project's changelog in the PR body (GitHub releases API for ghcr.io/github.com sources).
 
-## 3. Smaller bugs and rough edges
 
 - [x] *(0.23.0, decision 133: own port)* **Tailnet exposure collides with the LAN app port.** In LAN mode an app's host port (e.g.
       18080) is published on every interface (`0.0.0.0:18080`, plain HTTP, via docker-proxy).

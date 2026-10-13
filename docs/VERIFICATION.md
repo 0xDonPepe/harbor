@@ -729,7 +729,21 @@ v0.19.1 (schema 8) and v0.22.1 (schema 10) with those releases' own code opens, 
 **Not verified live yet:** anything of 0.32.0 on a box (it needs the signing rollout first), cookie firewall with
 real browsers, HTTPS only through Caddy, SFTP/SMTP against real servers, an old link switching over.
 
-## 3. Live acceptance runs (`pnpm test:vm -- --fresh`)
+## 3n. App versions, the upstream update bot, safer automatic updates (2026-10-13, Harbor 0.33.0, decisions 174–176)
+
+| What | Evidence |
+|---|---|
+| Version shown (174) | unit `package-version.test.ts` (manifest wins, main image's appVersion, variant dropped, prerelease kept, null when nothing says); integration `packages.test.ts` (`InstanceSummary.version` before/after an update); e2e: BentoPDF card shows `v2.8.8`, an uploaded app's card `v1.1`, its update review "from v1.1 to v1.2" |
+| Tag choice (175) | unit `upstream-tags.test.ts`: same shape only, numeric compare, 0.x levels, databases keep their major, version→date switch refused, lockstep groups, text rewrite, strict `updates.json` |
+| Registry reads (175) | `pnpm catalog:upstream check` against the real registries for all 139 harbor-apps packages (read-only, ~100 s): 40 moves, among them **immich 3.2.1 → 3.3.1 (minor, server + machine-learning together, database held)** and **open-webui 0.11.3 → 0.12.0 (major; ollama 0.34.0 → 0.34.4, kept within 0.34)**. A first pass without the guards proposed old date tags (heimdall 2.8.3 → 2021.11.28, tautulli, overseerr) and a Postgres major (librephotos 17 → 18); the guards removed them |
+| Smoke on real Docker (175) | Docker Desktop 29.2.1 arm64 (dev loop, not an x86 box): `catalog:upstream apply` FreshRSS 1.30.0 → 1.30.1 on a copy, then `catalog:smoke --base`: install rev 1 healthy, update to rev 2 healthy, fresh install healthy (85 s, nothing left behind). With a broken health path the update rolled back and the result carried Harbor's events and the container log |
+| land job (175) | its script, extracted from `updates.yml`, run against a throwaway clone with a stub `gh`: a patch touching another app refused; a patch update committed to main with index.json's revision raised (the result verifies and hashes clean); a major went to `updates/memos`, the refused PR fell back to an issue; a failed smoke opened an issue; ci.yml dispatched on main and on the branch |
+| Auto-update gate (176) | integration `auto-update-backup.test.ts`: a failed backup holds the update (notice, not marked tried, no "update available" row); with a working place: backup first, then the update, `app-updated` notice, `updates.autoTried` stored; `auto-updates.test.ts` keeps rollback-not-retried and gains the notices |
+
+Gate: lint, typecheck, unit 491 (+2 skipped), integration 288 + 3 skipped, e2e 38, catalog verify/hash, openapi current.
+**Not verified yet:** `updates.yml` on GitHub (it needs this Harbor release first: it runs the latest release's
+scripts), a smoke run on an x86-64 runner, Immich and Open WebUI through it, an automatic update on a box.
+
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed
 

@@ -278,6 +278,12 @@ export const mockApi = {
               : null;
       if (note) p.notes = [note, ...p.notes];
     }
+    // decision 174: an update plan names both versions, as the daemon's does
+    if (req.kind === 'update' && inst.updateAvailable) {
+      const u = inst.updateAvailable;
+      p.revision = u.revision;
+      p.update = { fromRevision: inst.revision, toRevision: u.revision, fromVersion: inst.version, toVersion: u.version, images: [{ service: 'server', from: 'ghcr.io/example/server@sha256:1111', to: 'ghcr.io/example/server@sha256:2222' }], newSecrets: [], newStorage: [], newEndpoints: [], releaseNotes: u.releaseNotes };
+    }
     if (req.location) {
       p.location = { dir: req.location.dir, encrypted: true, onDrive: !req.location.dir.startsWith('/srv/harbor/'), defaultKey: true };
       p.changes = [...p.changes, `Whole app encrypted at ${req.location.dir}`];

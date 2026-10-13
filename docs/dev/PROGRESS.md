@@ -448,7 +448,14 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
-## Phase 61 — signed releases, cookie firewall, second copies (2026-10-13, 0.32.0)
+## Phase 62 — app versions, upstream update bot, safer auto-updates (2026-10-13, 0.33.0)
+- [x] Decision 174: Store cards, the app page, update prompts, the plan review and `harbor list` show the app's own version (`src/packages/version.ts`); `InstanceSummary.version`
+- [x] Decision 175: `pnpm catalog:upstream check|apply` + `pnpm catalog:smoke` (Harbor's engine on real Docker: install old → update → fresh install, `--record`); harbor-apps `updates.yml` (daily: patch/minor → main + catalog dispatch, majors → PR, failures → issue) and `updates.json`
+- [x] Decision 176: automatic updates back the app up first (when its backups are on), remember tried revisions across restarts, notify `app-updated` / `auto-update-held`
+- [x] Tests: unit 491 (+2 skipped), integration 288 + 3 skipped, e2e 38; land job run locally against a throwaway clone (stub `gh`)
+- [x] Real Docker (Docker Desktop, dev loop): FreshRSS 1.30.0 → 1.30.1 smoke passed (upgrade + fresh); a broken update was caught (rollback, events, logs)
+- [ ] First `updates.yml` run on GitHub (needs this Harbor release first); Open WebUI 0.12.0 + Immich 3.3.1 through it
+
 - [x] Decision 167: cookie firewall in the LAN HTTPS relay (HttpOnly cookies renamed + signed per app, others stripped, cross-app POST/WebSocket refused, `endpoints.<id>.cookies`), HTTPS only switch
 - [x] Decision 168: Ed25519 signatures on releases (`SHA256SUMS.sig`) and the catalog (`catalog.json.sig`), install.sh/self-update/catalog refuse unsigned, no downgrades, catalog fetched by tag; harbor-apps branch `signing`
 - [x] Decision 169: low-severity round (terminal closes on revoke, SMTP TLS, wallpaper SSRF, GCM tag/nonce, O_NOFOLLOW root writes, SFTP host-key confirmation, quieter `/v1/setup`)

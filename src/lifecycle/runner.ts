@@ -7,7 +7,8 @@ import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
 import { LABELS } from '../naming.js';
 import { defaultNetworkName, identityFor, ownedVolumeName, volumeLabels, type InstanceIdentity } from '../planner/identity.js';
 import { renderCompose, type ConsumerLink } from '../planner/render.js';
-import { linkAlias, linkAliasesDrift, linkNetworkLabels, linkValue } from '../planner/links.js';
+import { linkAlias, linkAliasesDrift, linkExtraNames, linkNetworkLabels, linkValue } from '../planner/links.js';
+import { aliasesOn, linkMembers, ownsLinkNetwork } from './link-members.js';
 import type { NetworkInfo } from '../docker/adapter.js';
 import type { LinkRow, PlannedLink } from '../state/repo.js';
 import { checkHostDirectory } from '../storage/host-path.js';
@@ -141,6 +142,7 @@ export class OperationRunner {
         case 'move': await this.move(op, plan, inst, secretValues); break;
         case 'backup': await this.backupCold(op, plan, inst); break;
         case 'restore': await this.restoreInPlace(op, plan, inst, secretValues); break;
+        case 'relink': await this.relink(op, inst, secretValues); break;
       }
       const { stored: result, memory } = splitOneTime({ instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) });
       this.opResult = null;
@@ -742,7 +744,7 @@ export class OperationRunner {
 
   // Ownership of a link network: this installation, the consumer instance, kind link, this link id.
   private ownsLinkNetwork(net: NetworkInfo, l: LinkRow): boolean {
-    return net.labels[LABELS.installation] === this.ctx.installationId && net.labels[LABELS.instance] === l.consumerInstanceId && net.labels[LABELS.kind] === 'link' && net.labels[LABELS.link] === l.linkId;
+    return ownsLinkNetwork(this.ctx, net, l);
   }
 
   // Render inputs: active links where `inst` is the consumer (its bound services' variables get the address).
@@ -783,27 +785,6 @@ export class OperationRunner {
     for (const l of [...repo.linksOfConsumer(inst.id), ...repo.linksOfProvider(inst.id)]) if (l.state === 'active' && l.providerInstanceId) await this.ensureLinkNetwork(op, l);
   }
 
-  // Containers that sit on a link network: the consumer's bound services, or the provider's endpoint service.
-  private linkMembers(l: LinkRow, side: 'consumer' | 'provider'): { id: string; aliases: string[] }[] {
-    const { repo } = this.ctx;
-    if (side === 'provider') {
-      const prov = l.providerInstanceId ? repo.instance(l.providerInstanceId) : null;
-      const svc = prov?.endpoints.find((e) => e.id === l.providerEndpoint)?.service;
-      if (!prov || !svc) return [];
-      return repo.resources(prov.id).filter((r) => r.kind === 'container' && r.role === svc && r.dockerId).map((r) => ({ id: r.dockerId!, aliases: [linkAlias(l.linkId)] }));
-    }
-    const consumer = repo.instance(l.consumerInstanceId);
-    if (!consumer) return [];
-    let services: string[] = [];
-    try {
-      const pkg = loadReleaseSnapshot(this.dirs(consumer).release, consumer.packageId);
-      services = (pkg.manifest.links ?? []).find((c) => c.id === l.linkId)?.bindings.map((b) => b.service) ?? [];
-    } catch {
-      return [];
-    }
-    return repo.resources(consumer.id).filter((r) => r.kind === 'container' && services.includes(r.role) && r.dockerId).map((r) => ({ id: r.dockerId!, aliases: [] }));
-  }
-
   // Decision 171: put the link members on their networks with exactly the names Harbor gives (consumer
   // services none, the provider's endpoint service `<id>-link`). `own`: this instance's side only, before
   // its containers start; `all`: both sides, the other app attached live (no restart for it). A member that
@@ -819,22 +800,46 @@ export class OperationRunner {
       if (l.state !== 'active' || !l.providerInstanceId) continue;
       const net = await docker.inspectNetwork(l.networkId ?? l.networkName);
       if (!net || !this.ownsLinkNetwork(net, l)) continue;
-      for (const m of this.linkMembers(l, side)) {
+      for (const m of linkMembers(this.ctx, l, side)) {
         const c = await docker.inspectContainer(m.id);
         if (!c) continue;
         const as = m.aliases.length ? ` as ${m.aliases.join(', ')} only` : ' under no name of its own';
-        if (c.networkIds.includes(net.id)) {
-          const actual = c.networkAliases?.[net.id];
+        const actual = aliasesOn(c, net);
+        if (actual !== undefined) {
+          // attached: keep it unless it answers to names Harbor did not give (unknown aliases: leave it)
           if (!actual || !linkAliasesDrift(actual, m.aliases, c)) continue;
+          // Docker accepts a second connect of an attached, stopped container and keeps the old aliases,
+          // so it is always detached first.
           await docker.disconnectNetwork(net.id, m.id);
           await docker.connectNetwork(net.id, m.id, m.aliases);
-          const dropped = actual.filter((a) => !m.aliases.includes(a) && a !== c.name);
+          const dropped = linkExtraNames(actual, m.aliases, c);
           this.event(op, 'starting', `re-attached ${c.name} to link network ${l.networkName}${as}${dropped.length ? ` (it also answered there to ${dropped.join(', ')})` : ''}`);
           continue;
         }
         await docker.connectNetwork(net.id, m.id, m.aliases);
         this.event(op, 'starting', `attached ${c.name} to link network ${l.networkName}${as}`);
       }
+    }
+  }
+
+  // Decision 171: the one-time switch of links Compose attached before 0.32.0 (actor `link-guard`): both
+  // sides of every active link of `inst` are attached again with only the names Harbor gives, live (no
+  // container is recreated), and the Compose files of both apps are written without the link networks.
+  private async relink(op: OperationRow, inst: InstanceRow, sink: string[]): Promise<void> {
+    const { repo } = this.ctx;
+    this.phase(op, 'applying', 'starting', 'attaching its links again with only the names Harbor gives');
+    await this.engineOrThrow();
+    await this.ensureLinkNetworks(op, inst);
+    await this.syncLinkMembers(op, inst, 'all');
+    const others = new Set<string>([inst.id]);
+    for (const l of [...repo.linksOfConsumer(inst.id), ...repo.linksOfProvider(inst.id)]) {
+      if (l.state !== 'active' || !l.providerInstanceId) continue;
+      others.add(l.consumerInstanceId);
+      others.add(l.providerInstanceId);
+    }
+    for (const id of others) {
+      const other = repo.instance(id);
+      if (other) await this.rewriteCompose(op, other, sink, true);
     }
   }
 
@@ -905,7 +910,7 @@ export class OperationRunner {
       repo.upsertLink({ consumerInstanceId: consumer.id, linkId: p.id, providerInstanceId: prov.id, providerEndpoint: alloc.id, networkName: p.network, networkId: null, state: 'active', note: null });
       const row = repo.link(consumer.id, p.id)!;
       const net = await this.ensureLinkNetwork(op, row);
-      for (const m of this.linkMembers(row, 'provider')) {
+      for (const m of linkMembers(this.ctx, row, 'provider')) {
         if (net.containerIds.includes(m.id) || !(await docker.inspectContainer(m.id))) continue;
         await docker.connectNetwork(net.id, m.id, m.aliases);
       }

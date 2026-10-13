@@ -8,7 +8,8 @@ function isNotFound(e: unknown): boolean {
   return (e as { statusCode?: number })?.statusCode === 404;
 }
 
-function fromInspect(c: InspectInfo): ContainerInfo {
+// Exported for the unit tests (decision 171: how link-network aliases are read).
+export function containerInfoFromInspect(c: InspectInfo): ContainerInfo {
   const ports = [];
   for (const [key, bindings] of Object.entries(c.NetworkSettings?.Ports ?? {})) {
     const [num, proto] = key.split('/');
@@ -29,7 +30,8 @@ function fromInspect(c: InspectInfo): ContainerInfo {
     health: health ?? 'none',
     ports,
     networkIds: Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.NetworkID),
-    networkAliases: Object.fromEntries(Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => [n.NetworkID, n.Aliases ?? []])),
+    // keyed by network NAME: a container that never started has NetworkID "" on every network (Docker 29)
+    networkAliases: Object.fromEntries(Object.entries(c.NetworkSettings?.Networks ?? {}).map(([name, n]) => [name, n.Aliases ?? []])),
   };
 }
 
@@ -66,7 +68,7 @@ export class DockerodeAdapter implements DockerAdapter {
 
   async inspectContainer(id: string): Promise<ContainerInfo | null> {
     try {
-      return fromInspect(await this.docker.getContainer(id).inspect());
+      return containerInfoFromInspect(await this.docker.getContainer(id).inspect());
     } catch (e) {
       if (isNotFound(e)) return null;
       throw e;

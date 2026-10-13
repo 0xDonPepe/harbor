@@ -41,6 +41,15 @@ export function linkValue(alias: string, containerPort: number, format: LinkForm
 // Compose lists the name): both are unique and Harbor-made, never a name an app looks up. Anything else
 // (a service name Compose added before 0.32.0) is drift, and so is a wanted alias that is missing.
 export function linkAliasesDrift(actual: readonly string[], wanted: readonly string[], container: { id: string; name: string }): boolean {
-  const own = (a: string) => a === container.name || (a.length === 12 && container.id.startsWith(a));
-  return actual.some((a) => !wanted.includes(a) && !own(a)) || wanted.some((w) => !actual.includes(w));
+  return linkExtraNames(actual, wanted, container).length > 0 || wanted.some((w) => !actual.includes(w));
+}
+
+// Docker's own names for a container: its name and its 12-character short id.
+export function linkOwnName(alias: string, container: { id: string; name: string }): boolean {
+  return alias === container.name || (alias.length === 12 && container.id.startsWith(alias));
+}
+
+// The names a link member answers to besides the wanted ones and Docker's own (what drift drops).
+export function linkExtraNames(actual: readonly string[], wanted: readonly string[], container: { id: string; name: string }): string[] {
+  return actual.filter((a) => !wanted.includes(a) && !linkOwnName(a, container));
 }

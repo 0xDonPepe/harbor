@@ -607,8 +607,8 @@ function NotificationBell({ c, onOpenApp, onViewAll }: { c: ReturnType<typeof us
   );
 }
 
-const DOING: Record<string, string> = { install: 'Installing', start: 'Starting', stop: 'Stopping', remove: 'Removing', reinstall: 'Reinstalling', purge: 'Uninstalling', update: 'Updating', expose: 'Publishing', unexpose: 'Withdrawing the address of', reconfigure: 'Switching the address of', restart: 'Restarting', configure: 'Applying new settings to', seal: 'Encrypting', move: 'Moving', backup: 'Backing up', restore: 'Restoring' };
-const DONE: Record<string, string> = { install: 'is ready', start: 'is running again', stop: 'is stopped', remove: 'was removed (data kept)', reinstall: 'is back', purge: 'was uninstalled completely', update: 'is up to date', expose: 'is published', unexpose: 'address withdrawn', reconfigure: 'address switched', restart: 'restarted', configure: 'settings applied', seal: 'is encrypted', move: 'moved', backup: 'is backed up', restore: 'is restored' };
+const DOING: Record<string, string> = { install: 'Installing', start: 'Starting', stop: 'Stopping', remove: 'Removing', reinstall: 'Reinstalling', purge: 'Uninstalling', update: 'Updating', expose: 'Publishing', unexpose: 'Withdrawing the address of', reconfigure: 'Switching the address of', restart: 'Restarting', configure: 'Applying new settings to', seal: 'Encrypting', move: 'Moving', backup: 'Backing up', restore: 'Restoring', relink: 'Securing the links of' };
+const DONE: Record<string, string> = { install: 'is ready', start: 'is running again', stop: 'is stopped', remove: 'was removed (data kept)', reinstall: 'is back', purge: 'was uninstalled completely', update: 'is up to date', expose: 'is published', unexpose: 'address withdrawn', reconfigure: 'address switched', restart: 'restarted', configure: 'settings applied', seal: 'is encrypted', move: 'moved', backup: 'is backed up', restore: 'is restored', relink: 'links secured' };
 const PHASE: Record<string, string> = { rollback: 'putting the previous version back', purging: 'deleting its data', queued: 'waiting for its turn', preparing: 'preparing', pulling: 'downloading the app', starting: 'starting containers', checking: 'waiting until it answers', stopping: 'stopping', removing: 'cleaning up', reconfiguring: 'applying the new address', verifying: 'checking the result', exposing: 'setting up the address', unexposing: 'removing the address', 'backing-up': 'sending the last changes', restoring: 'restoring its data', copying: 'copying its data' };
 
 // Bottom-right operation tray: progress while running, one-shot result (with credentials) when done.
@@ -640,7 +640,7 @@ function Tray({ c }: { c: ReturnType<typeof useConsole> }) {
   const who = inst ? (inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} (${inst.name})`)) : 'the app';
   const title =
     op.state === 'succeeded'
-      ? op.kind === 'unexpose' || op.kind === 'reconfigure' || op.kind === 'configure'
+      ? op.kind === 'unexpose' || op.kind === 'reconfigure' || op.kind === 'configure' || op.kind === 'relink'
         ? `${who}: ${DONE[op.kind]}`
         : `${who} ${DONE[op.kind] ?? 'done'}`
       : op.state === 'failed'

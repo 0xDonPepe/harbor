@@ -5,7 +5,8 @@ import { validateComposeSource } from '../../src/packages/compose-source.js';
 import { parseRestrictedYaml } from '../../src/packages/yaml.js';
 import { identityFor } from '../../src/planner/identity.js';
 import { renderCompose } from '../../src/planner/render.js';
-import { linkAlias, linkAliasesDrift, linkNetworkLabels, linkNetworkName, linkValue } from '../../src/planner/links.js';
+import { linkAlias, linkAliasesDrift, linkExtraNames, linkNetworkLabels, linkNetworkName, linkValue } from '../../src/planner/links.js';
+import { containerInfoFromInspect } from '../../src/docker/dockerode-adapter.js';
 import { checkSubmittedSecrets, operatorValueProblem, plannedSecrets } from '../../src/planner/secrets.js';
 import { HarborError } from '../../src/errors.js';
 import { LABELS } from '../../src/naming.js';
@@ -161,6 +162,26 @@ describe('planner: links', () => {
     expect(linkAliasesDrift(['db'], [], c)).toBe(true);
     // the wanted alias missing is drift as well
     expect(linkAliasesDrift([], ['docs-link'], c)).toBe(true);
+  });
+  it('the names a re-attach drops leave out Docker\'s own (container name, short id)', () => {
+    const c = { id: 'db1f00c0ffee' + '0'.repeat(52), name: 'hb_abc-db-1' };
+    expect(linkExtraNames([c.id.slice(0, 12), c.name, 'db', 'docs-link'], ['docs-link'], c)).toEqual(['db']);
+    expect(linkExtraNames([c.id.slice(0, 12), c.name], [], c)).toEqual([]);
+  });
+  it('inspect: aliases are keyed by network name, also for a container never started (Docker leaves its NetworkID empty)', () => {
+    const inspect = (status: string, nid: string) =>
+      ({
+        Id: 'c'.repeat(64),
+        Name: '/hb_abc-db-1',
+        Config: { Image: 'x', Labels: {} },
+        Created: '2026-10-12T00:00:00Z',
+        State: { Status: status, StartedAt: '0001-01-01T00:00:00Z' },
+        NetworkSettings: { Ports: {}, Networks: { hb_abc_link_docs: { NetworkID: nid, Aliases: ['hb_abc-db-1', 'db'] }, hb_abc_default: { NetworkID: nid, Aliases: null } } },
+      }) as never;
+    // checked on Docker 29.2.1: `docker create` + `network connect` lists the network with NetworkID ""
+    const created = containerInfoFromInspect(inspect('created', ''));
+    expect(created.networkAliases).toEqual({ hb_abc_link_docs: ['hb_abc-db-1', 'db'], hb_abc_default: [] });
+    expect(containerInfoFromInspect(inspect('running', 'n'.repeat(64))).networkAliases?.['hb_abc_link_docs']).toEqual(['hb_abc-db-1', 'db']);
   });
 });
 

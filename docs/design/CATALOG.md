@@ -180,7 +180,13 @@ when the new release does not start or answer. Developer guide: docs/DEVELOPER_P
   its side attached, then started (`up --wait`), so the link is there from the first second; after
   every `up`/`start` both sides are checked and the other app attached live. A member that answers to
   any other name (what Compose left before 0.32.0) is detached and attached again: same container, same
-  address.
+  address (always detach first: Docker accepts a second connect of an attached, stopped container and
+  keeps its old aliases; aliases are read by network name, because Docker leaves `NetworkID` empty on
+  every network of a container that never started). Once per daemon start the observer reads every link
+  that exists then; one whose containers still answer to other names gets a `relink` operation (internal
+  kind, actor `link-guard`, not accepted by the API): both sides attached again live, nothing recreated,
+  both Compose files rewritten without the link network. So an upgrade switches untouched links by
+  itself; `compose start` on a 0.31 file never re-adds the names (Compose attaches networks only on `up`).
 - Not in this round: links to platform tools, several providers per link, cross-machine links, and
   automatic restarts of a consumer when a provider's container port changes (an event says to Restart).
 

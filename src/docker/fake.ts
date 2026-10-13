@@ -66,12 +66,12 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   }
   async listContainers(opts: { all: boolean; labels?: Record<string, string> }): Promise<ContainerInfo[]> {
     this.assertUp();
-    return [...this.containers.values()].filter((c) => (opts.all || c.state === 'running') && matches(c.labels, opts.labels)).map(clone);
+    return [...this.containers.values()].filter((c) => (opts.all || c.state === 'running') && matches(c.labels, opts.labels)).map((c) => clone(c, this.networks));
   }
   async inspectContainer(id: string): Promise<ContainerInfo | null> {
     this.assertUp();
     const c = this.containers.get(id) ?? [...this.containers.values()].find((x) => x.name === id);
-    return c ? clone(c) : null;
+    return c ? clone(c, this.networks) : null;
   }
   async startContainer(id: string): Promise<void> {
     this.assertUp();
@@ -422,7 +422,7 @@ function matches(labels: Record<string, string>, want?: Record<string, string>):
   if (!want) return true;
   return Object.entries(want).every(([k, v]) => labels[k] === v);
 }
-function clone(c: FakeContainer): ContainerInfo {
+function clone(c: FakeContainer, networks: Map<string, NetworkInfo>): ContainerInfo {
 
-  return { id: c.id, name: c.name, image: c.image, state: c.state, labels: { ...c.labels }, createdAt: c.createdAt, startedAt: c.startedAt, health: c.health, ports: c.ports.map((p) => ({ ...p })), networkIds: [...c.networkIds], networkAliases: Object.fromEntries(c.networkIds.map((n) => [n, [...(c.aliases?.[n] ?? [])]])) };
+  return { id: c.id, name: c.name, image: c.image, state: c.state, labels: { ...c.labels }, createdAt: c.createdAt, startedAt: c.startedAt, health: c.health, ports: c.ports.map((p) => ({ ...p })), networkIds: [...c.networkIds], networkAliases: Object.fromEntries(c.networkIds.map((n) => [networks.get(n)?.name ?? n, [...(c.aliases?.[n] ?? [])]])) };
 }

@@ -16,6 +16,8 @@ import { listDevices, type DeviceInfo } from '../system/host-storage.js';
 import { driveAttentionText } from '../system/drive-attention.js';
 import { checkHostDirectory } from '../storage/host-path.js';
 import { verifyBindMarker, writeBindMarker } from '../storage/bind-marker.js';
+import { linkNameDrift } from './link-members.js';
+import type { LinkRow } from '../state/repo.js';
 
 // Periodic observation of what actually exists. Never mutates Docker.
 export class Observer {
@@ -118,6 +120,7 @@ export class Observer {
       this.notifyMissingFolders(runningByInstance);
       this.autoStartRecovered(runningByInstance);
       this.autoStartUnlocked(runningByInstance);
+      if (ping.available) await this.checkLinkNames();
       await this.reconcileLanHttps();
       if (Date.now() - this.lastSourceCheck >= this.sourceCheckMs) {
         this.lastSourceCheck = Date.now();
@@ -408,6 +411,52 @@ export class Observer {
       }
     } catch (e) {
       this.ctx.log.warn(`lock-guard auto-start check failed: ${(e as Error).message}`);
+    }
+  }
+
+  // Decision 171: before 0.32.0 Compose attached link networks and gave every container there its service
+  // name, so a consumer service called `db` could answer the provider's own `db` lookups. Once per daemon
+  // start (so right after an upgrade) every link that exists then is read; one whose containers still answer
+  // to such names gets a relink operation (plan -> operation, actor link-guard: both sides attached again
+  // live, nothing recreated). Reading only here; links made later are attached by the runner itself. A link
+  // whose app is busy is read on a later tick; a failed relink is not retried (any Start, Restart, update
+  // or link change of either app does the same switch).
+  private linksToCheck: Set<string> | null = null;
+  private async checkLinkNames(): Promise<void> {
+    const key = (l: LinkRow) => `${l.consumerInstanceId}:${l.linkId}`;
+    try {
+      const { repo } = this.ctx;
+      this.linksToCheck ??= new Set(repo.links().filter((l) => l.state === 'active' && l.providerInstanceId).map(key));
+      if (!this.linksToCheck.size) return;
+      const queued = new Set<string>();
+      for (const l of repo.links()) {
+        const k = key(l);
+        if (!this.linksToCheck.has(k)) continue;
+        const consumer = repo.instance(l.consumerInstanceId);
+        const provider = l.providerInstanceId ? repo.instance(l.providerInstanceId) : null;
+        if (l.state !== 'active' || !consumer || !provider || consumer.installState !== 'installed') {
+          this.linksToCheck.delete(k); // nothing attached to fix, or its next start attaches it
+          continue;
+        }
+        if (consumer.activeOperationId || provider.activeOperationId) continue; // a later tick
+        if (queued.has(consumer.id)) {
+          this.linksToCheck.delete(k); // the relink already queued covers every link of this app
+          continue;
+        }
+        const drifting = await linkNameDrift(this.ctx, l);
+        this.linksToCheck.delete(k);
+        if (!drifting.length) continue;
+        queued.add(consumer.id);
+        void this.service
+          .createPlan({ kind: 'relink', instanceId: consumer.id }, 'link-guard')
+          .then((plan) => {
+            this.service.submit(plan.id, this.ctx.ids.uuid(), 'link-guard');
+            this.ctx.log.warn(`link-guard attaches the links of ${consumer.name} again: ${drifting.join(', ')} answered to service names on ${l.networkName}`, { instanceId: consumer.id });
+          })
+          .catch((e) => this.ctx.log.warn(`link-guard could not queue the link check of ${consumer.name}: ${(e as Error).message}`, { instanceId: consumer.id }));
+      }
+    } catch (e) {
+      this.ctx.log.warn(`link-guard check failed: ${(e as Error).message}`);
     }
   }
 

@@ -1773,11 +1773,13 @@ function humanSummary(plan: PlanDto, n: string): string {  switch (plan.kind) {
       return `Harbor will encrypt ${n} in place: it stops, its data is copied into a sealed home at ${plan.location?.dir ?? 'the Harbor data folder'}, and it starts again on the sealed copy. The plain copy is deleted only after that works.`;
     case 'update':
       return `Harbor will update ${n} to revision ${plan.update?.toRevision ?? plan.revision}${plan.update?.toVersion ? ` (${plan.update.toVersion})` : ''}. Data, ports and addresses stay; if the new release does not start, the previous one is put back automatically.`;
+    case 'relink':
+      return `Harbor will attach the private links of ${n} again with only the names it gives them. Nothing is recreated; each link drops for a moment.`;
   }
 }
 
 function verb(kind: PlanDto['kind']): string {
-  return { install: 'install', start: 'start', stop: 'stop', remove: 'removal', reinstall: 'reinstall', purge: 'full uninstall', update: 'update', expose: 'publishing', unexpose: 'withdrawal', reconfigure: 'address switch', restart: 'restart', configure: 'new settings', seal: 'encryption', move: 'move', backup: 'backup', restore: 'restore' }[kind];
+  return { install: 'install', start: 'start', stop: 'stop', remove: 'removal', reinstall: 'reinstall', purge: 'full uninstall', update: 'update', expose: 'publishing', unexpose: 'withdrawal', reconfigure: 'address switch', restart: 'restart', configure: 'new settings', seal: 'encryption', move: 'move', backup: 'backup', restore: 'restore', relink: 'link check' }[kind];
 }
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

@@ -18,8 +18,10 @@ export interface ContainerInfo {
   health: 'healthy' | 'unhealthy' | 'starting' | 'none';
   ports: PortBinding[];
   networkIds: string[];
-  // network id -> the aliases the container was given on it (decision 171 checks link networks: only the
-  // names Harbor gives may be there). Absent when the adapter cannot tell.
+  // network NAME -> the aliases the container was given on it (decision 171 checks link networks: only the
+  // names Harbor gives may be there). By name, because Docker leaves NetworkID empty on every network of a
+  // container that never started, so `networkIds` cannot tell whether such a container is attached.
+  // Absent when the adapter cannot tell.
   networkAliases?: Record<string, string[]>;
 }
 

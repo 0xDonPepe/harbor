@@ -259,8 +259,25 @@ export const mockApi = {
     await beat();
     const inst = req.instanceId ? (instances.find((i) => i.id === req.instanceId) ?? instances[0]!) : instances[0]!;
     const p = planFor(req.kind, req.instanceId ?? inst.id, req.packageId ?? inst.packageId, req.name ?? inst.name);
-    const have = req.kind === 'install' ? instances.filter((i) => i.packageId === req.packageId && i.installState !== 'retained') : [];
-    if (have.length) p.notes = [`You already have ${have[0]!.packageName}. This installs a separate copy (${req.name || req.packageId}) with its own data, address and login; the first one is not touched.`];
+    // decision 170: the daemon's copyNote (src/planner/identity.ts), branch for branch, with its proposed name
+    if (req.kind === 'install' && req.packageId) {
+      const mine = instances.filter((i) => i.packageId === req.packageId);
+      const active = mine.filter((i) => i.installState !== 'retained').length;
+      const removed = mine.length - active;
+      const appName = mockCatalog().find((c) => c.id === req.packageId)?.name ?? req.packageId;
+      const taken = new Set(instances.map((i) => i.name));
+      const copy = req.name || (taken.has(req.packageId) ? `${req.packageId}-${[...Array(998).keys()].map((n) => n + 2).find((n) => !taken.has(`${req.packageId}-${n}`))}` : req.packageId);
+      p.name = copy;
+      const note =
+        active === 1
+          ? `You already have ${appName}. This installs a separate copy (${copy}) with its own data, address and login; the first one is not touched.`
+          : active > 1
+            ? `You already have ${active} copies of ${appName}. This installs another separate copy (${copy}) with its own data, address and login; the others are not touched.`
+            : removed > 0
+              ? `A removed copy of ${appName} still keeps its data. This installs a new, separate copy (${copy}); to get that data back, reinstall the removed copy from Home instead.`
+              : null;
+      if (note) p.notes = [note, ...p.notes];
+    }
     if (req.location) {
       p.location = { dir: req.location.dir, encrypted: true, onDrive: !req.location.dir.startsWith('/srv/harbor/'), defaultKey: true };
       p.changes = [...p.changes, `Whole app encrypted at ${req.location.dir}`];

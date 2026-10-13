@@ -20,7 +20,7 @@ import type { LoadedPackage } from '../contracts/types.js';
 import { compareRevisions, type PackageStore } from '../packages/store.js';
 import { browserUrlFor, managementOrigin } from '../config.js';
 import { HarborError } from '../errors.js';
-import { copyNote, identityFor, ownedVolumeName, proposeName, type InstanceIdentity } from '../planner/identity.js';
+import { copyNote, identityFor, oneCopyNextAction, ownedVolumeName, proposeName, type InstanceIdentity } from '../planner/identity.js';
 import { allocateEndpoints } from '../planner/ports.js';
 import { renderCompose } from '../planner/render.js';
 import { checkHostDirectory, hostPathsOverlap, normalizeHostPath } from '../storage/host-path.js';
@@ -1707,8 +1707,7 @@ export class ApplicationService {
       const taken = new Set(instances.map((i) => i.name));
       const copies = instances.filter((i) => i.packageId === pkg.id);
       if (!pkg.manifest.deployment.multiInstance && copies.length) {
-        const nextAction = copies.every((i) => i.installState === 'retained') ? 'Reinstall the removed copy from Home (its data is kept), or uninstall it completely first.' : 'Open the copy you have; this app runs one copy per machine.';
-        throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction });
+        throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: oneCopyNextAction(copies, 'install') });
       }
       const proposed = proposeName(pkg.id, taken, req.name);
       if (proposed.error) throw new HarborError(req.name && taken.has(req.name) ? 'NAME_CONFLICT' : 'INVALID_REQUEST', proposed.error);
@@ -2283,7 +2282,8 @@ export class ApplicationService {
       throw new HarborError('NOT_FOUND', `this Harbor has no package ${pkgId}`, { nextAction: 'Add that app\'s package first (App Store → Your apps → Upload, or its git source), then restore again.' });
     }
     const instances = repo.listInstances();
-    if (!pkg.manifest.deployment.multiInstance && instances.some((i) => i.packageId === pkg.id)) throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: 'Remove the existing one first.' });
+    const copies = instances.filter((i) => i.packageId === pkg.id);
+    if (!pkg.manifest.deployment.multiInstance && copies.length) throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: oneCopyNextAction(copies, 'restore') });
     const taken = new Set(instances.map((i) => i.name));
     const slug = point.home.split('/').pop() ?? pkg.id;
     const proposed = proposeName(req.name ?? slug, taken, req.name);

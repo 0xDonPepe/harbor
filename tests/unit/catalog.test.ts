@@ -68,6 +68,9 @@ describe('bundled catalog', () => {
     const items = listCatalog(dir);
     expect(items.find((i) => i.id === 'solo')?.multiInstance).toBe(false);
     expect(items.find((i) => i.id === 'excalidraw')?.multiInstance).toBe(true);
+    // a package that needs a newer Harbor still says so when this Harbor can read its manifest
+    writePackage(dir, 'solo', { manifest: MINIMAL_MANIFEST.replace('id: demo', 'id: solo').replace('multiInstance: true', 'multiInstance: false').replace('  revision: "1"\n', '  revision: "1"\n  minHarbor: "9.0.0"\n'), compose: MINIMAL_COMPOSE, images: { web: `example/demo@${DIGEST_A}` } });
+    expect(listCatalog(dir, 'bundled', { harborVersion: '0.31.0' }).find((i) => i.id === 'solo')).toMatchObject({ availability: 'unavailable', reason: 'needs Harbor 9.0.0 or newer', multiInstance: false });
   });
   it('reports an invalid package in the listing without throwing for the others', () => {
     const dir = cloneCatalog();

@@ -133,7 +133,9 @@ export function mockCatalog(): CatalogItemDto[] {
       },
     }),
     app('excalidraw', 'Excalidraw', 'Whiteboard for quick sketches and diagrams'),
+    // decision 170: a one-copy app whose only copy was removed (data kept) — its card shows Reinstall…
     app('open-webui', 'Open WebUI', 'Chat with models running on your machine', {
+      multiInstance: false,
       presentation: {
         tagline: 'Chat with models running on your machine',
         category: 'ai',
@@ -284,6 +286,19 @@ export function mockInstances(): InstanceSummary[] {
       name: 'draw',
       packageId: 'excalidraw',
       packageName: 'Excalidraw',
+      installState: 'retained',
+      runtime: 'stopped',
+      readiness: 'unknown',
+      endpoints: [],
+      hasRetainedData: true,
+    },
+    {
+      ...base,
+      id: 'inst-open-webui',
+      name: 'open-webui',
+      packageId: 'open-webui',
+      packageName: 'Open WebUI',
+      category: 'ai',
       installState: 'retained',
       runtime: 'stopped',
       readiness: 'unknown',

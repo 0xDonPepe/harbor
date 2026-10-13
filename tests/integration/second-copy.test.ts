@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startHarness, type Harness } from './harness.js';
 import type { CatalogItemDto } from '../../src/contracts/api.js';
+import { planSummary } from '../../src/cli/plan-summary.js';
 import { DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, writePackage } from '../unit/helpers.js';
 
 // Decision 170: the catalog says whether an app allows copies and which name the next one gets; an install
@@ -31,6 +32,9 @@ describe('a second copy of an app (decision 170)', () => {
     const second = await h.api.plan({ kind: 'install', packageId: 'excalidraw' });
     expect(second.name).toBe('excalidraw-2');
     expect(second.notes[0]).toBe('You already have Excalidraw. This installs a separate copy (excalidraw-2) with its own data, address and login; the first one is not touched.');
+    // `harbor install` / `harbor plan install` print the same line
+    expect(planSummary(second).split('\n')).toContain('  · You already have Excalidraw. This installs a separate copy (excalidraw-2) with its own data, address and login; the first one is not touched.');
+    expect(planSummary(first)).not.toMatch(/already have/);
     // a name the operator types is the one the note uses
     const named = await h.api.plan({ kind: 'install', packageId: 'excalidraw', name: 'sketches' });
     expect(named.notes[0]).toContain('(sketches)');
@@ -41,6 +45,8 @@ describe('a second copy of an app (decision 170)', () => {
     expect(op.state).toBe('succeeded');
     const inst = (await h.api.instances()).find((i) => i.packageId === 'bentopdf')!;
     expect((await h.api.run({ kind: 'remove', instanceId: inst.id })).op.state).toBe('succeeded');
+    // the catalog skips the removed copy's name too (it keeps its name for a Reinstall)
+    expect((await item('bentopdf')).proposedName).toBe('bentopdf-2');
     const again = await h.api.plan({ kind: 'install', packageId: 'bentopdf' });
     expect(again.name).toBe('bentopdf-2');
     expect(again.notes[0]).toMatch(/^A removed copy of BentoPDF still keeps its data\./);

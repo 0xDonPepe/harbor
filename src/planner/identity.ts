@@ -55,3 +55,14 @@ export function copyNote(appName: string, name: string, copies: { active: number
   if (copies.removed > 0) return `A removed copy of ${appName} still keeps its data. This installs a new, separate copy (${name}); to get that data back, reinstall the removed copy from Home instead.`;
   return null;
 }
+
+// Decision 170: what to do instead when a one-copy app (deployment.multiInstance false) already has a copy
+// here. Removed copies (data kept) still hold the one place, so the advice depends on what is there and on
+// whether the operator was installing or restoring a backup.
+export function oneCopyNextAction(copies: { installState: string }[], purpose: 'install' | 'restore'): string {
+  const removedOnly = copies.every((i) => i.installState === 'retained');
+  if (purpose === 'install') return removedOnly ? 'Reinstall the removed copy from Home (its data is kept), or uninstall it completely first.' : 'Open the copy you have; this app runs one copy per machine.';
+  return removedOnly
+    ? 'This app runs one copy per machine: reinstall the removed copy instead, or uninstall it completely (its kept data goes) and restore again.'
+    : 'This app runs one copy per machine: uninstall the copy you have completely first, then restore again.';
+}

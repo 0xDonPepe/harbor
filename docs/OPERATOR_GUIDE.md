@@ -185,9 +185,10 @@ allows copies also offers **Add another copy…**: the install page then says *Y
 installs a separate copy with its own data, address and login; the first one is not touched.* and asks for
 the copy's name, prefilled with the next free one (`immich-2`). Home names each copy under its icon, so the
 copies stay apart. An app that runs one copy per machine (a VPN server with a fixed port, for example) has no
-second Install at all; when its only copy was removed with its data kept, the card offers **Reinstall…**.
+second Install at all; when its only copy was removed with its data kept, its card and its page offer
+**Reinstall…** (restoring a backup of it says the same: reinstall or fully uninstall that copy first).
 The install review repeats the line, and `harbor install` prints it too; `harbor install immich --name photos-2`
-names the copy from the terminal.
+names the copy from the terminal, and `harbor catalog` shows `one` or `many` under COPIES.
 
 Exit codes: 0 success, 1 operation failed, 2 invalid request, 3 conflict/action required,
 4 dependency unavailable, 5 authentication. `--json` for machine-readable output.

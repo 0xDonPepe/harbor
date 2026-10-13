@@ -413,8 +413,7 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   await page.getByRole('button', { name: 'About BentoPDF' }).click();
   const where = page.getByRole('dialog');
   // decision 170: BentoPDF is installed by now, so its page opens it; the install page is one step further
-  const another = where.getByRole('button', { name: 'Add another copy of BentoPDF', exact: true });
-  if (await another.count()) await another.click();
+  await where.getByRole('button', { name: 'Add another copy of BentoPDF', exact: true }).click();
   // This machine is the default (no media folder); Change lists it and every drive as ONE radio group
   await expect(where.locator('.choice-main strong').first()).toHaveText('This machine');
   await where.getByRole('button', { name: 'Change where BentoPDF is stored' }).click();
@@ -1317,6 +1316,25 @@ test('decision 170: a one-copy app shows only Open once installed, on its card a
   await expect(about.getByRole('button', { name: 'Install Tunnel E2E now', exact: true })).toHaveCount(0);
   await expect(about.getByRole('button', { name: 'Add another copy of Tunnel E2E', exact: true })).toHaveCount(0);
   await about.getByRole('button', { name: 'Close', exact: true }).click();
+  // removed with its data kept: the card and the page bring that copy back (Reinstall…), never an Install
+  // the daemon would refuse
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of tunnel-e2e', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove tunnel-e2e', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove (keep data)' }).click();
+  await trayDone(page, 'Remove');
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  const removed = page.locator('.tile.store').filter({ hasText: 'Tunnel E2E' });
+  await expect(removed).toContainText('Removed · data kept');
+  await expect(removed.getByRole('button', { name: 'Reinstall Tunnel E2E', exact: true })).toBeVisible();
+  await expect(removed.getByRole('button', { name: 'Install Tunnel E2E', exact: true })).toHaveCount(0);
+  await removed.getByRole('button', { name: 'About Tunnel E2E', exact: true }).click();
+  const page2 = page.getByRole('dialog');
+  await expect(page2).toContainText('your removed copy still keeps its data');
+  await expect(page2.getByRole('button', { name: 'Install Tunnel E2E now', exact: true })).toHaveCount(0);
+  await page2.getByRole('button', { name: 'Reinstall Tunnel E2E', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Reinstall tunnel-e2e', exact: true })).toBeVisible();
 });
 
 test('decision 170: Store cards for 0, 1 and 2 copies; the second copy says so, with its own name, and Home tells them apart', async ({ page }) => {
@@ -1334,6 +1352,14 @@ test('decision 170: Store cards for 0, 1 and 2 copies; the second copy says so, 
   await card.getByRole('button', { name: 'Install FreshRSS', exact: true }).click();
   const first = page.getByRole('dialog');
   await expect(first.getByRole('note', { name: 'Another copy' })).toHaveCount(0);
+  // a bad name typed under Advanced says why Install is greyed out (no silent dead button)
+  await first.getByText('Advanced: name, passphrase, folders, technical details', { exact: true }).click();
+  const optional = first.getByLabel('Instance name for FreshRSS', { exact: true });
+  await optional.fill('Bad_Name');
+  await expect(first.getByRole('alert').filter({ hasText: 'Use lowercase letters' })).toBeVisible();
+  await expect(first.getByRole('button', { name: 'Install FreshRSS now', exact: true })).toBeDisabled();
+  await optional.fill('');
+  await expect(first.getByRole('alert').filter({ hasText: 'Use lowercase letters' })).toHaveCount(0);
   await first.getByRole('button', { name: 'Install FreshRSS now', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Review install');
   await expect(page.getByRole('dialog')).not.toContainText('You already have FreshRSS');

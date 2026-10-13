@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { appUrlFrom, type EndpointUrls } from './app-url';
+import { copiesOf, copyName, storeAction } from './copies';
 import type { CatalogItemDto, FolderListingDto, HostStorageDto, InstanceSummary, OperationDto } from '../../../src/contracts/api';
 import { api } from '../api';
 import { fmtBytes, fmtTime, monogram, plainStatus } from './format';
+
+export { copiesOf, copyName };
 
 export type CustomIcon = InstanceSummary['customIcon'];
 export function AppIcon({ packageId, icon, name, size = 44, custom = null }: { packageId: string; icon: string | null; name: string; size?: number; custom?: CustomIcon }) {
@@ -33,18 +36,6 @@ export function appLabel(inst: InstanceSummary, all?: InstanceSummary[]): string
   if (!inst.displayName && copyName(inst, all ?? [])) return `${inst.packageName} · ${inst.name}`;
   return inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} · ${inst.name}`);
 }
-// The instance name to show under the icon when several copies of one app exist (and the operator has not
-// named this one); null when the label alone already tells it apart.
-export function copyName(inst: InstanceSummary, all: InstanceSummary[]): string | null {
-  if (inst.displayName) return null;
-  return all.some((o) => o.id !== inst.id && o.packageId === inst.packageId) ? inst.name : null;
-}
-// Decision 170: the copies of a package the Store counts (removed ones keep their data but are not "installed").
-export function copiesOf(packageId: string, all: InstanceSummary[]): { active: InstanceSummary[]; removed: InstanceSummary[] } {
-  const mine = all.filter((i) => i.packageId === packageId);
-  return { active: mine.filter((i) => i.installState !== 'retained'), removed: mine.filter((i) => i.installState === 'retained') };
-}
-
 export function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'muted' | 'busy' | 'info'; children: ReactNode }) {
   return <span className={`pill tone-${tone}`}>{children}</span>;
 }
@@ -117,9 +108,8 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
 // surprising Install; an app that allows copies also offers "Add another copy…" (another label and style).
 export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, disabled }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; disabled: boolean }) {
   const installed = copies.length;
-  const copyable = item.multiInstance !== false;
-  const available = item.availability === 'available';
-  const addCopy = installed > 0 && available && copyable;
+  const action = storeAction(item, [...copies, ...removed]);
+  const addCopy = action === 'open-or-copy';
   return (
     <li className={`tile store ${addCopy ? 'two-actions' : ''}`}>
       <button className="tile-main" onClick={onOpen} aria-label={`About ${item.name}`}>
@@ -146,9 +136,9 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
           )}
           <OpenCopy inst={copies[0]!} name={item.name} onManage={onManage} />
         </div>
-      ) : !available ? (
+      ) : action === 'unavailable' ? (
         <Pill tone="bad">Unavailable</Pill>
-      ) : !copyable && removed.length > 0 ? (
+      ) : action === 'reinstall' ? (
         // one copy per machine and a removed one keeps its data: bring that one back (its page has Reinstall)
         <button className="btn primary" disabled={disabled} onClick={() => onManage(removed[0]!)} aria-label={`Reinstall ${item.name}`}>
           Reinstall…

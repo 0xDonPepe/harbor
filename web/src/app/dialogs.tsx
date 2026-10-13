@@ -4,6 +4,7 @@ import type { AddressOptionsDto, CatalogItemDto, ExposureDto, InstanceDetail, In
 import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
 import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, appLabel, copiesOf, endpointUrlHere, openUrl } from './components';
+import { defaultCopyName, installView, nameProblem } from './copies';
 import { categoryLabel, fmtBytes, fmtTime } from './format';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
@@ -313,16 +314,6 @@ function fmtDeviceSize(size: string): string {
   return fmtGB(Number(m[1]) * 1024 ** ('KMGTP'.indexOf(m[2]!.toUpperCase()) + 1));
 }
 
-// The name the daemon proposes for the next copy (catalog `proposedName`, the planner's rule). Should the
-// catalog be a poll behind the instance list, the same rule runs here so the prefill is never a taken name.
-function defaultCopyName(item: CatalogItemDto, instances: InstanceSummary[]): string {
-  const taken = new Set(instances.map((i) => i.name));
-  if (item.proposedName && !taken.has(item.proposedName)) return item.proposedName;
-  if (!taken.has(item.id)) return item.id;
-  for (let n = 2; n < 1000; n++) if (!taken.has(`${item.id}-${n}`)) return `${item.id}-${n}`;
-  return '';
-}
-
 export function InstallWizard({ item, instances = [], busy, installed = 0, mode: startMode = 'page', onClose, onStart, onRemovePackage, onOpenInstance }: { item: CatalogItemDto; instances?: InstanceSummary[]; busy: boolean; installed?: number; mode?: 'page' | 'copy'; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void; onOpenInstance?: (i: InstanceSummary) => void }) {
   // Decision 170: an installed app's page opens the copy you have; "Add another copy…" (copyable apps only)
   // turns it into the install page, which says it is a separate copy and asks for its name (prefilled
@@ -330,13 +321,16 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
   const copies = copiesOf(item.id, instances);
   const copyable = item.multiInstance !== false;
   const [mode, setMode] = useState<'page' | 'copy'>(startMode);
-  const appPage = copies.active.length > 0 && (mode === 'page' || !copyable);
-  const copyMode = copies.active.length > 0 && !appPage;
+  const view = installView(item, instances, mode);
+  // 'reinstall': a one-copy app whose only copy was removed with its data kept — its page brings that copy
+  // back instead of offering an install the daemon refuses (decision 170: no dead buttons)
+  const appPage = view === 'page' || view === 'reinstall';
+  const copyMode = view === 'copy';
   const [name, setName] = useState(() => (copies.active.length > 0 ? defaultCopyName(item, instances) : ''));
   const nameTrim = name.trim();
-  const nameBad = nameTrim !== '' && !/^[a-z][a-z0-9-]{0,62}$/.test(nameTrim);
-  const nameTaken = nameTrim !== '' && instances.some((i) => i.name === nameTrim);
-  const nameBlocked = (copyMode && nameTrim === '') || nameBad || nameTaken;
+  // the same check, shown next to whichever name field is on screen (the copy notice, or Advanced)
+  const nameError = nameProblem(name, instances, copyMode);
+  const nameBlocked = nameError !== null;
   // Decision 126: which installed app satisfies each link ('' = none, optional links only).
   const [linkPick, setLinkPick] = useState<Record<string, string>>({});
   const linkSel = (l: CatalogItemDto['links'][number]) => linkPick[l.id] ?? (l.optional ? '' : (linkCandidates(l, instances)[0]?.id ?? ''));
@@ -641,13 +635,9 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
             Name for this copy
             <input value={name} onChange={(e) => setName(e.target.value)} required pattern="[a-z][a-z0-9-]{0,62}" aria-label="Name for this copy" aria-invalid={nameBlocked} autoComplete="off" spellCheck={false} />
           </label>
-          {nameTaken ? (
+          {nameError && nameTrim !== '' ? (
             <p className="error small" role="alert">
-              {nameTrim} is already the name of another app here. Pick another.
-            </p>
-          ) : nameBad ? (
-            <p className="error small" role="alert">
-              Use lowercase letters, digits and dashes, starting with a letter.
+              {nameError}
             </p>
           ) : (
             <p className="muted small">It shows under the icon on Home, so you can tell the copies apart.</p>
@@ -730,7 +720,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
               On this machine
             </h3>
             <ul className="plain copies">
-              {copies.active.map((i) => (
+              {(view === 'reinstall' ? copies.removed : copies.active).map((i) => (
                 <li key={i.id} className="row between wrap">
                   <span className="row">
                     <InstanceIcon inst={i} size={28} />
@@ -743,7 +733,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
                 </li>
               ))}
             </ul>
-            {!copyable && <p className="muted small">{item.name} runs as one copy per machine.</p>}
+            {!copyable && <p className="muted small">{view === 'reinstall' ? `${item.name} runs as one copy per machine; your removed copy still keeps its data, so reinstall that one.` : `${item.name} runs as one copy per machine.`}</p>}
           </section>
           <div className="row end">
             <button className="btn" onClick={onClose}>
@@ -754,7 +744,14 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
                 Add another copy…
               </button>
             )}
-            <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} />
+            {view === 'reinstall' ? (
+              // its drawer has Reinstall (the kept data comes back), the same place the Store card goes
+              <button className="btn primary" disabled={busy} onClick={() => (onOpenInstance ?? onClose)(copies.removed[0]!)} aria-label={`Reinstall ${item.name}`}>
+                Reinstall…
+              </button>
+            ) : (
+              <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} />
+            )}
           </div>
         </>
       ) : (
@@ -966,7 +963,12 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
               {!copyMode && (
                 <label className="small">
                   Instance name (optional)
-                  <input value={name} onChange={(e) => setName(e.target.value)} pattern="[a-z][a-z0-9-]{0,62}" placeholder={item.id} aria-label={`Instance name for ${item.name}`} />
+                  <input value={name} onChange={(e) => setName(e.target.value)} pattern="[a-z][a-z0-9-]{0,62}" placeholder={item.id} aria-label={`Instance name for ${item.name}`} aria-invalid={nameBlocked} />
+                  {nameError && (
+                    <span className="error small" role="alert">
+                      {nameError}
+                    </span>
+                  )}
                 </label>
               )}
               {!customPass ? (
@@ -1065,7 +1067,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
               disabled={busy || item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
               onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
               aria-label={`Install ${item.name} now`}
-              title={nameBlocked ? 'This copy needs a free name' : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
+              title={nameError ? nameError : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
             >
               Install
             </button>

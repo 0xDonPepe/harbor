@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { allocateEndpoints } from '../../src/planner/ports.js';
-import { copyNote, identityFor, proposeName } from '../../src/planner/identity.js';
+import { copyNote, identityFor, oneCopyNextAction, proposeName } from '../../src/planner/identity.js';
 import { escapeCompose, renderCompose } from '../../src/planner/render.js';
 import { validateManifestShape } from '../../src/packages/manifest.js';
 import { validateComposeSource } from '../../src/packages/compose-source.js';
@@ -33,6 +33,15 @@ describe('identity', () => {
     expect(copyNote('Immich', 'immich-2', { active: 1, removed: 0 })).toBe('You already have Immich. This installs a separate copy (immich-2) with its own data, address and login; the first one is not touched.');
     expect(copyNote('Immich', 'immich-3', { active: 2, removed: 1 })).toMatch(/^You already have 2 copies of Immich\. This installs another separate copy \(immich-3\).*the others are not touched\.$/);
     expect(copyNote('Immich', 'immich-2', { active: 0, removed: 1 })).toMatch(/^A removed copy of Immich still keeps its data\..*reinstall the removed copy from Home instead\.$/);
+  });
+  it('a one-copy app that is already here says what to do instead, for an install and for a restore (decision 170)', () => {
+    const active = [{ installState: 'installed' }];
+    const removed = [{ installState: 'retained' }];
+    expect(oneCopyNextAction(active, 'install')).toBe('Open the copy you have; this app runs one copy per machine.');
+    expect(oneCopyNextAction(removed, 'install')).toMatch(/^Reinstall the removed copy from Home/);
+    expect(oneCopyNextAction(active, 'restore')).toMatch(/uninstall the copy you have completely first, then restore again\.$/);
+    expect(oneCopyNextAction(removed, 'restore')).toMatch(/reinstall the removed copy instead, or uninstall it completely/);
+    expect(oneCopyNextAction([...removed, ...active], 'restore')).not.toMatch(/removed copy/);
   });
 });
 

@@ -125,7 +125,10 @@ wallpaper, surfaces are translucent (`backdrop-filter`), one accent colour, 8pt 
 
 - Open opens the first copy's address when it runs, else its drawer (Start, Unlock, Repair live there).
 - A removed copy (data kept): a copyable app keeps **Install** with a note and *Show the removed copy*; a
-  one-copy app offers **Reinstall…** (its drawer), never a plan the daemon would refuse.
+  one-copy app offers **Reinstall…** (its drawer) on the card and on its page, never a plan the daemon would refuse.
+- A name typed on the install page (the copy notice, or Advanced on a first install) that is taken or malformed
+  says why under the field; Install stays greyed out only with that reason on screen (pure checks in
+  `web/src/app/copies.ts`, unit-tested).
 - No toggle and no extra confirmation: the install page is the confirmation, the label and button style differ
   (never color alone), and the required name is what keeps the copies apart on Home.
 

@@ -4,7 +4,7 @@
 // and refused while any app (bind folder OR app home) lives on the drive.
 // Progress goes to <stateDir>/devices/<name>/format-status.json so the console
 // can poll it like mount status.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
@@ -12,6 +12,7 @@ import { loadConfig } from '../config.js';
 import { exec, execOk } from './exec.js';
 import { listDevices } from '../system/host-storage.js';
 import { mountArgsFor, mountedAt } from './device-mount-apply.js';
+import { writeStatusFile } from './safe-write.js';
 
 export type DeviceFormatState = 'requested' | 'formatting' | 'formatted' | 'failed';
 export interface DeviceFormatStatus {
@@ -30,8 +31,8 @@ export function deviceFormatStatusFile(stateDir: string, name: string): string {
 function writeStatus(stateDir: string, name: string, state: DeviceFormatState, message: string, fsType: string | null, mountpoint: string | null): void {
   const file = deviceFormatStatusFile(stateDir, name);
   try {
-    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, JSON.stringify({ device: name, state, message, fsType, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
+    // decision 169: devices/ is harbor-owned; no symlink is followed on the way to the file
+    writeStatusFile(stateDir, file, JSON.stringify({ device: name, state, message, fsType, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
   } catch {
     /* status is best effort */
   }

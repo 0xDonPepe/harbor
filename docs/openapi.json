@@ -42,7 +42,7 @@
     },
     "/v1/setup": {
       "get": {
-        "description": "Whether this Harbor still needs its first administrator, plus what the setup wizard shows.",
+        "description": "Whether this Harbor still needs its first administrator, plus what the setup wizard shows. Once an administrator exists: only `needed: false` and the https hosts the console on plain http probes (decision 169).",
         "security": [],
         "responses": {
           "200": {
@@ -713,11 +713,13 @@
                         },
                         "from": {
                           "type": "string",
-                          "maxLength": 256
+                          "maxLength": 256,
+                          "pattern": "^[^\\r\\n]*$"
                         },
                         "to": {
                           "type": "string",
-                          "maxLength": 256
+                          "maxLength": 256,
+                          "pattern": "^[^\\r\\n]*$"
                         },
                         "minSeverity": {
                           "type": "string",

@@ -210,7 +210,7 @@ export const mockApi = {
     return { token: 'mock-token', expiresAt: new Date(Date.now() + 3600_000).toISOString() };
   },
   currentToken: (): string | null => 'mock-token',
-  setupStatus: async () => ({ needed: false, hostname: 'harbor', deviceName: 'homelab', lan: { enabled: false, url: null }, tailscale: { installed: true, loggedIn: true }, version: '0.9.0' }),
+  setupStatus: async () => ({ needed: false, https: { enabled: false, hosts: [] } }),
   setup: async () => ({ token: 'mock-token', expiresAt: new Date(Date.now() + 3600_000).toISOString(), recoveryKey: 'abandon ability able about above absent absorb abstract absurd abuse access accident' }),
   selfUpdate: async () => mockSystem().update,
   selfUpdateCheck: async () => mockSystem().update,

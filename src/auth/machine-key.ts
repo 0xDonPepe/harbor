@@ -20,7 +20,8 @@
 // The sealed blob lives in the settings table (`security.machineKey`, JSON),
 // so no schema migration is needed. This module is pure key handling: callers
 // own persistence (repo settings) and memory lifetime (daemon/session layer).
-import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'node:crypto';
+import { createCipheriv, randomBytes, scrypt } from 'node:crypto';
+import { gcmOpen, gcmShapeOk } from '../gcm.js';
 import { HarborError } from '../errors.js';
 import { APP_HOME_SCRYPT } from '../storage/app-home.js';
 
@@ -102,11 +103,17 @@ export async function unsealMachineKey(sealed: SealedMachineKey, password: strin
       nextAction: 'Update Harbor to a version that understands this key, then try again.',
     });
   }
+  const nonce = unhex(sealed.nonce, 'nonce');
+  const tag = unhex(sealed.tag, 'tag');
+  // decision 169: only a 12-byte nonce and a 16-byte tag (what sealing writes) are ever decrypted
+  if (!gcmShapeOk(nonce, tag)) {
+    throw new HarborError('INVALID_PACKAGE', 'sealed machine key has a malformed nonce or tag', {
+      nextAction: 'The stored machine key is damaged. App homes stay recoverable through their own encryption passphrases.',
+    });
+  }
   const kek = await scryptAsync(password, unhex(sealed.salt, 'salt'));
   try {
-    const decipher = createDecipheriv('aes-256-gcm', kek, unhex(sealed.nonce, 'nonce'));
-    decipher.setAuthTag(unhex(sealed.tag, 'tag'));
-    const key = Buffer.concat([decipher.update(unhex(sealed.sealedKey, 'sealedKey')), decipher.final()]);
+    const key = gcmOpen(kek, nonce, tag, unhex(sealed.sealedKey, 'sealedKey'));
     if (key.length !== MACHINE_KEY_BYTES) throw new Error('bad length');
     return key;
   } catch (e) {

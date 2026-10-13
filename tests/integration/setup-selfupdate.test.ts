@@ -29,9 +29,10 @@ describe('first-run setup in the browser (no administrator yet)', () => {
   it('reports setup needed, refuses login and wrong codes, creates the administrator once, then closes the door', async () => {
     const st = await h.api.expect<SetupStatusDto>(200, 'GET', '/v1/setup', undefined, { authorization: '' });
     expect(st.needed).toBe(true);
-    expect(st.lan.enabled).toBe(true);
-    expect(st.lan.url).toMatch(/^http:\/\/[a-z0-9-]+\.local:18999\/$/);
-    expect(st.tailscale.installed).toBe(true);
+    expect(st.lan!.enabled).toBe(true);
+    expect(st.lan!.url).toMatch(/^http:\/\/[a-z0-9-]+\.local:18999\/$/);
+    expect(st.tailscale!.installed).toBe(true);
+    expect(st.version).toBeTruthy();
     // the console's data routes are still closed
     await h.api.expectError(401, 'UNAUTHENTICATED', 'GET', '/v1/instances', undefined, { authorization: '' });
     await h.api.expectError(401, 'UNAUTHENTICATED', 'POST', '/v1/sessions', { username: 'admin', password: 'whatever-it-is-12' }, { authorization: '' });
@@ -47,8 +48,11 @@ describe('first-run setup in the browser (no administrator yet)', () => {
     expect(existsSync(path.join(h.stateDir, 'setup-code'))).toBe(false);
     const sys = await h.api.expect<SystemDto>(200, 'GET', '/v1/system');
     expect(sys.deviceName).toBe('Kitchen server');
-    expect(sys.lan).toEqual({ enabled: true, url: st.lan.url });
-    expect((await h.api.expect<SetupStatusDto>(200, 'GET', '/v1/setup', undefined, { authorization: '' })).needed).toBe(false);
+    expect(sys.lan).toEqual({ enabled: true, url: st.lan!.url });
+    // Decision 169: once an administrator exists, the open route says only what the login page needs.
+    const after = await h.api.expect<SetupStatusDto>(200, 'GET', '/v1/setup', undefined, { authorization: '' });
+    expect(Object.keys(after).sort()).toEqual(['https', 'needed']);
+    expect(after.needed).toBe(false);
     await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/setup', { code, username: 'x', password: 'a-good-password-123' }, { authorization: '' });
     // the normal login works with the chosen credentials
     await h.api.expect(201, 'POST', '/v1/sessions', { username: 'carlos', password: 'a-good-password-123' }, { authorization: '' });

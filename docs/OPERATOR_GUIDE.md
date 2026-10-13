@@ -52,6 +52,9 @@ is typed on the terminal.
   The installer takes the newest release; pinning is for troubleshooting only. Releases older than 0.17.0 said
   "installed encrypted" and were not — do not install them (`docs/releases/v0.17.0.md`).
 - Lost the setup code? On the machine: `sudo /opt/harbor/bin/harbor setup-code --config /etc/harbor/harbor.json`.
+- The setup page's status route (`GET /v1/setup`) needs no login. Once the administrator exists it only says
+  that setup is done and whether HTTPS is on, with its addresses (the login page uses them to move you to
+  https). The version, machine name, LAN address and remote-access state are shown only after you log in.
 
 **LAN mode** means the console (port 80) and every app port answer to any device on your local network,
 like Umbrel. Protect the console with a strong password and two-factor login (Settings → Account); apps
@@ -299,7 +302,7 @@ password).
 |---|---|---|
 | Another disk | a folder under `/mnt/…` or `/media/…` (a mounted drive) | fast; same house as the original |
 | S3-compatible | endpoint, bucket, folder, access key ID + secret | Backblaze B2, Cloudflare R2, Wasabi, AWS, MinIO; a bucket with object lock keeps backups even a hacked machine cannot delete |
-| SFTP server | server, port, user, folder, a private key (no passphrase) | put the key's public half in the server's `authorized_keys`; the server key is pinned at the first test |
+| SFTP server | server, port, user, folder, a private key (no passphrase) | put the key's public half in the server's `authorized_keys`; Harbor shows the server key's fingerprint and pins it only after you click **Trust this key** (compare it first: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server). CLI: `harbor backup add sftp NAS … --host-key SHA256:…`, or answer *yes* at the prompt |
 | Proton Drive (beta) | Proton email, password, the current 2FA code | through rclone's unofficial Proton backend: it can break when Proton changes things, pair it with another place |
 
 Harbor tests a place before it saves it. An empty place is set up there and then; a place that already
@@ -589,8 +592,8 @@ The console's **Settings** page covers what a household operator needs after boo
 | Remote access (details) | tailnet addresses, node key expiry, link to the Tailscale admin console; the auth key you used is single-use and is not stored |
 | Storage | disks with free space, removable drives (mount/eject, auto-mount/auto-start toggles), the Harbor data folder (`/srv/harbor`, where Harbor may create folders for you), folders currently used by apps, and a folder browser with *Create folder here* |
 | Overview | the landing page: the **Harbor version first**, with *Update to x.y.z* when a release is out, then your machine's name, what it runs on, uptime, storage/memory/temperature, *Restart* and *Shut down* (each asks first), the Look picker and the automatic app-update default |
-| Appearance | **Look**: Harbor in *Auto* (follows the device), *Light* or *Dark*, over the *Picture of the day* (or your own picture) or flat *Harbor*; *Readability over pictures* (how solid cards are, per browser); your own picture (PNG/JPEG/WebP up to 6 MB), or **rotating wallpapers**: Harbor itself fetches a new picture on a schedule from Bing or Wikimedia Commons (no account) or from your favourite subreddits (needs a free Reddit "script" app key; Settings walks you through it). The picture and its credit show on Home. |
-| Advanced access | a **terminal** on the machine (shell of the Harbor service account: `docker`, `harbor …`), the SSH forwarding lines with copy buttons, and the CLI equivalents |
+| Appearance | **Look**: Harbor in *Auto* (follows the device), *Light* or *Dark*, over the *Picture of the day* (or your own picture) or flat *Harbor*; *Readability over pictures* (how solid cards are, per browser); your own picture (PNG/JPEG/WebP up to 6 MB), or **rotating wallpapers**: Harbor itself fetches a new picture on a schedule from Bing or Wikimedia Commons (no account) or from your favourite subreddits (needs a free Reddit "script" app key; Settings walks you through it). The picture and its credit show on Home. Harbor downloads pictures over https only and never from an address on this machine or your home network, not even when a site redirects there. |
+| Advanced access | a **terminal** on the machine (shell of the Harbor service account: `docker`, `harbor …`), the SSH forwarding lines with copy buttons, and the CLI equivalents. An open terminal closes when its session ends: logging out, *Log out other sessions*, a password change (every other session) or the session expiring |
 | Troubleshoot | Harbor's own log (systemd journal) and each app's container logs, copyable |
 | Account (two-factor) | turn on a 6-digit authenticator code at login (QR code or typed key); turn off with the password; lost the app? on the machine: `sudo /opt/harbor/bin/harbor account totp reset --local --config /etc/harbor/harbor.json` |
 | Overview (name) | rename the machine (shown in Settings and the browser tab) |
@@ -603,6 +606,11 @@ tap a section to open it, and *‹ Settings* goes back.
 Search everything with **⌘K / Ctrl+K** (or `/`): installed apps open on Enter, store apps show their page, settings sections jump straight there.
 
 ### The notification bell
+
+Email delivery (Settings → Notifications → channels): when you give the mail server a user and password,
+Harbor sends them only inside TLS, either *secure* (implicit TLS, usually port 465) or STARTTLS that the
+server offers on 587. A server that offers neither gets no password and the test says so. The from and to
+addresses are one line each.
 
 The bell (bottom of the sidebar, a badge when something is unread) collects updates, warnings and
 failures. Clicking a row marks it read and, for app rows, opens the app. Each row has a **×** to

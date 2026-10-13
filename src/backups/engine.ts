@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { HarborError } from '../errors.js';
 import { systemctlStartBlocking, type UnitStarter } from '../storage/crypto-provider.js';
 import { sealedDir } from '../storage/fscrypt.js';
-import { tagValue, type Retention, type RepoKey, type SnapshotInfo, type TargetRuntime } from './restic.js';
+import { confirmHostKey, isHostKeyFingerprint, tagValue, type Retention, type RepoKey, type SnapshotInfo, type TargetRuntime } from './restic.js';
 import { backupRequestFiles, backupUnit, parseBackupProgress, parseBackupStatus, stageDirFor, type BackupAction, type BackupProgress, type BackupRequest, type BackupResult, type BackupSecrets, type BackupStatus, type StageFile } from './step.js';
 
 export interface TargetCall {
@@ -160,6 +160,8 @@ export class RootBackupEngine implements BackupEngine {
       }
       const status = raw ? parseBackupStatus(raw) : null;
       if (status?.state === 'ok') return { result: status.result ?? {}, out };
+      // decision 169: an unconfirmed SFTP server key comes back as its own code, with the fingerprints to confirm
+      if (status?.state === 'failed' && status.code === 'host-key-unconfirmed') throw withCode(new HarborError('HOST_KEY_UNCONFIRMED', status.message, { nextAction: status.nextAction ?? 'Confirm the server key fingerprint, then try again.', details: (status.details ?? []).filter((d) => typeof d === 'string').slice(0, 8) }), status.code);
       if (status?.state === 'failed') throw withCode(new HarborError('OPERATION_FAILED', status.message, { nextAction: status.nextAction ?? 'Check Settings → Backups and try again.' }), status.code);
       throw new HarborError('OPERATION_FAILED', `backup step ${req.action} gave no verdict${unitError ? ` (${unitError})` : ''}`, {
         nextAction: `On the machine, run: journalctl -u ${unit} --no-pager -n 50 — and check that Harbor's units are installed (re-run bootstrap if not).`,
@@ -253,6 +255,9 @@ function readTree(root: string, base = ''): Map<string, Buffer> {
 
 // Remote repositories keyed by a stable string from the target's config, so two daemons in one test
 // (two "machines") that install the same place see the same backups.
+// What every fake SFTP server shows as its key (tests confirm its fingerprint).
+export const FAKE_SFTP_HOST_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTUREfixturefixturefixturefixturefixture';
+
 export class FakeBackupEngine implements BackupEngine {
   readonly kind = 'fake' as const;
   readonly repos = new Map<string, FakeRepo>();
@@ -286,13 +291,20 @@ export class FakeBackupEngine implements BackupEngine {
   }
 
   async test(c: TargetCall) {
+    // Like the root step (decision 169): no key, or a fingerprint, means "read the server's key first".
+    let hostKey: string | undefined;
+    const given = (c.target.config['hostKey'] ?? '').trim();
+    if (c.target.transport === 'sftp' && (!given || isHostKeyFingerprint(given))) {
+      const port = c.target.config['port'] ? Number(c.target.config['port']) : 22;
+      hostKey = confirmHostKey(given, `${c.target.config['host']} ${FAKE_SFTP_HOST_KEY}`, `${c.target.config['host']}:${port}`);
+    }
     try {
       this.repo(c, 'test');
-      return { repo: 'ours' as const, ...(c.target.transport === 'sftp' && !c.target.config['hostKey'] ? { hostKey: `${c.target.config['host']} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFIXTUREfixturefixturefixturefixturefixture` } : {}) };
+      return { repo: 'ours' as const, ...(hostKey ? { hostKey } : {}) };
     } catch (e) {
       const code = backupErrorCode(e);
-      if (code === 'repo-missing') return { repo: 'missing' as const };
-      if (code === 'wrong-password') return { repo: 'foreign' as const };
+      if (code === 'repo-missing') return { repo: 'missing' as const, ...(hostKey ? { hostKey } : {}) };
+      if (code === 'wrong-password') return { repo: 'foreign' as const, ...(hostKey ? { hostKey } : {}) };
       throw e;
     }
   }

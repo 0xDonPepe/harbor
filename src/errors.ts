@@ -25,6 +25,7 @@ export type ErrorCode =
   | 'RATE_LIMITED'
   | 'INVALID_STATE'
   | 'MACHINE_KEY_LOCKED'
+  | 'HOST_KEY_UNCONFIRMED'
   | 'BUSY'
   | 'OPERATION_FAILED'
   | 'INTERNAL';
@@ -41,6 +42,7 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   OWNERSHIP_CONFLICT: 409,
   INVALID_STATE: 409,
   MACHINE_KEY_LOCKED: 409,
+  HOST_KEY_UNCONFIRMED: 409,
   BUSY: 409,
   DATA_MISSING: 409,
   SECRET_MISSING: 409,
@@ -74,6 +76,7 @@ const EXIT_CODE: Record<ErrorCode, number> = {
   OWNERSHIP_CONFLICT: 3,
   INVALID_STATE: 3,
   MACHINE_KEY_LOCKED: 3,
+  HOST_KEY_UNCONFIRMED: 3,
   BUSY: 3,
   DATA_MISSING: 3,
   SECRET_MISSING: 3,
@@ -156,6 +159,7 @@ function defaultNextAction(code: ErrorCode): string {
     case 'RATE_LIMITED': return 'Wait and retry.';
     case 'INVALID_STATE': return 'The instance is not in a state that allows this operation.';
     case 'MACHINE_KEY_LOCKED': return 'Type your password once to unlock this machine\'s key (harbor account unlock), then retry.';
+    case 'HOST_KEY_UNCONFIRMED': return 'Compare the server key fingerprint with the one the server itself shows, then confirm it.';
     case 'BUSY': return 'Wait for the running operation to finish.';
     case 'OPERATION_FAILED': return 'Inspect the operation events and the instance.';
     case 'INTERNAL': return 'Check the daemon log.';

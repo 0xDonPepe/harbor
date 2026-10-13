@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api } from '../api';
 import { isMockUi } from '../mock/api';
+import { closeReasons } from './terminal-close';
 
 // A shell on the machine (Settings → Advanced access). WebSocket to the daemon; the first message carries the
 // session token, then keystrokes go up as JSON and terminal bytes come down as binary frames.
@@ -41,6 +42,8 @@ export function Terminal({ onStatus }: { onStatus?: (s: 'connecting' | 'open' | 
       setNote(n ?? null);
       onStatus?.(s, n);
     };
+    const reasons = closeReasons();
+    const closed = (n?: string) => status('closed', reasons.closed(n));
     ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: api.currentToken(), cols: term.cols, rows: term.rows }));
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') {
@@ -49,12 +52,12 @@ export function Terminal({ onStatus }: { onStatus?: (s: 'connecting' | 'open' | 
           opened = true;
           status('open');
           term.focus();
-        } else if (m.type === 'exit') status('closed', m.reason ?? 'the shell exited');
-        else if (m.type === 'error') status('closed', m.message ?? 'terminal unavailable');
+        } else if (m.type === 'exit') closed(m.reason ?? 'the shell exited');
+        else if (m.type === 'error') closed(m.message ?? 'terminal unavailable');
       } else term.write(new Uint8Array(e.data as ArrayBuffer));
     };
-    ws.onclose = () => status('closed', opened ? undefined : 'connection closed');
-    ws.onerror = () => status('closed', 'connection error');
+    ws.onclose = () => closed(opened ? undefined : 'connection closed');
+    ws.onerror = () => closed('connection error');
     const inDisp = term.onData((d) => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ type: 'input', data: d })));
     const ro = new ResizeObserver(() => {
       try {

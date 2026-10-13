@@ -35,4 +35,4 @@ fields:
   - id: hostKey
     label: Server key
     type: textarea
-    hint: Leave empty to trust the key the server shows at the first test (it is pinned from then on)
+    hint: Leave empty and Harbor shows the server key fingerprint for you to confirm first. Or paste the key, or its SHA256 fingerprint

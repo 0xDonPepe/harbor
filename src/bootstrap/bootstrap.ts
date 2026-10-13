@@ -1,4 +1,4 @@
-import { chmodSync, chownSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadConfig, normalizeConfig, type DaemonConfig } from '../config.js';
 import { HarborError } from '../errors.js';
@@ -18,6 +18,7 @@ import { installBackupTools } from './backup-tools.js';
 import { configureAvahiForLan, restartAvahi, unpinAvahiHostName } from './mdns.js';
 import { openLanFirewall } from './firewall.js';
 import { ensureCliLink } from './cli-link.js';
+import { chownTree } from './safe-write.js';
 import { privateInterfaces, lanUrl as lanUrlFor } from '../system/lan.js';
 import { readSetupCode, writeSetupCode } from '../auth/setup.js';
 import { hostname as osHostname } from 'node:os';
@@ -435,17 +436,6 @@ function readReleaseManifest(releaseDir: string): { version: string } {
     if (!existsSync(path.join(releaseDir, required))) throw new HarborError('INVALID_REQUEST', `release is incomplete: missing ${required}`);
   }
   return { version: m.version };
-}
-
-// Ownership fix confined to Harbor's own state directory.
-function chownTree(dir: string, uid: number, gid: number): void {
-  chownSync(dir, uid, gid);
-  for (const entry of readdirSync(dir)) {
-    const p = path.join(dir, entry);
-    const st = statSync(p);
-    if (st.isDirectory()) chownTree(p, uid, gid);
-    else chownSync(p, uid, gid);
-  }
 }
 
 async function waitHealthy(url: string, timeoutMs: number): Promise<boolean> {

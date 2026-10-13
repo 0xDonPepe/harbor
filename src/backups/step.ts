@@ -106,7 +106,7 @@ export interface BackupSecrets {
 
 export interface BackupResult {
   repo?: 'missing' | 'ours' | 'foreign';
-  hostKey?: string; // sftp: the key the server showed (pinned by the daemon)
+  hostKey?: string; // sftp: the key the operator confirmed (by fingerprint) and the server showed, pinned by the daemon
   snapshotId?: string;
   dataAdded?: number;
   totalBytes?: number;
@@ -124,7 +124,8 @@ export interface BackupStatus {
   state: 'working' | 'ok' | 'failed';
   message: string;
   nextAction?: string;
-  code?: 'deadline' | 'wrong-password' | 'repo-missing' | 'locked' | 'unreachable';
+  code?: 'deadline' | 'wrong-password' | 'repo-missing' | 'locked' | 'unreachable' | 'host-key-unconfirmed';
+  details?: string[]; // host-key-unconfirmed: the SHA256 fingerprints the server showed (decision 169)
   result?: BackupResult;
   at: string;
 }

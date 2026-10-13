@@ -3,7 +3,7 @@ import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 import type { EmailChannel } from './notifier.js';
 
 // Minimal SMTP submission client (decision 77): EHLO, STARTTLS when offered on plain
-// connections, AUTH LOGIN when credentials are set, one RFC 5322 text message.
+// connections, AUTH LOGIN when credentials are set (only ever inside TLS, decision 169), one RFC 5322 text message.
 // Deliberately no dependency: Harbor sends a handful of notification mails, nothing more.
 
 const TIMEOUT = 15_000;
@@ -64,11 +64,19 @@ class SmtpSession {
   }
 }
 
-export async function sendSmtp(ch: EmailChannel, subject: string, text: string): Promise<{ ok: boolean; error: string | null }> {
+// Decision 169: an address with a line break would end the SMTP command early and start another one.
+export function smtpAddressOk(address: string): boolean {
+  return typeof address === 'string' && !/[\r\n\0]/.test(address);
+}
+
+// `trust.ca` is for tests only (a throwaway certificate); real mail servers are checked against the system CAs.
+export async function sendSmtp(ch: EmailChannel, subject: string, text: string, trust: { ca?: string | Buffer } = {}): Promise<{ ok: boolean; error: string | null }> {
+  const ca = trust.ca ? { ca: trust.ca } : {};
   let session: SmtpSession | null = null;
+  if (!smtpAddressOk(ch.from) || !smtpAddressOk(ch.to)) return { ok: false, error: 'the from and to addresses must be one line each' };
   try {
     const sock = ch.smtp.secure
-      ? tlsConnect({ host: ch.smtp.host, port: ch.smtp.port, servername: ch.smtp.host })
+      ? tlsConnect({ host: ch.smtp.host, port: ch.smtp.port, servername: ch.smtp.host, ...ca })
       : netConnect({ host: ch.smtp.host, port: ch.smtp.port });
     await new Promise<void>((resolve, reject) => {
       sock.once(ch.smtp.secure ? 'secureConnect' : 'connect', resolve);
@@ -77,15 +85,22 @@ export async function sendSmtp(ch: EmailChannel, subject: string, text: string):
     session = new SmtpSession(sock);
     await session.reply(); // greeting
     const ehlo = await session.cmd('EHLO harbor.local', [250]);
+    let encrypted = ch.smtp.secure;
     if (!ch.smtp.secure && /STARTTLS/i.test(ehlo)) {
       await session.cmd('STARTTLS', [220]);
-      const tls = tlsConnect({ socket: session.raw() as Socket, servername: ch.smtp.host });
+      const tls = tlsConnect({ socket: session.raw() as Socket, servername: ch.smtp.host, ...ca });
       await new Promise<void>((resolve, reject) => {
         tls.once('secureConnect', resolve);
         tls.once('error', reject);
       });
       session.swap(tls);
+      encrypted = true;
       await session.cmd('EHLO harbor.local', [250]);
+    }
+    // Decision 169: a password only ever travels inside TLS (implicit TLS, or STARTTLS that the server
+    // offered and that succeeded). A server without either gets no AUTH at all.
+    if (ch.smtp.user && !encrypted) {
+      throw new Error('the mail server offers no encryption (STARTTLS), so Harbor does not send the password. Turn on "secure" (usually port 465) or use a server that supports STARTTLS');
     }
     if (ch.smtp.user) {
       await session.cmd('AUTH LOGIN', [334]);

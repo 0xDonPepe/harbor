@@ -713,7 +713,8 @@ backupCmd
   .description('install a place: e.g. harbor backup add s3 B2 --set endpoint=… --set bucket=… --set accessKeyId=… --secret secretAccessKey=@key.txt')
   .option('--set <key=value>', 'a non-secret answer (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--secret <key=@file|key=->', 'a secret answer from a file or stdin (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
-  .action(async (type: string, name: string, opts: { set: string[]; secret: string[] }) => {
+  .option('--host-key <fingerprint>', 'SFTP: the server key you confirmed, as its SHA256:… fingerprint (or the key line itself)')
+  .action(async (type: string, name: string, opts: { set: string[]; secret: string[]; hostKey?: string }) => {
     const values: Record<string, string> = {};
     for (const kv of opts.set) {
       const eq = kv.indexOf('=');
@@ -721,7 +722,24 @@ backupCmd
       values[kv.slice(0, eq)] = kv.slice(eq + 1);
     }
     Object.assign(values, await readSecretFlags(opts.secret));
-    const r = await client().post<{ target: BackupTargetDto; recoveryKey: string | null }>('/v1/backups/targets', { packageId: type, name, values });
+    if (opts.hostKey) values['hostKey'] = opts.hostKey;
+    const api = client();
+    const add = () => api.post<{ target: BackupTargetDto; recoveryKey: string | null }>('/v1/backups/targets', { packageId: type, name, values });
+    let r: { target: BackupTargetDto; recoveryKey: string | null };
+    try {
+      r = await add();
+    } catch (e) {
+      // Decision 169: no trust on first use. Show the fingerprint; trust it on an explicit yes (or --host-key).
+      if (!HarborError.is(e, 'HOST_KEY_UNCONFIRMED') || !e.details[0]) throw e;
+      const fingerprint = e.details[0];
+      if (globals().json || !process.stdin.isTTY) {
+        throw new HarborError('HOST_KEY_UNCONFIRMED', e.message, { details: e.details, nextAction: `Check it on the server (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then run the same command with --host-key ${fingerprint}` });
+      }
+      process.stderr.write(`${e.message}.\n  ${fingerprint}\n${e.nextAction}\n`);
+      if (!(await confirm('Trust this key?'))) throw new HarborError('INVALID_REQUEST', 'the server key was not trusted; nothing was added', { nextAction: `Run the command again with --host-key ${fingerprint} once you checked it.` });
+      values['hostKey'] = fingerprint;
+      r = await add();
+    }
     out(r, () => [`${r.target.name}: ${r.target.repo}${r.target.note ? ` — ${r.target.note}` : ''}`, r.recoveryKey ? `\nYour Harbor recovery key (shown once; it opens every backup of this Harbor):\n  ${r.recoveryKey}` : null].filter(Boolean).join('\n'));
   });
 backupCmd

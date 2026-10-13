@@ -1228,6 +1228,25 @@ test('backups: add a place, back an encrypted app up, restore it in place, delet
   await expect(after).not.toContainText('before the last restore', { timeout: 15_000 });
 });
 
+test('decision 169: an SFTP place shows the server key fingerprint and is added only after "Trust this key"', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /^Backups/ }).click();
+  await page.getByRole('button', { name: 'Add a place' }).click();
+  const add = page.getByRole('dialog');
+  await add.getByRole('button', { name: 'Choose SFTP server' }).click();
+  await add.locator('label', { hasText: /^Server(?! key)/ }).locator('input').fill('nas.example.test');
+  await add.locator('label', { hasText: /^User/ }).locator('input').fill('backup');
+  await add.locator('label', { hasText: /^Folder on the server/ }).locator('input').fill('/srv/backup/e2e');
+  await add.locator('label', { hasText: /^Private key/ }).locator('textarea').fill('-----BEGIN OPENSSH PRIVATE KEY-----\nFIXTURE\n-----END OPENSSH PRIVATE KEY-----');
+  await add.getByRole('button', { name: 'Test and add' }).click();
+  const check = add.getByRole('alert');
+  await expect(check).toContainText('Check the server key');
+  await expect(check).toContainText(/SHA256:[A-Za-z0-9+/]{43}/);
+  await check.getByRole('button', { name: 'Trust this key', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('SFTP server is ready');
+});
+
 test('a VPN-style app: the review lists its UDP port and permissions; Install waits for the permission box; the drawer shows the port to forward (decision 163)', async ({ page }) => {
   const { writeZip } = await import('../../src/packages/zip.js');
   const { createSocket } = await import('node:dgram');

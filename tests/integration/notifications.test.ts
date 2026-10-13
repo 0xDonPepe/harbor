@@ -106,6 +106,10 @@ describe('notifications engine', () => {
     await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: moved });
     const hookMoved = read.channels.map((c, i) => (i === 1 ? { ...c, url: 'https://hooks.attacker.example/x' } : c));
     await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: hookMoved });
+    // Decision 169: an email address with a line break would inject SMTP commands; the API refuses it.
+    const smtp = { host: 'mail.example.test', port: 587, secure: false };
+    await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: [{ kind: 'email', smtp, from: 'harbor@example.test', to: 'me@example.test\r\nRCPT TO:<x@evil.test>' }] });
+    await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: [{ kind: 'email', smtp, from: 'harbor@example.test\n', to: 'me@example.test' }] });
 
     h.notifyTransport.posts.length = 0;
     // A new error-severity notification (failed op) must hit both channels; info only ntfy.

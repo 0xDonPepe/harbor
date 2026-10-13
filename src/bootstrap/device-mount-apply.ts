@@ -2,13 +2,14 @@
 // (run by harbor-device-mount@<escaped-device>.service). Reuses the same shape as
 // tools-install-apply: must run as root (started by the template unit), validates
 // the allowlist itself, and writes progress to <stateDir>/devices/<name>/mount-status.json.
-import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
 import { loadConfig } from '../config.js';
 import { exec, execOk } from './exec.js';
 import { listDevices, suggestedMountpoint } from '../system/host-storage.js';
+import { DirHandle, fchownFileNoFollow, writeStatusFile } from './safe-write.js';
 
 export type DeviceMountState = 'requested' | 'mounting' | 'mounted' | 'unmounting' | 'unmounted' | 'failed';
 export interface DeviceMountStatus {
@@ -26,8 +27,8 @@ export function deviceMountStatusFile(stateDir: string, name: string): string {
 function writeStatus(stateDir: string, name: string, state: DeviceMountState, message: string, mountpoint: string | null): void {
   const file = deviceMountStatusFile(stateDir, name);
   try {
-    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, JSON.stringify({ device: name, state, message, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
+    // decision 169: devices/ is harbor-owned; no symlink is followed on the way to the file
+    writeStatusFile(stateDir, file, JSON.stringify({ device: name, state, message, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
   } catch {
     /* status is best effort */
   }
@@ -78,26 +79,35 @@ export function desktopIgnoreRule(uuid: string): { file: string; content: string
 export function reownMarkers(root: string, uid: number, gid: number, log: (m: string) => void): number {
   let visited = 0;
   let fixed = 0;
-  const walk = (dir: string, depth: number): void => {
+  // decision 169: folders are opened O_NOFOLLOW and walked through their fd (DirHandle), so a folder swapped
+  // for a link mid-walk cannot lead it off the drive; each marker is opened O_NOFOLLOW and fchown'd by fd.
+  const walk = (dir: DirHandle, depth: number): void => {
     if (depth > 6 || visited > 20_000) return;
     let entries;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir.self(), { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
       visited += 1;
-      const p = path.join(dir, e.name);
       if (e.isSymbolicLink()) continue;
       if (e.isDirectory()) {
         if (e.name === 'harbor-apps' || e.name === 'lost+found') continue;
-        walk(p, depth + 1);
+        let sub: DirHandle;
+        try {
+          sub = dir.openDir(e.name);
+        } catch {
+          continue; // swapped for a link (or gone) since the listing
+        }
+        try {
+          walk(sub, depth + 1);
+        } finally {
+          sub.close();
+        }
       } else if (e.isFile() && e.name === '.harbor-bind.json') {
         try {
-          if (!lstatSync(p).isFile()) continue;
-          chownSync(p, uid, gid);
-          chmodSync(p, 0o644);
+          fchownFileNoFollow(dir.child(e.name), { uid, gid }, 0o644);
           fixed += 1;
         } catch {
           /* best effort per file */
@@ -105,7 +115,17 @@ export function reownMarkers(root: string, uid: number, gid: number, log: (m: st
       }
     }
   };
-  walk(root, 0);
+  let top: DirHandle;
+  try {
+    top = DirHandle.openNoFollow(root);
+  } catch {
+    return 0;
+  }
+  try {
+    walk(top, 0);
+  } finally {
+    top.close();
+  }
   if (fixed) log(`re-owned ${fixed} Harbor identity file(s) for this machine`);
   return fixed;
 }

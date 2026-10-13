@@ -236,8 +236,8 @@ ui:
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
     const gw = await byName('gatewayish');
     expect(ports(h.stateDir, gw.id)).toEqual({ hostIps: ['127.0.0.1'], marker: { lanAccess: 'relay' } });
-    // docsapp's file was re-rendered for the link, but its containers still publish on every interface
-    expect(readFileSync(path.join(h.stateDir, 'instances', docs.id, 'runtime', 'compose.yaml'), 'utf8')).toContain('external: true');
+    // linking does not move the provider (decision 171: the runner attaches it to the link network, not Compose):
+    // its containers still publish on every interface until it restarts
     expect(ports(h.stateDir, docs.id)).toEqual({ hostIps: ['0.0.0.0'], marker: undefined });
     expect((await h.api.expect<NetworkHttpsDto>(200, 'GET', '/v1/network/https')).rebindToApply).toEqual(['docsapp']);
   }, 60_000);

@@ -1,11 +1,11 @@
-name: "hb_c15db023d8fb4fad89519893e1a7a913"
+name: "hb_bd31c60d0b56480ba8b515f4fe00ce68"
 services:
   web:
     image: "ghcr.io/alam00000/bentopdf-simple@sha256:3d62b8f8eece5fe947026ac3925ff08fda245b3d6ba2c3916b94da91e0010c74"
     restart: "unless-stopped"
     labels:
-      io.harbor.preview/installation: "af09e948-c8d6-4b30-932c-f8c5339ac807"
-      io.harbor.preview/instance: "c15db023-d8fb-4fad-8951-9893e1a7a913"
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "bd31c60d-0b56-480b-a8b5-15f4fe00ce68"
       io.harbor.preview/service: "web"
       io.harbor.preview/kind: "application"
     networks:
@@ -18,9 +18,9 @@ services:
         mode: "host"
 networks:
   default:
-    name: "hb_c15db023d8fb4fad89519893e1a7a913_default"
+    name: "hb_bd31c60d0b56480ba8b515f4fe00ce68_default"
     driver: "bridge"
     labels:
-      io.harbor.preview/installation: "af09e948-c8d6-4b30-932c-f8c5339ac807"
-      io.harbor.preview/instance: "c15db023-d8fb-4fad-8951-9893e1a7a913"
+      io.harbor.preview/installation: "a7d50e67-d6f3-4f77-8886-9baf482a35fd"
+      io.harbor.preview/instance: "bd31c60d-0b56-480b-a8b5-15f4fe00ce68"
       io.harbor.preview/kind: "network"

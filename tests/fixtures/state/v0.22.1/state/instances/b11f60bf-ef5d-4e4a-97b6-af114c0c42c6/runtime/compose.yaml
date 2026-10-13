@@ -1,11 +1,11 @@
-name: "hb_b49ec8f4fb244cd6b7f3a51282d780d2"
+name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6"
 services:
   web:
     image: "neosmemo/memos@sha256:71a5b4738d1bed96e92112004054f0888e92791b64eb78afd79077c96e6f9327"
     restart: "unless-stopped"
     labels:
-      io.harbor.preview/installation: "af09e948-c8d6-4b30-932c-f8c5339ac807"
-      io.harbor.preview/instance: "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2"
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "b11f60bf-ef5d-4e4a-97b6-af114c0c42c6"
       io.harbor.preview/service: "web"
       io.harbor.preview/kind: "application"
     networks:
@@ -25,13 +25,13 @@ services:
         target: "/var/opt/memos"
 networks:
   default:
-    name: "hb_b49ec8f4fb244cd6b7f3a51282d780d2_default"
+    name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6_default"
     driver: "bridge"
     labels:
-      io.harbor.preview/installation: "af09e948-c8d6-4b30-932c-f8c5339ac807"
-      io.harbor.preview/instance: "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2"
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "b11f60bf-ef5d-4e4a-97b6-af114c0c42c6"
       io.harbor.preview/kind: "network"
 volumes:
   data:
-    name: "hb_b49ec8f4fb244cd6b7f3a51282d780d2_data"
+    name: "hb_b11f60bfef5d4e4a97b6af114c0c42c6_data"
     external: true

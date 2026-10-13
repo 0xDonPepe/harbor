@@ -1,11 +1,11 @@
-name: "hb_2b9b5d7fa3734cb983335f82acb57cea"
+name: "hb_460520d7b2fe4702a60f9cf7494c1564"
 services:
   postgres:
     image: "postgres@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94"
     restart: "unless-stopped"
     labels:
-      io.harbor.preview/installation: "4544f0e1-3858-489b-a5ee-ae4b057b4974"
-      io.harbor.preview/instance: "2b9b5d7f-a373-4cb9-8333-5f82acb57cea"
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "460520d7-b2fe-4702-a60f-9cf7494c1564"
       io.harbor.preview/service: "postgres"
       io.harbor.preview/kind: "infrastructure"
     networks:
@@ -33,8 +33,8 @@ services:
     image: "n8nio/n8n@sha256:a8c95f75c6fdf65f5f2b7a7b354744eaa1c62bb911b5c00af6499c3f38e4cd32"
     restart: "unless-stopped"
     labels:
-      io.harbor.preview/installation: "4544f0e1-3858-489b-a5ee-ae4b057b4974"
-      io.harbor.preview/instance: "2b9b5d7f-a373-4cb9-8333-5f82acb57cea"
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "460520d7-b2fe-4702-a60f-9cf7494c1564"
       io.harbor.preview/service: "web"
       io.harbor.preview/kind: "application"
     networks:
@@ -70,16 +70,16 @@ services:
         target: "/home/node/.n8n"
 networks:
   default:
-    name: "hb_2b9b5d7fa3734cb983335f82acb57cea_default"
+    name: "hb_460520d7b2fe4702a60f9cf7494c1564_default"
     driver: "bridge"
     labels:
-      io.harbor.preview/installation: "4544f0e1-3858-489b-a5ee-ae4b057b4974"
-      io.harbor.preview/instance: "2b9b5d7f-a373-4cb9-8333-5f82acb57cea"
+      io.harbor.preview/installation: "f710648b-fed3-45c8-b401-bd27a028114d"
+      io.harbor.preview/instance: "460520d7-b2fe-4702-a60f-9cf7494c1564"
       io.harbor.preview/kind: "network"
 volumes:
   app-state:
-    name: "hb_2b9b5d7fa3734cb983335f82acb57cea_app-state"
+    name: "hb_460520d7b2fe4702a60f9cf7494c1564_app-state"
     external: true
   database:
-    name: "hb_2b9b5d7fa3734cb983335f82acb57cea_database"
+    name: "hb_460520d7b2fe4702a60f9cf7494c1564_database"
     external: true

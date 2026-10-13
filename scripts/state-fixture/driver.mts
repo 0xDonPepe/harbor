@@ -6,7 +6,9 @@
 //   <root>/state, <root>/data and <root>/catalog are created; <root>/fixture.json describes what was made.
 //
 // Imports are relative to the old checkout root, so this file is not type-checked against the current tree.
+import nodeCrypto from 'node:crypto';
 import { cpSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { normalizeConfig } from './src/config.js';
 import { FakeDocker } from './src/docker/fake.js';
@@ -44,6 +46,29 @@ const ids: Ids = {
     return b;
   },
 };
+
+// The rest of the old code's randomness (key-wrapping salts and nonces, app-home and machine keys, the recovery
+// words, fake container ids) goes through node:crypto randomBytes. Replace it with a visibly synthetic
+// `fdfd…<counter>` stream for this run, so no committed byte looks like a drawn secret: the recovery words come
+// out as one repeated word. syncBuiltinESMExports() updates the live `import { randomBytes }` bindings the old
+// modules already hold. Ciphertext, GCM tags and scrypt hashes stay high-entropy: they are computed, not drawn.
+let randomSeq = 0;
+const synthetic = (n: number): Buffer => {
+  const b = Buffer.alloc(n, 0xfd);
+  randomSeq += 1;
+  if (n >= 8) b.writeUInt32BE(randomSeq, n - 4);
+  return b;
+};
+const patchedRandomBytes = ((n: number, cb?: (err: Error | null, buf: Buffer) => void) => {
+  const b = synthetic(n);
+  if (cb) {
+    queueMicrotask(() => cb(null, b));
+    return undefined;
+  }
+  return b;
+}) as typeof nodeCrypto.randomBytes;
+nodeCrypto.randomBytes = patchedRandomBytes;
+syncBuiltinESMExports();
 
 const stateDir = path.join(root, 'state');
 const userDataDir = path.join(root, 'data');
@@ -84,10 +109,13 @@ const daemon = await startDaemon(config, {
   crypto,
   toolsProbe: async () => ({ reachable: false, note: 'not probed in the fixture run' }),
 });
+const madeAt = new Date().toISOString();
 const api = new Api(`http://localhost:${LISTEN_PORT}`, null);
-api.token = (await api.login(ADMIN.username, ADMIN.password)).token;
-// A remembered browser session (30 days) next to the plain one.
-await api.expect(201, 'POST', '/v1/sessions', { ...ADMIN, remember: true }, { authorization: '' });
+const sessionToken = (await api.login(ADMIN.username, ADMIN.password)).token;
+api.token = sessionToken;
+// A remembered browser session (30 days) next to the plain one. Both tokens are synthetic (`ids` above), so
+// fixture.json records them: the test checks that an upgrade keeps browsers logged in.
+const remembered = await api.expect<{ token: string }>(201, 'POST', '/v1/sessions', { ...ADMIN, remember: true }, { authorization: '' });
 
 const ok = async (req: Record<string, unknown>) => {
   const { op } = await api.run(req);
@@ -162,7 +190,9 @@ writeFileSync(
     {
       harborVersion: system.version,
       root,
+      madeAt,
       admin: { username: ADMIN.username, password: ADMIN.password },
+      sessions: { session: sessionToken, remember: remembered.token },
       listenPort: LISTEN_PORT,
       appPortRange: RANGE,
       // The fake kernel's sealed homes: fscrypt policies live on disk and survive a Harbor upgrade.

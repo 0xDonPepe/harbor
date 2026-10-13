@@ -33,3 +33,7 @@
 
 # Private, machine-specific notes (handoffs naming real hosts, services, domains): never committed
 /local/
+
+# The upgrade-jump fixtures hold harbor.db alone; SQLite leaves these next to it when a copy is opened in place
+/tests/fixtures/state/**/harbor.db-wal
+/tests/fixtures/state/**/harbor.db-shm

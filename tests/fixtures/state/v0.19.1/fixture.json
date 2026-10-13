@@ -1,9 +1,14 @@
 {
   "harborVersion": "0.19.1",
   "root": "/private/tmp/harbor-fixture-v0.19.1",
+  "madeAt": "2026-10-13T04:17:39.162Z",
   "admin": {
     "username": "admin",
     "password": "upgrade-FIXTURE-password"
+  },
+  "sessions": {
+    "session": "_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_gAAAAE",
+    "remember": "_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_gAAAAI"
   },
   "listenPort": 47300,
   "appPortRange": {
@@ -15,7 +20,7 @@
   ],
   "instances": [
     {
-      "id": "04b03958-46dc-4713-a64d-d259500cb375",
+      "id": "8b668a7c-7b83-4609-8a99-3d7025621f64",
       "name": "excalidraw",
       "packageId": "excalidraw",
       "revision": "1",
@@ -29,7 +34,7 @@
       ]
     },
     {
-      "id": "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2",
+      "id": "b0dab155-89cc-492a-9c7a-e45e2a53947b",
       "name": "memos",
       "packageId": "memos",
       "revision": "1",
@@ -43,21 +48,7 @@
       ]
     },
     {
-      "id": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
-      "name": "n8n",
-      "packageId": "n8n",
-      "revision": "1",
-      "runtime": "stopped",
-      "desired": "stopped",
-      "endpoints": [
-        {
-          "id": "web",
-          "hostPort": 47312
-        }
-      ]
-    },
-    {
-      "id": "c15db023-d8fb-4fad-8951-9893e1a7a913",
+      "id": "bd31c60d-0b56-480b-a8b5-15f4fe00ce68",
       "name": "bentopdf",
       "packageId": "bentopdf",
       "revision": "1",
@@ -69,12 +60,26 @@
           "hostPort": 47313
         }
       ]
+    },
+    {
+      "id": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
+      "name": "n8n",
+      "packageId": "n8n",
+      "revision": "1",
+      "runtime": "stopped",
+      "desired": "stopped",
+      "endpoints": [
+        {
+          "id": "web",
+          "hostPort": 47312
+        }
+      ]
     }
   ],
   "exposures": [
     {
-      "id": "e5152e37-c552-4a5a-8de8-9285fd0e1769",
-      "instanceId": "04b03958-46dc-4713-a64d-d259500cb375",
+      "id": "c79dba5a-6606-473d-97b4-d105d0d53c9f",
+      "instanceId": "8b668a7c-7b83-4609-8a99-3d7025621f64",
       "instanceName": "excalidraw",
       "endpointId": "web",
       "via": "tailnet",
@@ -83,13 +88,13 @@
       "port": 47310,
       "protection": "none",
       "state": "active",
-      "observedAt": "2026-10-13T04:05:33Z",
+      "observedAt": "2026-10-13T04:17:40Z",
       "note": "answered HTTP 200",
       "isPrimary": false
     },
     {
-      "id": "9f83b551-b721-44dd-979b-9e20fae7700f",
-      "instanceId": "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2",
+      "id": "960e41a9-35be-4774-8f0a-a339aa090745",
+      "instanceId": "b0dab155-89cc-492a-9c7a-e45e2a53947b",
       "instanceName": "memos",
       "endpointId": "web",
       "via": "public",
@@ -98,7 +103,7 @@
       "port": 443,
       "protection": "none",
       "state": "active",
-      "observedAt": "2026-10-13T04:05:33Z",
+      "observedAt": "2026-10-13T04:17:40Z",
       "note": "answered HTTP 200",
       "isPrimary": false
     }
@@ -108,9 +113,9 @@
     "operation-failed"
   ],
   "emptyDirs": [
-    "state/instances/04b03958-46dc-4713-a64d-d259500cb375/secrets",
-    "state/instances/b49ec8f4-fb24-4cd6-b7f3-a51282d780d2/secrets",
-    "state/instances/c15db023-d8fb-4fad-8951-9893e1a7a913/secrets",
+    "state/instances/8b668a7c-7b83-4609-8a99-3d7025621f64/secrets",
+    "state/instances/b0dab155-89cc-492a-9c7a-e45e2a53947b/secrets",
+    "state/instances/bd31c60d-0b56-480b-a8b5-15f4fe00ce68/secrets",
     "state/platform",
     "state/scratch",
     "data/harbor-apps/memos/memos/vault",
@@ -119,20 +124,20 @@
   "docker": {
     "containers": [
       {
-        "id": "c877d6cedd0299e71611070b474aa94c00b33b7d645d032ec97be65f60002",
-        "name": "hb_04b0395846dc4713a64dd259500cb375-web-1",
+        "id": "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000060002",
+        "name": "hb_8b668a7c7b8346098a993d7025621f64-web-1",
         "image": "excalidraw/excalidraw@sha256:f7ee194addd607bf831d2af0f0a34463dd4225e426cf35199ef0b12a803398e9",
         "state": "running",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "04b03958-46dc-4713-a64d-d259500cb375",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "8b668a7c-7b83-4609-8a99-3d7025621f64",
           "io.harbor.preview/service": "web",
           "io.harbor.preview/kind": "application",
-          "com.docker.compose.project": "hb_04b0395846dc4713a64dd259500cb375",
+          "com.docker.compose.project": "hb_8b668a7c7b8346098a993d7025621f64",
           "com.docker.compose.service": "web"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
-        "startedAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:39Z",
+        "startedAt": "2026-10-13T04:17:39Z",
         "health": "none",
         "ports": [
           {
@@ -142,26 +147,26 @@
           }
         ],
         "networkIds": [
-          "n0ba36a0aeca4ac1bd232a0b767c20f7864f99fd94e292857d6951a530001"
+          "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000050001"
         ],
-        "project": "hb_04b0395846dc4713a64dd259500cb375",
+        "project": "hb_8b668a7c7b8346098a993d7025621f64",
         "service": "web"
       },
       {
-        "id": "c965294ab6d4a9106f94a1d0c68c0502b0d2b8581949ccecbcde9be660004",
-        "name": "hb_b49ec8f4fb244cd6b7f3a51282d780d2-web-1",
+        "id": "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001d0004",
+        "name": "hb_b0dab15589cc492a9c7ae45e2a53947b-web-1",
         "image": "neosmemo/memos@sha256:71a5b4738d1bed96e92112004054f0888e92791b64eb78afd79077c96e6f9327",
         "state": "running",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "b0dab155-89cc-492a-9c7a-e45e2a53947b",
           "io.harbor.preview/service": "web",
           "io.harbor.preview/kind": "application",
-          "com.docker.compose.project": "hb_b49ec8f4fb244cd6b7f3a51282d780d2",
+          "com.docker.compose.project": "hb_b0dab15589cc492a9c7ae45e2a53947b",
           "com.docker.compose.service": "web"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
-        "startedAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
+        "startedAt": "2026-10-13T04:17:40Z",
         "health": "none",
         "ports": [
           {
@@ -171,49 +176,49 @@
           }
         ],
         "networkIds": [
-          "n8fcbdde351b9d792e2d16c00e634c94f65bdbbc5a150c2c7edc9825f0003"
+          "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001c0003"
         ],
-        "project": "hb_b49ec8f4fb244cd6b7f3a51282d780d2",
+        "project": "hb_b0dab15589cc492a9c7ae45e2a53947b",
         "service": "web"
       },
       {
-        "id": "cd08980c9343b09a18d7ce3a98064ee41d0c66d2fb8f0caa04c2a1fe70006",
-        "name": "hb_55f0ab88e8a04928aa473aa11882f244-postgres-1",
+        "id": "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001f0006",
+        "name": "hb_da8cab241e8d4a70a6fd256615d9a3b4-postgres-1",
         "image": "postgres@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
         "state": "exited",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
           "io.harbor.preview/service": "postgres",
           "io.harbor.preview/kind": "infrastructure",
-          "com.docker.compose.project": "hb_55f0ab88e8a04928aa473aa11882f244",
+          "com.docker.compose.project": "hb_da8cab241e8d4a70a6fd256615d9a3b4",
           "com.docker.compose.service": "postgres"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
-        "startedAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
+        "startedAt": "2026-10-13T04:17:40Z",
         "health": "none",
         "ports": [],
         "networkIds": [
-          "n41831bbeeb2edd0bfe72d898ffbcd98b1d98d98641d9870b6f2c9c660005"
+          "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001e0005"
         ],
-        "project": "hb_55f0ab88e8a04928aa473aa11882f244",
+        "project": "hb_da8cab241e8d4a70a6fd256615d9a3b4",
         "service": "postgres"
       },
       {
-        "id": "c08e29f1e0c806c1084bc0bb74a1d7729534ac904228e58501744931c0007",
-        "name": "hb_55f0ab88e8a04928aa473aa11882f244-web-1",
+        "id": "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000200007",
+        "name": "hb_da8cab241e8d4a70a6fd256615d9a3b4-web-1",
         "image": "n8nio/n8n@sha256:a8c95f75c6fdf65f5f2b7a7b354744eaa1c62bb911b5c00af6499c3f38e4cd32",
         "state": "exited",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
           "io.harbor.preview/service": "web",
           "io.harbor.preview/kind": "application",
-          "com.docker.compose.project": "hb_55f0ab88e8a04928aa473aa11882f244",
+          "com.docker.compose.project": "hb_da8cab241e8d4a70a6fd256615d9a3b4",
           "com.docker.compose.service": "web"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
-        "startedAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
+        "startedAt": "2026-10-13T04:17:40Z",
         "health": "none",
         "ports": [
           {
@@ -223,98 +228,98 @@
           }
         ],
         "networkIds": [
-          "n41831bbeeb2edd0bfe72d898ffbcd98b1d98d98641d9870b6f2c9c660005"
+          "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001e0005"
         ],
-        "project": "hb_55f0ab88e8a04928aa473aa11882f244",
+        "project": "hb_da8cab241e8d4a70a6fd256615d9a3b4",
         "service": "web"
       }
     ],
     "volumes": [
       {
-        "name": "hb_b49ec8f4fb244cd6b7f3a51282d780d2_data",
+        "name": "hb_b0dab15589cc492a9c7ae45e2a53947b_data",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "b0dab155-89cc-492a-9c7a-e45e2a53947b",
           "io.harbor.preview/kind": "volume",
           "io.harbor.preview/token": "fefefefefefefefefefefefe00000003",
           "io.harbor.preview/service": "data"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
         "driver": "local"
       },
       {
-        "name": "hb_55f0ab88e8a04928aa473aa11882f244_database",
+        "name": "hb_da8cab241e8d4a70a6fd256615d9a3b4_database",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
           "io.harbor.preview/kind": "volume",
           "io.harbor.preview/token": "fefefefefefefefefefefefe00000004",
           "io.harbor.preview/service": "database"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
         "driver": "local"
       },
       {
-        "name": "hb_55f0ab88e8a04928aa473aa11882f244_app-state",
+        "name": "hb_da8cab241e8d4a70a6fd256615d9a3b4_app-state",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
           "io.harbor.preview/kind": "volume",
           "io.harbor.preview/token": "fefefefefefefefefefefefe00000005",
           "io.harbor.preview/service": "app-state"
         },
-        "createdAt": "2026-10-13T04:05:32Z",
+        "createdAt": "2026-10-13T04:17:40Z",
         "driver": "local"
       }
     ],
     "networks": [
       {
-        "id": "n0ba36a0aeca4ac1bd232a0b767c20f7864f99fd94e292857d6951a530001",
-        "name": "hb_04b0395846dc4713a64dd259500cb375_default",
+        "id": "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000050001",
+        "name": "hb_8b668a7c7b8346098a993d7025621f64_default",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "04b03958-46dc-4713-a64d-d259500cb375",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "8b668a7c-7b83-4609-8a99-3d7025621f64",
           "io.harbor.preview/kind": "network",
-          "com.docker.compose.project": "hb_04b0395846dc4713a64dd259500cb375",
+          "com.docker.compose.project": "hb_8b668a7c7b8346098a993d7025621f64",
           "com.docker.compose.network": "default"
         },
         "containerIds": [
-          "c877d6cedd0299e71611070b474aa94c00b33b7d645d032ec97be65f60002"
+          "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000060002"
         ],
         "gateways": [
           "172.30.0.1"
         ]
       },
       {
-        "id": "n8fcbdde351b9d792e2d16c00e634c94f65bdbbc5a150c2c7edc9825f0003",
-        "name": "hb_b49ec8f4fb244cd6b7f3a51282d780d2_default",
+        "id": "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001c0003",
+        "name": "hb_b0dab15589cc492a9c7ae45e2a53947b_default",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "b49ec8f4-fb24-4cd6-b7f3-a51282d780d2",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "b0dab155-89cc-492a-9c7a-e45e2a53947b",
           "io.harbor.preview/kind": "network",
-          "com.docker.compose.project": "hb_b49ec8f4fb244cd6b7f3a51282d780d2",
+          "com.docker.compose.project": "hb_b0dab15589cc492a9c7ae45e2a53947b",
           "com.docker.compose.network": "default"
         },
         "containerIds": [
-          "c965294ab6d4a9106f94a1d0c68c0502b0d2b8581949ccecbcde9be660004"
+          "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001d0004"
         ],
         "gateways": [
           "172.30.1.1"
         ]
       },
       {
-        "id": "n41831bbeeb2edd0bfe72d898ffbcd98b1d98d98641d9870b6f2c9c660005",
-        "name": "hb_55f0ab88e8a04928aa473aa11882f244_default",
+        "id": "nfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001e0005",
+        "name": "hb_da8cab241e8d4a70a6fd256615d9a3b4_default",
         "labels": {
-          "io.harbor.preview/installation": "af09e948-c8d6-4b30-932c-f8c5339ac807",
-          "io.harbor.preview/instance": "55f0ab88-e8a0-4928-aa47-3aa11882f244",
+          "io.harbor.preview/installation": "a7d50e67-d6f3-4f77-8886-9baf482a35fd",
+          "io.harbor.preview/instance": "da8cab24-1e8d-4a70-a6fd-256615d9a3b4",
           "io.harbor.preview/kind": "network",
-          "com.docker.compose.project": "hb_55f0ab88e8a04928aa473aa11882f244",
+          "com.docker.compose.project": "hb_da8cab241e8d4a70a6fd256615d9a3b4",
           "com.docker.compose.network": "default"
         },
         "containerIds": [
-          "cd08980c9343b09a18d7ce3a98064ee41d0c66d2fb8f0caa04c2a1fe70006",
-          "c08e29f1e0c806c1084bc0bb74a1d7729534ac904228e58501744931c0007"
+          "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd0000001f0006",
+          "cfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfdfd000000200007"
         ],
         "gateways": [
           "172.30.2.1"

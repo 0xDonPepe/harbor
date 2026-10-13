@@ -15,9 +15,11 @@ code. When a release changes the schema, add a fixture for that release's tag in
 ## How they were made
 
 ```sh
-node scripts/make-state-fixture.mjs            # v0.22.1 and v0.19.1
-node scripts/make-state-fixture.mjs v0.25.0    # any other release tag
+node scripts/make-state-fixture.mjs v0.25.0             # a new release tag (one or more)
+node scripts/make-state-fixture.mjs v0.22.1 --force     # replace an existing fixture (new ids and keys)
 ```
+
+The script needs explicit tags and refuses a tag whose folder already exists unless `--force` is given.
 
 For each tag, the script:
 
@@ -29,7 +31,8 @@ For each tag, the script:
 3. copies `state/`, `data/` and `fixture.json` here, then removes the worktree and the scratch root
    (`/tmp/harbor-fixture-<tag>`).
 
-Nothing touches Docker, a live host or the network beyond pnpm's offline cache.
+Nothing touches Docker or a live host. `pnpm install --prefer-offline` may download packages that are missing from
+pnpm's cache.
 
 ## What the old Harbor did
 
@@ -48,12 +51,14 @@ releases did. The current daemon has to remove them (decision 165).
 
 ## Files
 
-- `state/`: the old Harbor's state directory: `harbor.db` (WAL checkpointed on close), `instances/<id>/`
+- `state/`: the old Harbor's state directory: `harbor.db` (WAL checkpointed on close; there is no `-wal` or `-shm`
+  file, and the script refuses to write one: never open these databases in place, copy them first), `instances/<id>/`
   (release copy, rendered `runtime/compose.yaml`, `secrets/`) and the wallpaper cache.
 - `data/`: the data folder holding the memos app home (`manifest.json`; `vault/` and `volumes/` are empty).
 - `fixture.json` describes the run:
   - the release version and the absolute `root` it ran under;
-  - the admin login, the fixed listen port and app port range;
+  - when it was made (`madeAt`), the admin login and the two session tokens it issued, the fixed listen port and app
+    port range;
   - the sealed homes and the instances, exposures and notification kinds the old API reported;
   - `emptyDirs`: empty folders, which git does not keep;
   - `docker`: the fake engine's containers, volumes and networks.
@@ -62,10 +67,19 @@ releases did. The current daemon has to remove them (decision 165).
 
 ## Notes for the test
 
-- **Secret values.** Every random token the old daemon drew was replaced with a visibly synthetic value
-  (`fefefe…<counter>`, through the daemon's `ids` override). That covers app secrets and session tokens, so nothing
-  here looks like a credential (AGENTS.md §3.3). Key-wrapping material and the recovery words come from the old
-  code's own randomness. They only protect this fixture.
+- **Secret values.** Nothing here was drawn at random, so nothing looks like a credential (AGENTS.md §3.3):
+  - tokens the daemon draws (app secrets, session tokens) are `fefefe…<counter>`, through the daemon's `ids` override;
+  - everything else the old code draws through `node:crypto` `randomBytes` (machine and app-home keys, salts, nonces,
+    drive ids, fake container ids, the recovery words) is `fdfdfd…<counter>`: the driver swaps `randomBytes` for that
+    stream. The recovery words come out as one word repeated twelve times (`sausage sausage …`).
+
+  Ciphertext, GCM tags and scrypt hashes are computed from those values, so they still look random. They are
+  deliberate and protect nothing; `.github/secret_scanning.yml` keeps `tests/fixtures/state/**` out of secret
+  scanning for that reason.
+- **Time.** The test sets its clock to two minutes after `madeAt`, so both old sessions are still within their
+  lifetime on any day it runs.
+- **Ports.** The app ports (47310-47349) are fixed in the state. The test checks that they are free on 127.0.0.1
+  first and names any taken port.
 - **Paths.** The state stores absolute paths (app homes, volume folders). The test copies the fixture to a
   temporary root, then replaces the generating root (`fixture.json` `root`) with its own in every text cell of
   `harbor.db` and every text file. A real upgrade keeps its paths, so this change only exists for the test.

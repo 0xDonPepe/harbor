@@ -118,6 +118,9 @@ export const MANIFEST_SCHEMA = {
           // decision 141: api = a machine-facing endpoint (an MCP gateway, a document server): it gets its
           // addresses like any other, but the console offers no Open button for it
           kind: { enum: ['web', 'api'] },
+          // decision 167 (0.32.0): isolated (default) = the LAN HTTPS relay tags and signs the endpoint's HttpOnly
+          // cookies so no other app on the machine receives them; shared = its cookies pass unchanged
+          cookies: { enum: ['isolated', 'shared'] },
         },
       },
     },

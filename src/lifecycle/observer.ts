@@ -9,6 +9,7 @@ import { exposureCheck, exposureUrl } from '../exposure/urls.js';
 import type { Manifest } from '../contracts/types.js';
 import { renderCaddyConfig } from '../exposure/caddy.js';
 import { caddyLanConsole, caddyLanHttps, caddyRoutesFromState, caddySignature } from './runner.js';
+import { httpsOnlyOn } from '../system/lan-https.js';
 import { HarborError } from '../errors.js';
 import { compareRevisions } from '../packages/store.js';
 import { sampleDisk } from '../system/metrics.js';
@@ -454,7 +455,7 @@ export class Observer {
       if (!(await this.ctx.caddy.available())) return;
       const sink: string[] = [];
       const routes = caddyRoutesFromState(this.ctx, sink);
-      await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config), lanHttps: caddyLanHttps(this.ctx) }));
+      await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config, httpsOnlyOn(this.ctx)), lanHttps: caddyLanHttps(this.ctx) }));
       this.caddyApplied = want;
       this.caddyRejected = null;
       this.ctx.log.info('caddy config reconciled', { publicRoutes: routes.length, lan: this.ctx.config.lan.enabled, lanHttps: Boolean(caddyLanHttps(this.ctx)) });

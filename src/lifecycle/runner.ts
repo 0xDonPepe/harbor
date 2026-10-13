@@ -24,7 +24,7 @@ import { retainedExposures, setRetainedExposures, toRetained } from './retained-
 import type { VolumeImport } from '../storage/fscrypt.js';
 import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type CaddyRoute } from '../exposure/caddy.js';
 import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
-import { HTTPS_SETTING, lanHttpsHosts, readTlsState } from '../system/lan-https.js';
+import { HTTPS_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState } from '../system/lan-https.js';
 import { splitOneTime } from '../state/one-time.js';
 import type { ExposureRow, PrimaryExposure } from '../state/repo.js';
 import bcrypt from 'bcryptjs';
@@ -465,7 +465,7 @@ export class OperationRunner {
     await this.ensureLinkNetworks(op, inst);
     const { consumerLinks, providerLinks } = this.linkRenderInputs(inst, pkg);
     const volumeNames = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'volume' && r.role !== '__home__').map((r) => [r.role, r.name]));
-    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: this.ctx.config.lan.enabled ? '0.0.0.0' : '127.0.0.1', provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, providerLinks });
+    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: this.ctx.config.lan.enabled && !httpsOnlyOn(this.ctx) ? '0.0.0.0' : '127.0.0.1', lanRelay: httpsOnlyOn(this.ctx), provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, providerLinks });
     const file = writeRuntimeCompose(runtimeDir, rendered.yaml);
     try {
       await this.ctx.compose.config({ projectDir: runtimeDir, projectName: identity.project, file }, 60_000);
@@ -537,7 +537,7 @@ export class OperationRunner {
   // Full Caddy reconcile from state: every public exposure becomes one route (+ the LAN console server in LAN mode).
   private async reconcileCaddy(op: OperationRow, sink: string[]): Promise<void> {
     const routes = caddyRoutesFromState(this.ctx, sink);
-    await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config) }));
+    await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config, httpsOnlyOn(this.ctx)) }));
     this.event(op, 'applying', `reconciled ${routes.length} public route(s) in Caddy`);
   }
 
@@ -2144,13 +2144,13 @@ export function caddyRoutesFromState(ctx: Ctx, sink: string[]): CaddyRoute[] {
 // A cheap fingerprint of the desired Caddy state (no hashing): the observer re-applies only when it changes.
 export function caddySignature(ctx: Ctx): string {
   const parts = ctx.repo.exposures().filter((x) => x.via === 'public' && x.state !== 'removing').map((e) => `${e.id}:${e.hostname}:${e.port}:${e.protection}`);
-  const lan = caddyLanConsole(ctx.config);
+  const lan = caddyLanConsole(ctx.config, httpsOnlyOn(ctx));
   const lanHttps = caddyLanHttps(ctx);
   return JSON.stringify({ parts: parts.sort(), lan, lanHttps });
 }
-export function caddyLanConsole(config: Ctx['config']): CaddyLanConsole | null {
+export function caddyLanConsole(config: Ctx['config'], httpsOnly = false): CaddyLanConsole | null {
   if (!config.lan.enabled) return null;
-  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port, peers: [...LAN_PEER_RANGES, ...localSubnets()] };
+  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port, peers: [...LAN_PEER_RANGES, ...localSubnets()], ...(httpsOnly ? { httpsOnly: true } : {}) };
 }
 // LAN HTTPS served through Caddy (decision 109 + Caddy-owns-443 fix): when LAN HTTPS is on and the Harbor
 // cert exists, Caddy terminates TLS for the LAN hostnames (harbor.local, <hostname>.local, the machine's

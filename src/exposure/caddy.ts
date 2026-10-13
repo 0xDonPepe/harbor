@@ -21,6 +21,7 @@ export interface CaddyLanConsole {
   hosts: string[]; // harbor.local, <hostname>.local, *.local, the machine's addresses
   consolePort: number;
   peers?: string[]; // decision 165: client ranges allowed to use the LAN names (default LAN_PEER_RANGES)
+  httpsOnly?: boolean; // decision 167: redirect to https, except the CA download and the https probe
 }
 // LAN HTTPS with Caddy installed (decision 109 + this fix): Caddy owns :443 for public hostnames, so it also
 // terminates TLS for the LAN hostnames using the Harbor-minted cert (apps.tls.certificates.load_files) and
@@ -34,6 +35,27 @@ export interface CaddyLanHttps {
   peers?: string[]; // decision 165: client ranges allowed to use the LAN names (default LAN_PEER_RANGES)
   certVersion?: string; // decision 165: a short hash of the cert, so a new cert is a new config (Caddy skips identical ones)
 }
+// Decision 167: HTTPS only on Caddy's :80 — the CA download and the https probe are still proxied (a new device
+// fetches the CA over http), every other request from a LAN peer gets a temporary redirect to the same host and
+// path over https (307 keeps the method; not 308/301, which a browser would remember after HTTPS only is off).
+export const HTTP_KEEP_PATHS = ['/v1/network/https/ca.crt', '/v1/network/https/probe'];
+function httpsOnlyLanRoutes(lan: CaddyLanConsole): Record<string, unknown>[] {
+  const match = { host: [...new Set(lan.hosts)].sort(), remote_ip: { ranges: lan.peers ?? LAN_PEER_RANGES } };
+  return [
+    {
+      '@id': 'lan-console-http-keep',
+      match: [{ ...match, method: ['GET'], path: HTTP_KEEP_PATHS }],
+      handle: [{ handler: 'reverse_proxy', upstreams: [{ dial: `127.0.0.1:${lan.consolePort}` }] }],
+      terminal: true,
+    },
+    {
+      '@id': 'lan-console',
+      match: [match],
+      handle: [{ handler: 'static_response', status_code: 307, headers: { Location: ['https://{http.request.host}{http.request.uri}'], 'Cache-Control': ['no-store'] } }],
+      terminal: true,
+    },
+  ];
+}
 export function renderCaddyConfig(routes: CaddyRoute[], opts: { adminListen?: string; email?: string | null; lan?: CaddyLanConsole | null; lanHttps?: CaddyLanHttps | null } = {}): Record<string, unknown> {
   const sorted = [...routes].sort((a, b) => a.hostname.localeCompare(b.hostname));
   const lanTag = opts.lanHttps?.certVersion ? `harbor-lan-${opts.lanHttps.certVersion}` : 'harbor-lan';
@@ -42,7 +64,7 @@ export function renderCaddyConfig(routes: CaddyRoute[], opts: { adminListen?: st
         harbor_lan: {
           '@id': `${CADDY_MARKER}-lan`,
           listen: [':80'],
-          routes: [
+          routes: opts.lan.httpsOnly ? httpsOnlyLanRoutes(opts.lan) : [
             {
               '@id': 'lan-console',
               match: [{ host: [...new Set(opts.lan.hosts)].sort(), remote_ip: { ranges: opts.lan.peers ?? LAN_PEER_RANGES } }],

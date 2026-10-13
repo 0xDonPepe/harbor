@@ -85,6 +85,25 @@ Firefox keeps its own store everywhere). Until a device trusts it, the plain-HTT
 banner pointing at the sheet; the browser's own warning page for the HTTPS address cannot be
 styled by Harbor.
 
+**Apps keep their logins to themselves (0.32.0, decision 167).** On your network every app lives at
+`harbor.local:<port>`, and browsers share cookies between ports of one name. Over the secure addresses,
+Harbor's relay renames and signs each app's login cookies (`HttpOnly` ones), so another app on this
+Harbor never receives them and cannot fake them, and it refuses a form or WebSocket sent from one app's
+page to another's. Cookies an app's own scripts read are left as they are. Limits: plain-http app
+addresses do not go through the relay (turn on *HTTPS only* below); logins made before 0.32.0 stay
+readable by other apps until the app sets them again (log out and in once); Tailscale addresses are not
+covered yet. The signing key is `<state dir>/cookie-firewall.key`: stop Harbor, delete it and start
+Harbor again to log every browser out of every app once.
+
+**HTTPS only** (Settings → Network, under Secure addresses; `harbor network https-only on|off`). Once
+every device you use trusts the certificate, this closes the plain-http doors: `http://harbor.local/`
+answers every request with a redirect to `https://` (except the certificate download and the probe, so
+a new device can still fetch the certificate), and each app answers only on its secure address. Apps
+switch when they restart: the card and the CLI name the ones that still need it. It can only be turned
+on from a page opened over https (or on the machine itself), so you cannot lock yourself out from a
+browser that never reached the https console; turning it off always works, and turning secure
+addresses off turns it off too (apps it moved then need a restart to get their plain address back).
+
 ### 2b. Manual install (bootstrap)
 
 Running `bootstrap` without `--password-stdin` on a machine that has no administrator yet leaves it in setup mode: it prints the setup code and the wizard creates the account in the browser.
@@ -880,6 +899,9 @@ disks, log tail; never secrets). File it at
   not a sandbox against anyone with Docker or root access.
 - Loopback by default; LAN mode, tailnet and public HTTPS are opt-in providers (section 6a).
   The console itself is loopback + tailnet only, never public.
+- Apps share one host name in LAN mode (`harbor.local:<port>`). The secure relay keeps their login
+  cookies apart (decision 167); plain-http addresses, Tailscale addresses and cookies an app's scripts
+  read are not isolated. *HTTPS only* closes the plain-http addresses.
 - Not included: multi-user roles/SSO, community catalogs (there is one official catalog, §4d; your own apps come as uploads or git sources).
 
 ## 9. Uninstall

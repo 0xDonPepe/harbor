@@ -24,6 +24,9 @@ export interface ProviderLink {
 export interface RenderInput {
   // LAN mode publishes app ports on every interface (0.0.0.0); default loopback only
   bindHost?: string;
+  // Decision 167: HTTPS-only — ports stay on loopback and the LAN HTTPS relay is the app's only way onto the
+  // network. Recorded in the runtime file (`x-harbor.lanAccess: relay`) so the relay knows to serve it.
+  lanRelay?: boolean;
   manifest: Manifest;
   compose: ComposeSource;
   identity: InstanceIdentity;
@@ -208,6 +211,7 @@ export function renderCompose(input: RenderInput): RenderedCompose {
   // Harbor creates link networks itself (runner); Compose only attaches to them.
   for (const n of [...linkNetworks].sort()) (model['networks'] as Record<string, unknown>)[n] = { name: n, external: true };
   if (Object.keys(volumes).length) model['volumes'] = volumes;
+  if (input.lanRelay) model['x-harbor'] = { lanAccess: 'relay' };
 
   const yaml = yamlStringify(model, { lineWidth: 0, defaultStringType: 'QUOTE_DOUBLE', defaultKeyType: 'PLAIN' });
   return { model, yaml, generatedEnv };

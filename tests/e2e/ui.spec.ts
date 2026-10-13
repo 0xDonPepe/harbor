@@ -361,6 +361,8 @@ test('network: secure addresses card is off by default and explains LAN mode', a
   // e2e runs without LAN mode: the card says so and the toggle stays disabled
   await expect(page.getByText(/LAN mode is off/)).toBeVisible();
   await expect(page.getByLabel('Secure addresses on the home network')).toBeDisabled();
+  // decision 167: the HTTPS-only switch only appears once secure addresses are on
+  await expect(page.getByRole('heading', { name: 'HTTPS only', exact: true })).toHaveCount(0);
 });
 
 test('phone width: bottom tabs navigate, tiles render in two columns, dialogs open', async ({ page }) => {

@@ -430,16 +430,16 @@ export const mockApi = {
   // trust probe (mocked trusted) and the banner can be exercised with clicks.
   networkHttps: async (): Promise<NetworkHttpsDto> => ({ ...mockSystem().network.https, breaksWhenOff: [], restartToApply: [] }),
   addressOptions: async () => ({ local: { kind: 'http' as const, host: 'homelab.local' }, tailnet: { hostname: 'homelab.tail1234.ts.net' }, domains: ['cloud.example.com'] }),
-  setNetworkHttps: async (enabled: boolean): Promise<NetworkHttpsDto> => {
+  setNetworkHttps: async (enabled: boolean, httpsOnly?: boolean): Promise<NetworkHttpsDto> => {
     await beat(150);
     return enabled
-      ? { enabled: true, url: 'https://harbor.local/', fingerprint: 'AA:BB:CC (mock)', expiresAt: new Date(Date.now() + 800 * 86400_000).toISOString(), hosts: ['harbor.local', 'homelab.local'], caLimited: false, breaksWhenOff: [], restartToApply: ['nextcloud'] }
-      : { enabled: false, url: null, fingerprint: null, expiresAt: null, hosts: [], breaksWhenOff: [], restartToApply: ['nextcloud'] };
+      ? { enabled: true, httpsOnly: httpsOnly ?? false, url: 'https://harbor.local/', fingerprint: 'AA:BB:CC (mock)', expiresAt: new Date(Date.now() + 800 * 86400_000).toISOString(), hosts: ['harbor.local', 'homelab.local'], caLimited: false, breaksWhenOff: [], restartToApply: httpsOnly === undefined ? ['nextcloud'] : [], rebindToApply: httpsOnly === undefined ? [] : ['nextcloud'] }
+      : { enabled: false, httpsOnly: false, url: null, fingerprint: null, expiresAt: null, hosts: [], breaksWhenOff: [], restartToApply: ['nextcloud'], rebindToApply: [] };
   },
   // decision 165: the toggle above mints an "older" CA so the Replace line can be clicked in design mode
   replaceLanCa: async (): Promise<NetworkHttpsDto> => {
     await beat(150);
-    return { enabled: true, url: 'https://harbor.local/', fingerprint: 'DD:EE:FF (mock)', expiresAt: new Date(Date.now() + 800 * 86400_000).toISOString(), hosts: ['harbor.local', 'homelab.local'], caLimited: true, breaksWhenOff: [], restartToApply: [] };
+    return { enabled: true, httpsOnly: false, url: 'https://harbor.local/', fingerprint: 'DD:EE:FF (mock)', expiresAt: new Date(Date.now() + 800 * 86400_000).toISOString(), hosts: ['harbor.local', 'homelab.local'], caLimited: true, breaksWhenOff: [], restartToApply: [] };
   },
   probeHttpsTrust: async (): Promise<'trusted' | 'untrusted' | 'unreachable'> => 'trusted',
   domains: async (): Promise<DomainsDto> => mockDomains(),

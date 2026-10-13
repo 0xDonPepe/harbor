@@ -194,7 +194,8 @@ const realApi = {
   // LAN HTTPS (decision 109): local CA + secure addresses, off by default.
   networkHttps: () => call<NetworkHttpsDto>('GET', '/v1/network/https'),
   addressOptions: () => call<AddressOptionsDto>('GET', '/v1/network/addresses'),
-  setNetworkHttps: (enabled: boolean) => call<NetworkHttpsDto>('PUT', '/v1/network/https', { enabled }),
+  // decision 167: httpsOnly omitted = leave HTTPS only as it is
+  setNetworkHttps: (enabled: boolean, httpsOnly?: boolean) => call<NetworkHttpsDto>('PUT', '/v1/network/https', httpsOnly === undefined ? { enabled } : { enabled, httpsOnly }),
   replaceLanCa: () => call<NetworkHttpsDto>('POST', '/v1/network/https/ca', {}),
   // The trust probe: fetch the secure console address and report whether THIS
   // browser already trusts the Harbor CA. A trusted browser gets 200 through

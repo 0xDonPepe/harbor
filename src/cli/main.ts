@@ -1195,6 +1195,24 @@ networkCmd
     const s = await client().post<{ enabled: boolean; url: string | null; fingerprint: string | null }>('/v1/network/https', { enabled: state === 'on' }, {}, 'PUT');
     out(s, () => (s.enabled ? `Secure addresses on: ${s.url}\nTrust the certificate once per device (Settings → Network shows how).` : 'Secure addresses off; plain HTTP stays.'));
   });
+// Decision 167: HTTPS only. The CLI talks to the daemon on this machine, which the lock-out guard always allows.
+networkCmd
+  .command('https-only [on|off]')
+  .description('show status (no argument) or turn HTTPS only on (plain-http console redirects to https, apps answer only on their secure address after a restart) or off')
+  .action(async (state?: string) => {
+    if (state !== undefined && state !== 'on' && state !== 'off') throw new HarborError('INVALID_REQUEST', 'expected "on" or "off"');
+    type Https = { enabled: boolean; httpsOnly: boolean; rebindToApply?: string[] };
+    const restart = (s: Https) => (s.rebindToApply?.length ? `\nRestart ${s.rebindToApply.join(', ')} to apply it (harbor restart <app>).` : '');
+    if (state === undefined) {
+      const s = await client().get<Https>('/v1/network/https');
+      out(s, () => (s.httpsOnly ? 'HTTPS only ON: plain http only hands out the certificate.' : s.enabled ? 'HTTPS only off: plain http addresses answer too. Turn on with: harbor network https-only on' : 'HTTPS only off (secure addresses are off: harbor network https on)') + restart(s));
+      return;
+    }
+    const cur = await client().get<Https>('/v1/network/https');
+    if (state === 'on' && !cur.enabled) throw new HarborError('INVALID_STATE', 'secure addresses are off', { nextAction: 'Turn them on first: harbor network https on' });
+    const s = await client().post<Https>('/v1/network/https', { enabled: cur.enabled, httpsOnly: state === 'on' }, {}, 'PUT');
+    out(s, () => (s.httpsOnly ? 'HTTPS only on: http://harbor.local now redirects to https; every device needs the certificate trusted.' : 'HTTPS only off; plain http addresses answer again.') + restart(s));
+  });
 networkCmd
   .command('replace-ca')
   .description('replace the local certificate authority with a name-limited one (every device must trust the new one)')

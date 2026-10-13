@@ -3,6 +3,7 @@ import type { TailscaleProvider } from '../exposure/tailscale.js';
 import { exposureUrl } from '../exposure/urls.js';
 import { HarborError } from '../errors.js';
 import type { InstanceRow, Repo } from '../state/repo.js';
+import { rfc3339 } from '../util.js';
 import type { Ctx } from './context.js';
 
 // Decision 174: "Give every app a Tailscale address", an opt-in policy. The observer asks it once per tick (only on a
@@ -30,8 +31,9 @@ export interface TailnetAllCandidate {
   activeOperationId: string | null;
   runtime: Runtime;
   readiness: Readiness;
-  tailnetUrl: string | null; // its tailnet address, when it has one (any endpoint)
+  tailnetUrl: string | null; // the tailnet address of its primary endpoint, when it has one
   hasPrimaryEndpoint: boolean;
+  planOpen: boolean; // a plan for it is open for review (an approve would fail if the policy changed the app first)
 }
 
 export interface TailnetAllMemory {
@@ -53,10 +55,11 @@ export function tailnetAllState(app: TailnetAllCandidate, mem: TailnetAllMemory)
   if (app.installState === 'installing') return { state: 'waiting', note: 'installing; it gets its address once it runs' };
   if (app.installState !== 'installed') return { state: 'waiting', note: `it is ${app.installState.replace('_', ' ')}; it gets its address once it runs again` };
   if (app.activeOperationId) return { state: 'waiting', note: 'another operation is running' };
+  if (app.planOpen) return { state: 'waiting', note: 'a plan for it is open for review; it gets its address once that is approved or expires' };
   if (!app.hasPrimaryEndpoint) return { state: 'waiting', note: 'it has no address to publish' };
   if (app.runtime !== 'running') return { state: 'waiting', note: 'stopped; it gets its address when it runs' };
   if (app.readiness !== 'healthy') return { state: 'waiting', note: 'not answering yet; it gets its address once it does' };
-  if (mem.attempted.has(app.id)) return { state: 'waiting', note: 'already published once since Harbor started; publish it again from its Publish dialog' };
+  if (mem.attempted.has(app.id)) return { state: 'waiting', note: 'tried once since Harbor started; publish it from its Publish dialog, or Try again' };
   return { state: 'pending', note: 'gets its address at the next check' };
 }
 
@@ -80,9 +83,15 @@ export async function tailnetReadiness(ts: TailscaleProvider): Promise<TailnetRe
     return { ready: false, reason: 'Tailscale does not answer on this machine', nextAction: 'Check `tailscale status` on the machine, then try again.' };
   }
   if (st.backendState !== 'Running' || !st.dnsName) return { ready: false, reason: 'this machine is not logged in to your tailnet', nextAction: 'Log in under Settings → Remote access (or: harbor tailscale login).' };
+  // a node that is logged in but offline would spend every app's one attempt on serves that fail
+  if (!st.online) return { ready: false, reason: 'this machine is offline on your tailnet', nextAction: 'Check its network and `tailscale status` on the machine; Harbor carries on once it is back online.' };
   if (!st.httpsEnabled) return { ready: false, reason: 'HTTPS certificates are off for your tailnet', nextAction: 'In the Tailscale admin console, under DNS, turn on MagicDNS and click Enable HTTPS, then try again.' };
   return { ready: true, hostname: st.dnsName };
 }
+
+// Submit refusals that only mean "not now" (the app got busy, changed, or Docker blinked between the check and the
+// submit): the app is not marked failed and is tried again at a later check.
+const NOT_NOW = new Set(['BUSY', 'STATE_CHANGED', 'PLAN_EXPIRED', 'DOCKER_UNAVAILABLE']);
 
 export interface TailnetAllHost {
   createPlan(req: PlanRequest, actor: string): Promise<PlanDto>;
@@ -101,32 +110,38 @@ export class TailnetAllPolicy {
   ) {}
 
   // The stored policy, without exceptions for apps that no longer exist (purged). A removed app that Harbor keeps
-  // for Reinstall keeps its exception, so Reinstall honours the operator's choice.
+  // for Reinstall keeps its exception, so Reinstall honours the operator's choice. Reading never writes (a GET has
+  // no side effects): the stored list is pruned by the observer's check and by every write.
   setting(): TailnetAllSetting {
     const s = readTailnetAll(this.ctx.repo);
     const known = new Set(this.ctx.repo.listInstances().map((i) => i.id));
-    const except = [...new Set(s.except.filter((id) => known.has(id)))];
-    if (except.length !== s.except.length) this.write({ ...s, except });
-    return { ...s, except };
+    return { ...s, except: [...new Set(s.except.filter((id) => known.has(id)))] };
   }
 
-  private write(s: TailnetAllSetting): void {
-    this.ctx.repo.setSetting(TAILNET_ALL_SETTING, s);
+  // Read-modify-write on the freshest stored value (nothing awaits in between), so a change made meanwhile by the
+  // drawer, the CLI or a withdrawal is never lost.
+  private update(fn: (s: TailnetAllSetting) => TailnetAllSetting): TailnetAllSetting {
+    const next = fn(this.setting());
+    this.ctx.repo.setSetting(TAILNET_ALL_SETTING, next);
+    return next;
   }
 
   private candidates(): { row: InstanceRow; app: TailnetAllCandidate }[] {
     const { repo } = this.ctx;
+    // plans someone is reviewing (the policy's own unsubmitted plans do not hold the app back)
+    const openFor = new Set(repo.openPlans(rfc3339(this.ctx.clock.now())).filter((p) => p.actor !== TAILNET_POLICY_ACTOR).map((p) => p.instanceId));
     const out: { row: InstanceRow; app: TailnetAllCandidate }[] = [];
     for (const row of repo.listInstances()) {
       if (row.installState === 'retained') continue;
-      const tailnet = repo.exposures(row.id).find((e) => e.via === 'tailnet');
       let primary: string | null = null;
       try {
         primary = this.host.primaryEndpointOf(row);
       } catch {
         primary = null;
       }
-      out.push({ row, app: { id: row.id, installState: row.installState, activeOperationId: row.activeOperationId, runtime: row.runtime, readiness: row.readiness, tailnetUrl: tailnet ? exposureUrl(tailnet) : null, hasPrimaryEndpoint: primary !== null && row.endpoints.some((e) => e.id === primary) } });
+      // the policy is about the address the app opens at: a tailnet address on another endpoint does not count
+      const tailnet = repo.exposures(row.id).find((e) => e.via === 'tailnet' && e.endpointId === primary);
+      out.push({ row, app: { id: row.id, installState: row.installState, activeOperationId: row.activeOperationId, runtime: row.runtime, readiness: row.readiness, tailnetUrl: tailnet ? exposureUrl(tailnet) : null, hasPrimaryEndpoint: primary !== null && row.endpoints.some((e) => e.id === primary), planOpen: openFor.has(row.id) } });
     }
     return out;
   }
@@ -135,9 +150,9 @@ export class TailnetAllPolicy {
     return { except: new Set(except), attempted: this.attempted, failed: this.failed, inFlight: new Set(this.inFlight.keys()) };
   }
 
+  // A plain read: no write, no notification (the observer's check settles finished operations).
   async status(): Promise<TailnetAllDto> {
     const s = this.setting();
-    this.collect();
     const r = await tailnetReadiness(this.ctx.tailscale);
     const mem = this.memory(s.except);
     const apps: TailnetAllAppDto[] = this.candidates().map(({ row, app }) => ({ instanceId: row.id, name: row.displayName ?? row.name, url: app.tailnetUrl, ...tailnetAllState(app, mem) }));
@@ -146,17 +161,17 @@ export class TailnetAllPolicy {
 
   // Turning it on is refused while Tailscale cannot publish anything; turning it off never withdraws an address.
   async setEnabled(enabled: boolean): Promise<TailnetAllDto> {
-    const s = this.setting();
     if (enabled) {
       const r = await tailnetReadiness(this.ctx.tailscale);
       if (!r.ready) throw new HarborError('UNSUPPORTED_CAPABILITY', `every app cannot get a Tailscale address yet: ${r.reason}`, { nextAction: r.nextAction });
-      if (!s.enabled) {
-        // a fresh start of the policy: every app gets one attempt again
-        this.attempted.clear();
-        this.failed.clear();
-      }
     }
-    this.write({ ...s, enabled });
+    const was = this.setting().enabled;
+    if (enabled && !was) {
+      // a fresh start of the policy: every app gets one attempt again
+      this.attempted.clear();
+      this.failed.clear();
+    }
+    this.update((s) => ({ ...s, enabled }));
     if (!enabled) this.resolveAll();
     this.ctx.log.info(`every-app Tailscale addresses ${enabled ? 'on' : 'off'}`, {});
     return this.status();
@@ -166,9 +181,7 @@ export class TailnetAllPolicy {
   // failed attempt, so the policy publishes it at its next check.
   async setIncluded(idOrName: string, included: boolean): Promise<TailnetAllDto> {
     const inst = this.host.instanceRow(idOrName);
-    const s = this.setting();
-    const except = included ? s.except.filter((x) => x !== inst.id) : [...new Set([...s.except, inst.id])];
-    this.write({ ...s, except });
+    this.update((s) => ({ ...s, except: included ? s.except.filter((x) => x !== inst.id) : [...new Set([...s.except, inst.id])] }));
     if (included) {
       this.attempted.delete(inst.id);
       this.failed.delete(inst.id);
@@ -178,11 +191,11 @@ export class TailnetAllPolicy {
     return this.status();
   }
 
-  // The operator withdrew an app's tailnet address while the policy is on: keep it off from now on.
+  // The operator withdrew an app's tailnet address (policy on or off): keep it off from now on, so turning the
+  // policy on later does not undo a deliberate withdrawal.
   operatorWithdrew(instanceId: string): void {
-    const s = this.setting();
-    if (!s.enabled || s.except.includes(instanceId)) return;
-    this.write({ ...s, except: [...s.except, instanceId] });
+    if (this.setting().except.includes(instanceId)) return;
+    this.update((s) => ({ ...s, except: [...new Set([...s.except, instanceId])] }));
     this.ctx.repo.addEvent({ instanceId, phase: 'policy', message: 'its Tailscale address was withdrawn by hand: the "every app gets a Tailscale address" policy leaves it off the tailnet from now on' });
   }
 
@@ -215,16 +228,26 @@ export class TailnetAllPolicy {
       if (op.state !== 'succeeded' && op.state !== 'failed' && op.state !== 'needs_action') continue;
       this.inFlight.delete(instanceId);
       const row = this.ctx.repo.instance(instanceId);
-      if (op.state === 'succeeded') this.ctx.notifier.resolve(`tailnet-all:${instanceId}`);
-      else if (row) this.fail(row, `${op.errorMessage ?? `the operation ${op.state === 'failed' ? 'failed' : 'needs attention'}`}${/[.!?]$/.test(op.errorMessage ?? '') ? '' : '.'}`);
+      // the address is recorded (a later step such as a restart hook may have failed): that is the policy's success
+      const published = row !== null && this.candidates().some((c) => c.row.id === instanceId && c.app.tailnetUrl !== null);
+      if (op.state === 'succeeded' || published) {
+        // attempts only stop failure loops: a success leaves the app free to get an address again if it loses it
+        this.attempted.delete(instanceId);
+        this.ctx.notifier.resolve(`tailnet-all:${instanceId}`);
+      } else if (row) this.fail(row, `${op.errorMessage ?? `the operation ${op.state === 'failed' ? 'failed' : 'needs attention'}`}${/[.!?]$/.test(op.errorMessage ?? '') ? '' : '.'}`);
     }
   }
 
   // Called by the observer on a tick that saw Docker. One plan at a time, and only while no other operation runs:
   // a tailnet port is picked at plan time, so two plans made together could pick the same one.
   async reconcile(): Promise<void> {
+    // the stored exceptions lose purged apps here (a read never writes)
+    if (readTailnetAll(this.ctx.repo).except.length !== this.setting().except.length) this.update((x) => x);
     const s = this.setting();
     this.collect();
+    const all = this.candidates();
+    // an app that has its address now is no failure, whoever published it
+    for (const c of all) if (c.app.tailnetUrl) this.failed.delete(c.row.id);
     // a failure notification goes when its condition does (policy off, app kept off, published or retried later)
     for (const n of this.ctx.repo.notifications({ limit: 500 })) {
       if (n.kind !== TAILNET_ALL_NOTIFICATION || !n.instanceId) continue;
@@ -232,7 +255,6 @@ export class TailnetAllPolicy {
     }
     if (!s.enabled || this.inFlight.size) return;
     if (this.ctx.repo.listInstances().some((i) => i.activeOperationId)) return;
-    const all = this.candidates();
     const next = tailnetAllCandidates(
       all.map((c) => c.app),
       this.memory(s.except),
@@ -243,10 +265,23 @@ export class TailnetAllPolicy {
     this.attempted.add(row.id);
     try {
       const plan = await this.host.createPlan({ kind: 'expose', instanceId: row.id, via: 'tailnet', makePrimary: false }, TAILNET_POLICY_ACTOR);
+      // planning awaited tailscale and Docker: the operator may have turned the policy off or kept this app off
+      // meanwhile. Then the plan is simply never submitted (it expires).
+      const now = this.setting();
+      if (!now.enabled || now.except.includes(row.id)) {
+        this.attempted.delete(row.id);
+        return;
+      }
       const r = this.host.submit(plan.id, this.ctx.ids.uuid(), TAILNET_POLICY_ACTOR);
       this.inFlight.set(row.id, r.operation.id);
       this.ctx.log.info(`tailnet-policy publishes ${row.name} on the tailnet`, { instanceId: row.id, operationId: r.operation.id });
     } catch (e) {
+      if (e instanceof HarborError && NOT_NOW.has(e.code)) {
+        // a passing race, not a verdict on the app: try it again at a later check
+        this.attempted.delete(row.id);
+        this.ctx.log.info(`tailnet-policy will publish ${row.name} later: ${e.message}`, { instanceId: row.id });
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       this.fail(row, `${msg}${/[.!?]$/.test(msg) ? '' : '.'}`);
     }

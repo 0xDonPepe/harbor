@@ -68,7 +68,11 @@ export class OperationRunner {
         repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'needs_action', message: 'daemon restarted while the operation was in flight' });
         const inst = repo.instance(op.instanceId);
         if (inst) {
-          repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id, installState: 'needs_action', runtime: 'unknown', readiness: 'unknown' });
+          // An address change (expose, unexpose, reconfigure) keeps the app's state, as when it fails (decision 174:
+          // a background tailnet publish cut short by a restart must not leave the app to repair). The operation
+          // itself still says needs_action and is never replayed; the exposure checks settle its address row.
+          const keep = op.kind === 'expose' || op.kind === 'unexpose' || op.kind === 'reconfigure';
+          repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id, installState: keep ? inst.installState : 'needs_action', runtime: 'unknown', readiness: 'unknown' });
           repo.bumpGeneration(inst.id);
         }
       });
@@ -635,10 +639,14 @@ export class OperationRunner {
       // Decision 118: the operator's proxy terminates TLS and forwards here; Harbor runs nothing for it.
       this.event(op, 'publishing', `your proxy at ${x.proxyFrom} forwards https://${x.hostname}/ to this machine's port ${alloc.hostPort}`);
     } else if (x.via === 'tailnet') {
+      const target = `http://127.0.0.1:${alloc.hostPort}`;
       try {
-        await this.ctx.tailscale.serve(x.port, `http://127.0.0.1:${alloc.hostPort}`);
+        await this.ctx.tailscale.serve(x.port, target);
       } catch (e) {
-        // nothing serves it: no record either, or the app would look published (decision 174 reads that record)
+        // nothing serves it: no record either, or the app would look published (decision 174 reads that record).
+        // A serve that failed after it wrote its config (a timeout, a late non-zero exit) would leave an entry
+        // Harbor no longer knows: take it down first (best effort; "not found" is the usual answer).
+        await this.ctx.tailscale.unserve(x.port, target).catch((u: Error) => this.ctx.log.warn(`tailscale serve off after a failed serve: ${u.message}`, { instanceId: inst.id }));
         repo.deleteExposure(exposureId);
         throw e;
       }

@@ -1201,16 +1201,17 @@ function everyAppText(p: TailnetAllDto): string {
 }
 tailscaleCmd
   .command('every-app [on|off]')
-  .description('show (no argument) or turn on/off "every app gets a Tailscale address"; --except <app> on|off keeps one app off the tailnet (on) or lets the policy publish it again (off)')
-  .option('--except <app>', 'the app whose exception to set (on = keep it off the tailnet; its current address stays until you withdraw it)')
-  .action(async (state: string | undefined, opts: { except?: string }) => {
+  .description('show (no argument) or turn on/off "every app gets a Tailscale address"; with --app <app>, on/off is that app\'s own "On Tailscale" switch')
+  .option('--app <app>', 'one app\'s switch: off = keep it off the tailnet (an address it has stays until you withdraw it), on = let Harbor publish it again')
+  .option('--yes', 'turn it on without the question (the apps that get an address are still listed)', false)
+  .action(async (state: string | undefined, opts: { app?: string; yes: boolean }) => {
     if (state !== undefined && state !== 'on' && state !== 'off') throw new HarborError('INVALID_REQUEST', 'expected "on" or "off"');
     const api = client();
-    if (opts.except) {
-      if (state === undefined) throw new HarborError('INVALID_REQUEST', 'say on (keep it off the tailnet) or off (let the policy publish it)', { nextAction: `harbor tailscale every-app --except ${opts.except} on` });
-      const inst = await resolveInstance(api, opts.except);
-      const p = await api.post<TailnetAllDto>(`/v1/instances/${inst.id}/tailnet-all`, { included: state === 'off' }, {}, 'PUT');
-      out(p, () => (state === 'on' ? `${inst.name} stays off the tailnet.${inst.endpoints.some((e) => e.urls.tailnet) ? ` It keeps its current address until you withdraw it: harbor unexpose ${inst.name} --via tailnet` : ''}` : `${inst.name} is on Tailscale again: it gets its address at the next check.`) + '\n' + everyAppText(p));
+    if (opts.app) {
+      if (state === undefined) throw new HarborError('INVALID_REQUEST', 'say on (Harbor may give it an address) or off (keep it off the tailnet)', { nextAction: `harbor tailscale every-app --app ${opts.app} off` });
+      const inst = await resolveInstance(api, opts.app);
+      const p = await api.post<TailnetAllDto>(`/v1/instances/${inst.id}/tailnet-all`, { included: state === 'on' }, {}, 'PUT');
+      out(p, () => (state === 'off' ? `${inst.name} stays off the tailnet.${inst.endpoints.some((e) => e.urls.tailnet) ? ` It keeps its current address until you withdraw it: harbor unexpose ${inst.name} --via tailnet` : ''}` : `${inst.name} is on Tailscale again: it gets its address at the next check${p.enabled ? '' : ' once every-app is on'}.`) + '\n' + everyAppText(p));
       return;
     }
     if (state === undefined) {
@@ -1218,8 +1219,26 @@ tailscaleCmd
       out(p, () => everyAppText(p));
       return;
     }
+    if (state === 'on') {
+      // the console's review, in the terminal: what gets an address, then a yes (--yes skips the question only)
+      const before = await api.get<TailnetAllDto>('/v1/exposures/tailnet-all');
+      if (!before.enabled) {
+        const toGet = before.apps.filter((a) => a.state !== 'published' && a.state !== 'excluded').map((a) => a.name);
+        const keptOff = before.apps.filter((a) => a.state === 'excluded').map((a) => a.name);
+        const review = [
+          'Every app gets an address on your tailnet: any device on your tailnet can reach it.',
+          toGet.length ? `These apps get one, one at a time: ${toGet.join(', ')}.` : 'Every app already has one.',
+          ...(keptOff.length ? [`Kept off: ${keptOff.join(', ')} (harbor tailscale every-app --app <app> on includes one).`] : []),
+          'New installs get theirs once they run, before you have created their account: create it right away.',
+          "They share this machine's one tailnet name, so your browser shares their cookies between them.",
+          'Turning this off later never withdraws an address.',
+        ];
+        if (!globals().json) process.stderr.write(review.join('\n') + '\n');
+        if (!opts.yes && !(await confirm('Give every app a Tailscale address?'))) throw new HarborError('INVALID_REQUEST', 'not turned on', { nextAction: 'Re-run with --yes to turn it on non-interactively.' });
+      }
+    }
     const p = await api.post<TailnetAllDto>('/v1/exposures/tailnet-all', { enabled: state === 'on' }, {}, 'PUT');
-    out(p, () => (state === 'on' ? 'Every app gets an address on your tailnet: any device on your tailnet can reach it. Harbor publishes them one at a time.\n' : 'Turned off. Apps keep the addresses they have; withdraw one with: harbor unexpose <app> --via tailnet\n') + everyAppText(p));
+    out(p, () => (state === 'on' ? 'Every app on Tailscale is on. Harbor publishes them one at a time.\n' : 'Turned off. Apps keep the addresses they have; withdraw one with: harbor unexpose <app> --via tailnet\n') + everyAppText(p));
   });
 
 // --- network: secure addresses on the home network (Settings → Network, from the terminal)

@@ -691,6 +691,11 @@ export class Repo {
     const r = this.db.prepare('SELECT * FROM plans WHERE id = ?').get(id) as Raw | undefined;
     return r ? planFrom(r) : null;
   }
+  // Plans still open for review: not submitted, not expired (decision 174: their tailnet ports are reserved,
+  // and the every-app Tailscale policy leaves an app alone while one of its plans is open).
+  openPlans(nowIso: string): PlanRow[] {
+    return (this.db.prepare('SELECT * FROM plans WHERE consumed_operation_id IS NULL AND expires_at > ? ORDER BY created_at').all(nowIso) as Raw[]).map(planFrom);
+  }
   consumePlan(id: string, operationId: string): void {
     this.db.prepare('UPDATE plans SET consumed_operation_id = ? WHERE id = ?').run(operationId, id);
   }

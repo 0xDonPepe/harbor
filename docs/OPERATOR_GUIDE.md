@@ -913,28 +913,40 @@ Tailscale** gives every app its own tailnet address instead (decision 174):
 
 - **Turning it on** shows the apps that will get an address and asks first ("any device on your tailnet
   can reach it"). It is refused, with the step to take, while Tailscale is not ready (not installed, not
-  logged in, or HTTPS certificates off in the Tailscale admin console).
+  logged in, offline, or HTTPS certificates off in the Tailscale admin console).
+- **Know what it shares**: every app's address uses this machine's one tailnet name (one port each), so
+  your browser shares the apps' cookies between them. The cookie firewall that keeps apps apart on secure
+  home addresses (`https://harbor.local:<port>`) does not cover tailnet addresses. Publish only apps you
+  trust side by side, or keep the others off (below).
 - Harbor then publishes each app without a tailnet address, **one at a time**, each through its own
   ordinary *Publish* operation (you see them in the tray; the actor is `tailnet-policy`). Only an app that
   is running and answering gets one; a stopped, busy, installing or broken app gets its address once it
-  runs again. Nothing is planned while another operation runs. The main address of an app does not change.
-- **New installs**: the install review says the app also gets a Tailscale address once it runs.
-- **Keep one app off**: switch **On Tailscale** off in its drawer (under its addresses). That only stops
-  Harbor from giving it an address; an address it already has stays until you withdraw it with
-  *Publish… → Withdraw*. Withdrawing an app's tailnet address by hand while the policy is on also keeps
-  that app off from then on (the review says so). Switch it back on to let Harbor publish it again.
+  runs again. Nothing is planned while another operation runs, and an app is left alone while one of its
+  plans is open for review (so approving it still works). The main address of an app does not change.
+- **New installs**: the install review says the app also gets a Tailscale address once it runs. For an
+  app whose first visitor creates the owner account (or that ships a default login), the review warns
+  that this page is reachable from your tailnet as soon as it runs: create the account right after
+  install, or switch it off in its drawer while it installs.
+- **Keep one app off**: switch **On Tailscale** off in its drawer (under its addresses; shown whenever
+  Tailscale is ready, so you can keep an app off before turning the policy on). That only stops Harbor
+  from giving it an address; an address it already has stays until you withdraw it with
+  *Publish… → Withdraw*. Withdrawing an app's main tailnet address by hand, with the policy on or off,
+  also keeps that app off from then on (the review says so). Switch it back on to let Harbor publish it
+  again.
 - **If one fails** (no free port, Tailscale refused it), Harbor tries **once per start** of Harbor, shows
   it as *failed* in Remote access with the reason, and leaves one notification for that app. *Try again*
-  in Remote access retries right away.
+  in Remote access lets Harbor try once more at its next check (within seconds, once no other operation
+  runs). A refusal that only meant "not now" (the app got busy at that moment) is not a failure: Harbor
+  simply tries later.
 - **Turning it off** never withdraws an address: every app keeps the one it has; withdraw them one by one.
 - Every kind of app counts, API-only ones too (a script on your laptop can use the address as well).
 - Uninstalled apps leave the list of apps kept off; a removed app you may reinstall keeps its choice.
 
 ```sh
 harbor tailscale every-app                          # on/off, waiting reason, where each app stands
-harbor tailscale every-app on                       # every app gets a tailnet address
-harbor tailscale every-app --except nextcloud on    # keep this app off the tailnet (its current address stays)
-harbor tailscale every-app --except nextcloud off   # let Harbor publish it again
+harbor tailscale every-app on                       # lists the apps that get one, asks, then turns it on (--yes skips the question)
+harbor tailscale every-app --app nextcloud off      # keep this app off the tailnet (its current address stays)
+harbor tailscale every-app --app nextcloud on       # let Harbor publish it again
 harbor tailscale every-app off                      # stop; nothing is withdrawn
 ```
 

@@ -1847,6 +1847,8 @@ export class ApplicationService {
           // a passphrase of its own is the one way the data can be lost for good: that stays a warning
           ...(location && !location.defaultKey ? ['Lose both its passphrase and your Harbor recovery key and the data is gone.'] : []),
           ...(location ? [] : [NOT_ENCRYPTED_WARNING]),
+          // decision 174: the policy publishes it as soon as it answers, before anyone has created its account
+          ...(tailnetNote && mainExposure?.via !== 'tailnet' && (pkg.manifest.setup || pkg.manifest.defaultCredentials) ? [`Every app on Tailscale is on: ${pkg.manifest.metadata.name}'s ${pkg.manifest.setup ? 'first-run page (the first visitor creates the account)' : 'default login'} is reachable from every device on your tailnet once it runs. ${pkg.manifest.setup ? 'Create its account' : 'Change that login'} right after install, or switch its On Tailscale off in its drawer while it installs.`] : []),
         ],
         // decision 157: the plain facts (how it opens, what happens next) read as notes, not amber warnings
         notes: [
@@ -2543,7 +2545,10 @@ export class ApplicationService {
       }
       if (e.protection === 'basic') base.changes.push('Retain the generated basic-auth credentials (instance secret) for a later re-exposure');
       // decision 174: withdrawing it by hand keeps the every-app policy from publishing it again
-      if (e.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR && this.tailnetAll.setting().enabled) base.notes = ['Every app gets a Tailscale address is on: withdrawing this one keeps it off the tailnet from now on (turn its "On Tailscale" switch back on in its drawer to undo).'];
+      // (on or off: a withdrawal by hand is remembered, so turning the policy on later does not undo it)
+      if (e.via === 'tailnet' && endpointId === meta.primaryEndpoint && actor !== TAILNET_POLICY_ACTOR) {
+        base.notes = [this.tailnetAll.setting().enabled ? 'Every app on Tailscale is on: withdrawing this one keeps it off the tailnet from now on (turn its "On Tailscale" switch back on in its drawer to undo).' : 'Withdrawing it by hand also keeps it off the tailnet if you turn on Every app on Tailscale later (its "On Tailscale" switch in its drawer undoes that).'];
+      }
       const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'unexpose', instanceId: inst.id, proposal: base, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
       repo.insertPlan(plan);
       return this.plan(plan.id);
@@ -2586,7 +2591,9 @@ export class ApplicationService {
   // with any listener on it right now (the probe also sees wildcard 0.0.0.0 listeners).
   async tailnetPort(reserved: number[] = []): Promise<number> {
     const { repo, docker, ports, config } = this.ctx;
-    const taken = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...reserved]);
+    // decision 174: also the ports of plans still open for review (a tailnet address or an install's app ports),
+    // or a background plan (the every-app policy) could take the number a reviewed plan was shown
+    const taken = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...this.openPlanPorts(true), ...reserved]);
     try {
       for (const p of await docker.publishedHostPorts()) taken.add(p);
     } catch (e) {
@@ -2599,10 +2606,22 @@ export class ApplicationService {
     throw new HarborError('PORT_CONFLICT', `no free port left in ${config.appPortRange.from}-${config.appPortRange.to} for a tailnet address`, { nextAction: 'Withdraw an address or remove an app you no longer use, then try again.' });
   }
 
+  // Ports held by plans still open for review: their tailnet address (decision 133), plus, with endpoints, the app
+  // ports an install plan allocated (not claimed until it is submitted).
+  private openPlanPorts(endpoints: boolean): number[] {
+    const out: number[] = [];
+    for (const p of this.ctx.repo.openPlans(rfc3339(this.ctx.clock.now()))) {
+      if (p.proposal.exposure?.via === 'tailnet') out.push(p.proposal.exposure.port);
+      if (endpoints && p.kind === 'install') out.push(...(p.proposal.endpoints ?? []).map((e) => e.hostPort));
+    }
+    return out;
+  }
+
   private async allocatePorts(pkg: LoadedPackage, alsoUnavailable: Set<number> = new Set()) {
     const { repo, docker, ports, config } = this.ctx;
-    // tailnet addresses hold their own ports (decision 133): an app port there would clash again
-    const unavailable = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...alsoUnavailable]);
+    // tailnet addresses hold their own ports (decision 133): an app port there would clash again (so do the
+    // tailnet ports of plans still open for review, decision 174)
+    const unavailable = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...this.openPlanPorts(false), ...alsoUnavailable]);
     try {
       for (const p of await docker.publishedHostPorts()) unavailable.add(p);
     } catch (e) {
@@ -2801,9 +2820,18 @@ export class ApplicationService {
     });
     if (result.created && checked) this.operatorValues.set(planId, checked);
     if (result.created) {
-      // decision 174: the operator withdrew a tailnet address while every app gets one: that app stays off
+      // decision 174: the operator withdrew an app's tailnet address: the every-app policy leaves it off (now or later)
       const plan = repo.plan(planId);
-      if (plan?.kind === 'unexpose' && plan.proposal.exposure?.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR) this.tailnetAll.operatorWithdrew(plan.instanceId);
+      if (plan?.kind === 'unexpose' && plan.proposal.exposure?.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR) {
+        const inst = repo.instance(plan.instanceId);
+        let primary: string | null;
+        try {
+          primary = inst ? this.primaryEndpointOf(inst) : null;
+        } catch {
+          primary = null;
+        }
+        if (plan.proposal.exposure.endpointId === primary) this.tailnetAll.operatorWithdrew(plan.instanceId);
+      }
     }
     if (result.created) this.wake();
     return result;

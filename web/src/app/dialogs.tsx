@@ -1418,7 +1418,8 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
   useEffect(() => setAutoUpdate(inst.autoUpdate), [inst.id, inst.autoUpdate]);
   const [hiddenFromHome, setHiddenFromHome] = useState(inst.hiddenFromHome);
   useEffect(() => setHiddenFromHome(inst.hiddenFromHome), [inst.id, inst.hiddenFromHome]);
-  // decision 174: the app's switch of "every app gets a Tailscale address" (shown only while that policy is on)
+  // decision 174: the app's switch of "every app gets a Tailscale address" (shown while the policy is on, and while
+  // Tailscale is ready with it off, so an app can be kept off before the policy is turned on)
   const [tailnetAll, setTailnetAll] = useState<TailnetAllDto | null>(null);
   useEffect(() => {
     let live = true;
@@ -1693,7 +1694,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
                 </li>
               ))}
           </ul>
-          {tailnetAll?.enabled && (
+          {tailnetAll && (tailnetAll.enabled || !tailnetAll.reason) && (
             <label className="row auto-upd">
               <input
                 type="checkbox"
@@ -1706,8 +1707,8 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
                 aria-label={`${inst.name} on Tailscale`}
               />
               <span className="muted small">
-                On Tailscale: every app gets an address on your tailnet (Settings → Remote access).{' '}
-                {tailnetAll.except.includes(inst.id) ? (primary.urls.tailnet ? 'Kept off from now on; its current address stays until you withdraw it with Publish….' : 'Kept off: Harbor does not give it an address.') : primary.urls.tailnet ? 'Switch off to keep it off from now on (its current address stays until you withdraw it).' : 'It gets its address while it runs.'}
+                On Tailscale: {tailnetAll.enabled ? 'every app gets an address on your tailnet' : 'whether it gets an address if you turn on Every app on Tailscale'} (Settings → Remote access).{' '}
+                {tailnetAll.except.includes(inst.id) ? (primary.urls.tailnet ? 'Kept off from now on; its current address stays until you withdraw it with Publish….' : 'Kept off: Harbor does not give it an address.') : primary.urls.tailnet ? 'Switch off to keep it off from now on (its current address stays until you withdraw it).' : tailnetAll.enabled ? 'It gets its address while it runs.' : 'It would get one.'}
               </span>
             </label>
           )}

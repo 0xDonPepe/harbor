@@ -238,9 +238,13 @@ export class FakeTailscale implements TailscaleProvider {
   async serveEntries(): Promise<ServeEntry[]> {
     return [...this.entries];
   }
+  // tests: make serve fail before it changes anything, or after it wrote its entry (a real CLI that timed out late)
+  serveFails: 'before' | 'after-apply' | null = null;
   async serve(port: number, target: string): Promise<void> {
     if (!this.statusValue?.online) throw new HarborError('OPERATION_FAILED', 'tailscale serve failed: not logged in');
+    if (this.serveFails === 'before') throw new HarborError('OPERATION_FAILED', 'tailscale serve failed: test refusal');
     this.entries = this.entries.filter((e) => e.port !== port).concat([{ port, target }]);
+    if (this.serveFails === 'after-apply') throw new HarborError('OPERATION_FAILED', 'tailscale serve failed: timed out after 60 s');
   }
   async unserve(port: number): Promise<void> {
     this.entries = this.entries.filter((e) => e.port !== port);

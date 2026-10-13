@@ -1173,8 +1173,13 @@ function EveryAppOnTailscale({ c }: { c: Console }) {
           ) : (
             <p className="muted small">Every app already has one.</p>
           )}
-          {keptOff.length > 0 && <p className="muted small">Kept off: {keptOff.map((a) => a.name).join(', ')}.</p>}
-          <p className="muted small">New installs get theirs once they run. Their main address does not change. Turning this off later never withdraws an address.</p>
+          {keptOff.length > 0 && (
+            <p className="muted small">
+              Kept off (you withdrew their address, or switched them off in their drawer): {keptOff.map((a) => a.name).join(', ')}. Switch one back on in its drawer to include it.
+            </p>
+          )}
+          <p className="muted small">New installs get theirs once they run, before you have created their account: create it right away. Their main address does not change. Turning this off later never withdraws an address.</p>
+          <p className="muted small">All of them share your machine's one tailnet name (one port each), so your browser shares their cookies between them: Harbor's cookie firewall for secure home addresses does not cover tailnet addresses.</p>
           <div className="row end">
             <button className="btn" onClick={() => setConfirm(false)}>
               Cancel

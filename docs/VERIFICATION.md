@@ -741,8 +741,17 @@ real browsers, HTTPS only through Caddy, SFTP/SMTP against real servers, an old 
 | Auto-update gate (176) | integration `auto-update-backup.test.ts`: a failed backup holds the update (notice, not marked tried, no "update available" row); with a working place: backup first, then the update, `app-updated` notice, `updates.autoTried` stored; `auto-updates.test.ts` keeps rollback-not-retried and gains the notices |
 
 Gate: lint, typecheck, unit 491 (+2 skipped), integration 288 + 3 skipped, e2e 38, catalog verify/hash, openapi current.
-**Not verified yet:** `updates.yml` on GitHub (it needs this Harbor release first: it runs the latest release's
-scripts), a smoke run on an x86-64 runner, Immich and Open WebUI through it, an automatic update on a box.
+**On GitHub, after the 0.33.0 release** (harbor-apps `updates.yml`, dry runs: find + try, nothing landed), on
+`ubuntu-24.04` runners (Ubuntu 24.04.5 LTS x86_64, Docker 28.0.4):
+
+| Run | App | Result |
+|---|---|---|
+| 38426325250 | Open WebUI 0.11.3 → 0.12.0 (major; ollama 0.34.0 → 0.34.4) | **passed**: install rev 2 healthy after 102 s; update healthy after 101 s, no rollback; fresh install healthy after 32 s; each still healthy 60 s later |
+| 38426325250 | Immich 3.2.1 → 3.3.1 (minor) | failed before Immich ran: ghcr.io answered `toomanyrequests` to Harbor's pull of four images → the try job now pulls each image by digest with retries (logged in to ghcr.io with the job's read-only token) |
+| 38427932336 | Immich 3.2.1 → 3.3.1 (minor; database held) | **passed**: install healthy after 37 s; update healthy after 38 s, no rollback; fresh install healthy after 37 s; each still healthy 60 s later |
+
+The first dispatch (38426002364) found a jq scope bug in the find job; fixed in harbor-apps before these runs.
+**Not verified yet:** a non-dry run (land: commit, PR, issue, catalog dispatch on GitHub), an automatic update on a box.
 
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed

@@ -454,7 +454,8 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Decision 176: automatic updates back the app up first (when its backups are on), remember tried revisions across restarts, notify `app-updated` / `auto-update-held`
 - [x] Tests: unit 491 (+2 skipped), integration 288 + 3 skipped, e2e 38; land job run locally against a throwaway clone (stub `gh`)
 - [x] Real Docker (Docker Desktop, dev loop): FreshRSS 1.30.0 → 1.30.1 smoke passed (upgrade + fresh); a broken update was caught (rollback, events, logs)
-- [ ] First `updates.yml` run on GitHub (needs this Harbor release first); Open WebUI 0.12.0 + Immich 3.3.1 through it
+- [x] 0.33.0 released; `updates.yml` dry runs on x86-64 runners: Open WebUI 0.11.3 → 0.12.0 and Immich 3.2.1 → 3.3.1 passed (install, update with data, fresh)
+- [ ] First landing run (commit + catalog publish, PR, issue) on GitHub; an automatic update on a box
 
 - [x] Decision 167: cookie firewall in the LAN HTTPS relay (HttpOnly cookies renamed + signed per app, others stripped, cross-app POST/WebSocket refused, `endpoints.<id>.cookies`), HTTPS only switch
 - [x] Decision 168: Ed25519 signatures on releases (`SHA256SUMS.sig`) and the catalog (`catalog.json.sig`), install.sh/self-update/catalog refuse unsigned, no downgrades, catalog fetched by tag; harbor-apps branch `signing`

@@ -3,7 +3,7 @@ import { appUrlFrom, type EndpointUrls } from './app-url';
 import { copiesOf, copyName, storeAction } from './copies';
 import type { CatalogItemDto, FolderListingDto, HostStorageDto, InstanceSummary, OperationDto } from '../../../src/contracts/api';
 import { api } from '../api';
-import { fmtBytes, fmtTime, fmtVersion, monogram, plainStatus } from './format';
+import { fmtBytes, fmtTime, fmtVersion, monogram, plainStatus, updateLine } from './format';
 
 export { copiesOf, copyName };
 
@@ -106,25 +106,36 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
 
 // Decision 170: once an app is installed the card opens it (the first copy) instead of offering a dead or
 // surprising Install; an app that allows copies also offers "Add another copy…" (another label and style).
-export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, disabled }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; disabled: boolean }) {
+// An installed copy with a newer revision waiting: the Store card's primary action becomes Update (Open stays next to it).
+export function outdatedCopy(copies: InstanceSummary[]): InstanceSummary | null {
+  return copies.find((i) => i.updateAvailable && i.installState === 'installed') ?? null;
+}
+
+export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, onUpdate, disabled }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; onUpdate: (i: InstanceSummary) => void; disabled: boolean }) {
   const installed = copies.length;
   const action = storeAction(item, [...copies, ...removed]);
   const addCopy = action === 'open-or-copy';
+  const outdated = outdatedCopy(copies);
   return (
-    <li className={`tile store ${addCopy ? 'two-actions' : ''}`}>
+    <li className={`tile store ${addCopy || outdated ? 'two-actions' : ''}`}>
       <button className="tile-main" onClick={onOpen} aria-label={`About ${item.name}`}>
         <AppIcon packageId={item.id} icon={item.presentation.icon} name={item.name} size={56} />
         <div>
           <h3>{item.name}</h3>
           <p className="muted small">{item.presentation.tagline ?? item.description}</p>
           <p className="row wrap badges">
-            {installed > 0 && <Pill tone="ok">{installed === 1 ? 'Installed' : `${installed} installed`}</Pill>}
+            {installed > 0 && !outdated && <Pill tone="ok">{installed === 1 ? 'Installed' : `${installed} installed`}</Pill>}
+            {outdated && <Pill tone="info">Update available</Pill>}
             {installed === 0 && removed.length > 0 && <Pill tone="muted">Removed · data kept</Pill>}
             {item.origin === 'local' && <Pill tone="info">Your app</Pill>}
-            {item.version && (
-              <span className="muted small store-ver" title={`App version ${item.version} · Harbor package revision ${item.revision}`}>
-                {fmtVersion(item.version)}
-              </span>
+            {outdated ? (
+              <span className="muted small store-ver">{updateLine(outdated, outdated.updateAvailable!)}</span>
+            ) : (
+              item.version && (
+                <span className="muted small store-ver" title={`App version ${item.version} · Harbor package revision ${item.revision}`}>
+                  {fmtVersion(item.version)}
+                </span>
+              )
             )}
             {item.qualification !== 'passed' && item.availability === 'available' && (
               <Pill tone={item.qualification === 'blocked' ? 'warn' : 'muted'}>{item.qualification === 'blocked' ? 'Live check failed' : 'Not yet live-checked'}</Pill>
@@ -134,12 +145,13 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
       </button>
       {installed > 0 ? (
         <div className="row wrap store-actions">
-          {addCopy && (
+          {addCopy && !outdated && (
             <button className="btn" disabled={disabled} onClick={onAddCopy} aria-label={`Add another copy of ${item.name}`}>
               Add another copy…
             </button>
           )}
-          <OpenCopy inst={copies[0]!} name={item.name} onManage={onManage} />
+          <OpenCopy inst={copies[0]!} name={item.name} onManage={onManage} primary={!outdated} />
+          {outdated && <UpdateButton inst={outdated} copies={copies} onUpdate={onUpdate} disabled={disabled} />}
         </div>
       ) : action === 'unavailable' ? (
         <Pill tone="bad">Unavailable</Pill>
@@ -159,16 +171,27 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
 
 // "Open" for an installed copy: its address in a new tab when it is running, else its page in Harbor
 // (where Start, Unlock or Repair live), so the button never does nothing.
-export function OpenCopy({ inst, name, onManage }: { inst: InstanceSummary; name: string; onManage: (i: InstanceSummary) => void }) {
+// One copy's update, from the Store card or the app's Store page (the same review as the app page's Update).
+export function UpdateButton({ inst, copies, onUpdate, disabled }: { inst: InstanceSummary; copies: InstanceSummary[]; onUpdate: (i: InstanceSummary) => void; disabled: boolean }) {
+  // the copy's name only when several copies wait for an update (the review names the copy either way)
+  const label = copies.filter((c) => c.updateAvailable && c.installState === 'installed').length > 1 ? `Update ${inst.displayName ?? inst.name}` : 'Update';
+  return (
+    <button className="btn primary" disabled={disabled} onClick={() => onUpdate(inst)} aria-label={`Update ${inst.name}`} title={updateLine(inst, inst.updateAvailable!)}>
+      {label}
+    </button>
+  );
+}
+
+export function OpenCopy({ inst, name, onManage, primary = true }: { inst: InstanceSummary; name: string; onManage: (i: InstanceSummary) => void; primary?: boolean }) {
   const url = openUrl(inst);
   if (url && inst.installState === 'installed' && inst.runtime === 'running')
     return (
-      <a className="btn primary" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${name}`}>
+      <a className={`btn ${primary ? 'primary' : ''}`} href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${name}`}>
         Open
       </a>
     );
   return (
-    <button className="btn primary" onClick={() => onManage(inst)} aria-label={`Open ${name}`} title={`${appLabel(inst)} is not running; its page shows why`}>
+    <button className={`btn ${primary ? 'primary' : ''}`} onClick={() => onManage(inst)} aria-label={`Open ${name}`} title={`${appLabel(inst)} is not running; its page shows why`}>
       Open
     </button>
   );

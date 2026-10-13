@@ -928,6 +928,12 @@ ${notes ? `  releaseNotes: ${JSON.stringify(notes)}\n` : ''}`;
   await expect(dlg2).toContainText('replaces revision 1');
   await expect(dlg2).toContainText('Updates available for hello-e2e');
   await dlg2.getByRole('button', { name: 'Done' }).click();
+  // the Store card leads with Update (Open stays next to it) and says which versions
+  const card2 = page.locator('.tile.store').filter({ hasText: 'Hello E2E' });
+  await expect(card2).toContainText('Update available');
+  await expect(card2.locator('.store-ver')).toHaveText('v1.1 → v1.2');
+  await expect(card2.getByRole('button', { name: 'Update hello-e2e', exact: true })).toBeEnabled();
+  await expect(card2.getByRole('link', { name: 'Open Hello E2E', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Home' }).click();
   await expect(page.getByRole('heading', { name: '1 update available' })).toBeVisible();
   await expect(tile.getByLabel('Update available for hello-e2e')).toBeVisible();

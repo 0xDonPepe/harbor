@@ -3,7 +3,7 @@ import type { DomainsDto, HostStorageDto, InstallCandidateDto, TailnetAllDto } f
 import type { AddressOptionsDto, CatalogItemDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageImportResultDto, PlanDto, PlatformToolDto } from '../../../src/contracts/api';
 import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
-import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, appLabel, copiesOf, endpointUrlHere, openUrl } from './components';
+import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, UpdateButton, appLabel, copiesOf, endpointUrlHere, openUrl, outdatedCopy } from './components';
 import { defaultCopyName, installView, nameProblem } from './copies';
 import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './format';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
@@ -761,7 +761,10 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
                 Reinstall…
               </button>
             ) : (
-              <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} />
+              <>
+                <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} primary={!outdatedCopy(copies.active)} />
+                {outdatedCopy(copies.active) && <UpdateButton inst={outdatedCopy(copies.active)!} copies={copies.active} onUpdate={(i) => onStart({ kind: 'update', instance: i })} disabled={busy} />}
+              </>
             )}
           </div>
         </>

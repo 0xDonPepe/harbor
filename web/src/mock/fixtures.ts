@@ -60,6 +60,8 @@ export function mockCatalog(): CatalogItemDto[] {
   return [
     app('nextcloud', 'Nextcloud', 'Files, calendar and contacts on your machine'),
     app('immich', 'Immich', 'Photo backup and timeline', {
+      revision: '2',
+      version: '3.3.1',
       claims: [{ id: 'library', purpose: 'Photo library', external: { hint: '/photos', required: false, readOnly: false } }],
       presentation: {
         tagline: 'Photo backup and timeline',

@@ -162,6 +162,23 @@ without a restart; each Harbor release ships the latest as the seed. Next:
 - [ ] Small: the catalog fetch still sends the wallpaper fetcher's User-Agent; icons are cached for up to
       5 minutes after a swap.
 
+## Installing a second copy of an app (asked 2026-10-12)
+
+Today the Store card always shows **Install**, even when the app is already installed. For an app whose package
+does not allow copies (`deployment.multiInstance: false`) the button is dead: the plan fails with *does not support
+multiple instances*. For one that does, nothing says you are about to create a separate copy. Wanted:
+
+- [ ] `CatalogItemDto.multiInstance` (optional field) so the console knows before planning.
+- [ ] Store card and app page, once installed: the main button becomes **Open** (the existing copy). A copyable
+      app also gets a secondary **Add another copy…** (different label *and* style, never color alone); a
+      single-copy app gets no install button at all (no dead buttons).
+- [ ] The install page for a second copy says so on top: *You already have Immich. This installs a separate copy
+      with its own data, address and login; the first one is not touched.* The name field is required and
+      prefilled (`immich-2`), and Home and the drawer show that name under the icon so the copies stay apart.
+- [ ] The install review (plan) repeats it as a note; the CLI prints the same line for `harbor install` when a
+      copy already exists.
+- [ ] e2e: card states for 0/1/2 copies, single-copy app shows only Open, second-copy page notice + name.
+
 ## Security review (decision 165): what 0.31.0 left
 
 The audit of 2026-10-12 fixed every high and medium finding in 0.31.0. Still open:

@@ -43,4 +43,14 @@ describe('SFTP server keys', () => {
     expect(() => confirmHostKey(`SHA256:${'B'.repeat(43)}`, scan, 'nas.lan:22')).toThrow(/different server key/);
     expect(() => confirmHostKey(ED_FP, '', 'nas.lan:22')).toThrow(/cannot read the server key/);
   });
+
+  it('a host whose name starts like a key type (ssh-nas.lan) is not taken for the type', () => {
+    for (const host of ['ssh-nas.lan', 'ssh-nas', 'ecdsa-box.lan', 'sk-nas.lan']) {
+      const keys = parseScannedHostKeys(`${host} ssh-ed25519 ${ED}\n`);
+      expect(keys, host).toEqual([{ type: 'ssh-ed25519', fingerprint: ED_FP, line: `ssh-ed25519 ${ED}` }]);
+      expect(confirmHostKey(ED_FP, `${host} ssh-ed25519 ${ED}\n`, `${host}:22`)).toBe(`ssh-ed25519 ${ED}`);
+      expect(knownHostsFor(host, 22, `${host} ssh-ed25519 ${ED}`)).toBe(`${host} ssh-ed25519 ${ED}\n`);
+    }
+    expect(knownHostsFor('nas.lan', 2222, `ssh-ed25519 ${ED}`)).toBe(`[nas.lan]:2222 ssh-ed25519 ${ED}\n`);
+  });
 });

@@ -1,7 +1,8 @@
-import { linkSync, lstatSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { chownTree, ensurePlainDirUnder, fchownFileNoFollow, writeFileNoFollow, writeStatusFile } from '../../src/bootstrap/safe-write.js';
+import { chownTree, DirHandle, ensurePlainDirUnder, FD_RELATIVE_PATHS, fchownFileNoFollow, openDirUnder, writeFileNoFollow, writeStatusFile } from '../../src/bootstrap/safe-write.js';
+import { readSetupCode, writeSetupCode } from '../../src/auth/setup.js';
 import { tempDir } from './helpers.js';
 
 // Decision 169: root helpers never write or chown through a link the harbor user planted.
@@ -91,5 +92,92 @@ describe('chownTree', () => {
     expect(calls.some((c) => c.includes('shadow') && !c.endsWith('shadow-link'))).toBe(false);
     // the real lchown runs too (to our own uid: allowed without root)
     chownTree(root, me.uid, me.gid);
+  });
+});
+
+// Where a path really leads: an fd (Linux: through /proc/self/fd) or a path whose parents are resolved.
+function whereItLeads(target: number | string): string {
+  if (typeof target === 'number') return readlinkSync(`/proc/self/fd/${target}`);
+  return path.join(realpathSync.native(path.dirname(target)), path.basename(target));
+}
+
+// O_NOFOLLOW only covers the last part of a path; these prove a folder swapped for a link mid-way is not
+// followed either. They need /proc/self/fd (Linux, where the root helpers run); macOS falls back to paths.
+describe.runIf(FD_RELATIVE_PATHS)('a folder swapped for a link mid-way (Linux)', () => {
+  it('chownTree keeps walking the folder it opened, not the link put in its place', () => {
+    const base = tempDir('harbor-ct-');
+    const root = path.join(base, 'state');
+    mkdirSync(path.join(root, 'sub'), { recursive: true });
+    writeFileSync(path.join(root, 'sub', 'a'), 'a');
+    writeFileSync(path.join(root, 'sub', 'shadow'), 'mine');
+    mkdirSync(path.join(base, 'etc'));
+    writeFileSync(path.join(base, 'etc', 'shadow'), 'root only');
+    const touched: string[] = [];
+    chownTree(root, me.uid, me.gid, (logical, target) => {
+      touched.push(whereItLeads(target));
+      if (logical === path.join(root, 'sub', 'a')) {
+        renameSync(path.join(root, 'sub'), path.join(root, 'sub-old'));
+        symlinkSync(path.join(base, 'etc'), path.join(root, 'sub'));
+      }
+    });
+    const realRoot = realpathSync.native(root);
+    expect(touched.length).toBe(4);
+    expect(touched.every((t) => t === realRoot || t.startsWith(realRoot + path.sep))).toBe(true);
+    expect(touched).toContain(path.join(realRoot, 'sub-old', 'shadow'));
+  });
+
+  it('a pinned folder keeps receiving the writes after its path is swapped for a link', () => {
+    const base = tempDir('harbor-pin-');
+    const root = path.join(base, 'state');
+    mkdirSync(path.join(root, 'backup', 'requests', 'r1'), { recursive: true });
+    mkdirSync(path.join(base, 'etc'));
+    const dir = openDirUnder(root, path.join(root, 'backup', 'requests', 'r1'), null);
+    try {
+      dir.writeFile('status.json', '{"state":"working"}', { mode: 0o640, owner: me });
+      // the harbor user swaps a folder above the request for a link while the step runs
+      renameSync(path.join(root, 'backup'), path.join(root, 'backup-old'));
+      symlinkSync(path.join(base, 'etc'), path.join(root, 'backup'));
+      mkdirSync(path.join(base, 'etc', 'requests', 'r1'), { recursive: true });
+      dir.writeFile('progress.json', '{"percent":50}', { mode: 0o640, owner: me });
+    } finally {
+      dir.close();
+    }
+    expect(readFileSync(path.join(root, 'backup-old', 'requests', 'r1', 'progress.json'), 'utf8')).toBe('{"percent":50}');
+    expect(() => lstatSync(path.join(base, 'etc', 'requests', 'r1', 'progress.json'))).toThrow();
+  });
+});
+
+describe('DirHandle', () => {
+  it('opens existing folders only when asked to, and refuses a link or a file on the way', () => {
+    const root = tempDir('harbor-dh-');
+    expect(() => openDirUnder(root, path.join(root, 'backup', 'requests'), null)).toThrow();
+    expect(() => lstatSync(path.join(root, 'backup'))).toThrow();
+    mkdirSync(path.join(root, 'backup'));
+    writeFileSync(path.join(root, 'backup', 'requests'), 'not a folder');
+    expect(() => openDirUnder(root, path.join(root, 'backup', 'requests'))).toThrow(/not a plain directory/);
+    const outside = tempDir('harbor-dh-out-');
+    symlinkSync(outside, path.join(root, 'link'));
+    expect(() => DirHandle.openNoFollow(path.join(root, 'link'))).toThrow(/not a plain directory/);
+    const d = openDirUnder(root, path.join(root, 'backup'), null);
+    try {
+      expect(() => d.child('../x')).toThrow(/invalid file name/);
+    } finally {
+      d.close();
+    }
+  });
+});
+
+describe('setup code in the harbor-owned state dir', () => {
+  it('a link planted at setup-code is neither read nor written through', () => {
+    const dir = tempDir('harbor-setup-');
+    const victim = path.join(dir, 'victim');
+    writeFileSync(victim, 'root:x:0:0\n', { mode: 0o600 });
+    symlinkSync(victim, path.join(dir, 'setup-code'));
+    expect(readSetupCode(dir)).toBeNull();
+    expect(() => writeSetupCode(dir)).toThrow(/symbolic link/);
+    expect(readFileSync(victim, 'utf8')).toBe('root:x:0:0\n');
+    // a code that looks right behind a link is not taken either
+    writeFileSync(victim, '123456\n');
+    expect(readSetupCode(dir)).toBeNull();
   });
 });

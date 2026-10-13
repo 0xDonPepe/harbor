@@ -9,7 +9,7 @@ import { PRODUCT } from '../naming.js';
 import { loadConfig } from '../config.js';
 import { exec, execOk } from './exec.js';
 import { listDevices, suggestedMountpoint } from '../system/host-storage.js';
-import { fchownFileNoFollow, writeStatusFile } from './safe-write.js';
+import { DirHandle, fchownFileNoFollow, writeStatusFile } from './safe-write.js';
 
 export type DeviceMountState = 'requested' | 'mounting' | 'mounted' | 'unmounting' | 'unmounted' | 'failed';
 export interface DeviceMountStatus {
@@ -79,25 +79,35 @@ export function desktopIgnoreRule(uuid: string): { file: string; content: string
 export function reownMarkers(root: string, uid: number, gid: number, log: (m: string) => void): number {
   let visited = 0;
   let fixed = 0;
-  const walk = (dir: string, depth: number): void => {
+  // decision 169: folders are opened O_NOFOLLOW and walked through their fd (DirHandle), so a folder swapped
+  // for a link mid-walk cannot lead it off the drive; each marker is opened O_NOFOLLOW and fchown'd by fd.
+  const walk = (dir: DirHandle, depth: number): void => {
     if (depth > 6 || visited > 20_000) return;
     let entries;
     try {
-      entries = readdirSync(dir, { withFileTypes: true });
+      entries = readdirSync(dir.self(), { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
       visited += 1;
-      const p = path.join(dir, e.name);
       if (e.isSymbolicLink()) continue;
       if (e.isDirectory()) {
         if (e.name === 'harbor-apps' || e.name === 'lost+found') continue;
-        walk(p, depth + 1);
+        let sub: DirHandle;
+        try {
+          sub = dir.openDir(e.name);
+        } catch {
+          continue; // swapped for a link (or gone) since the listing
+        }
+        try {
+          walk(sub, depth + 1);
+        } finally {
+          sub.close();
+        }
       } else if (e.isFile() && e.name === '.harbor-bind.json') {
         try {
-          // decision 169: open O_NOFOLLOW and fchown/fchmod the fd: no lstat-then-chown race with a swapped-in link
-          fchownFileNoFollow(p, { uid, gid }, 0o644);
+          fchownFileNoFollow(dir.child(e.name), { uid, gid }, 0o644);
           fixed += 1;
         } catch {
           /* best effort per file */
@@ -105,7 +115,17 @@ export function reownMarkers(root: string, uid: number, gid: number, log: (m: st
       }
     }
   };
-  walk(root, 0);
+  let top: DirHandle;
+  try {
+    top = DirHandle.openNoFollow(root);
+  } catch {
+    return 0;
+  }
+  try {
+    walk(top, 0);
+  } finally {
+    top.close();
+  }
   if (fixed) log(`re-owned ${fixed} Harbor identity file(s) for this machine`);
   return fixed;
 }

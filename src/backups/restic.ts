@@ -133,6 +133,15 @@ export function sshCommand(o: { host: string; port: number; user: string; key: s
   return ['ssh', '-i', o.key, '-p', String(o.port), '-o', `UserKnownHostsFile=${o.known}`, '-o', 'StrictHostKeyChecking=yes', '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=20', '-o', 'ServerAliveInterval=30', `${o.user}@${o.host}`, '-s', 'sftp'];
 }
 
+// Where the key type sits in a known_hosts / ssh-keyscan line ("host type base64" or "type base64"): the first
+// token that names an SSH key algorithm AND is followed by a base64 blob. A host name like `ssh-nas.lan` or
+// `ssh-nas` comes first in the line and is not followed by base64, so it is never taken for the type.
+const KEY_TYPE_RE = /^(?:ssh-[a-z0-9]+|ecdsa-sha2-[a-z0-9]+|sk-[a-z0-9-]+@openssh\.com)(?:-cert-v01@openssh\.com)?$/;
+const KEY_BLOB_RE = /^[A-Za-z0-9+/]+=*$/;
+function keyTypeAt(parts: string[]): number {
+  return parts.findIndex((p, i) => KEY_TYPE_RE.test(p) && KEY_BLOB_RE.test(parts[i + 1] ?? ''));
+}
+
 // known_hosts lines for the pinned key(s). Accepts what ssh-keyscan prints ("host type key") or bare
 // "type key" lines; re-keys every line to the host[:port] ssh will look up.
 export function knownHostsFor(host: string, port: number, hostKey: string): string {
@@ -142,8 +151,8 @@ export function knownHostsFor(host: string, port: number, hostKey: string): stri
     const l = raw.trim();
     if (!l || l.startsWith('#')) continue;
     const parts = l.split(/\s+/);
-    const at = parts.findIndex((p) => /^(ssh-|ecdsa-|sk-)/.test(p));
-    if (at < 0 || !parts[at + 1]) continue;
+    const at = keyTypeAt(parts);
+    if (at < 0) continue;
     lines.push(`${name} ${parts[at]} ${parts[at + 1]}`);
   }
   return lines.length ? `${lines.join('\n')}\n` : '';
@@ -171,9 +180,9 @@ export function parseScannedHostKeys(text: string): ScannedHostKey[] {
     const l = raw.trim();
     if (!l || l.startsWith('#')) continue;
     const parts = l.split(/\s+/);
-    const at = parts.findIndex((p) => /^(ssh-|ecdsa-|sk-)/.test(p));
+    const at = keyTypeAt(parts);
     const blob = at >= 0 ? parts[at + 1] : undefined;
-    if (!blob || !/^[A-Za-z0-9+/]+=*$/.test(blob)) continue;
+    if (!blob) continue;
     if (out.some((k) => k.line === `${parts[at]} ${blob}`)) continue;
     out.push({ type: parts[at]!, fingerprint: hostKeyFingerprint(blob), line: `${parts[at]} ${blob}` });
   }

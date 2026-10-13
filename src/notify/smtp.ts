@@ -69,12 +69,14 @@ export function smtpAddressOk(address: string): boolean {
   return typeof address === 'string' && !/[\r\n\0]/.test(address);
 }
 
-export async function sendSmtp(ch: EmailChannel, subject: string, text: string): Promise<{ ok: boolean; error: string | null }> {
+// `trust.ca` is for tests only (a throwaway certificate); real mail servers are checked against the system CAs.
+export async function sendSmtp(ch: EmailChannel, subject: string, text: string, trust: { ca?: string | Buffer } = {}): Promise<{ ok: boolean; error: string | null }> {
+  const ca = trust.ca ? { ca: trust.ca } : {};
   let session: SmtpSession | null = null;
   if (!smtpAddressOk(ch.from) || !smtpAddressOk(ch.to)) return { ok: false, error: 'the from and to addresses must be one line each' };
   try {
     const sock = ch.smtp.secure
-      ? tlsConnect({ host: ch.smtp.host, port: ch.smtp.port, servername: ch.smtp.host })
+      ? tlsConnect({ host: ch.smtp.host, port: ch.smtp.port, servername: ch.smtp.host, ...ca })
       : netConnect({ host: ch.smtp.host, port: ch.smtp.port });
     await new Promise<void>((resolve, reject) => {
       sock.once(ch.smtp.secure ? 'secureConnect' : 'connect', resolve);
@@ -86,7 +88,7 @@ export async function sendSmtp(ch: EmailChannel, subject: string, text: string):
     let encrypted = ch.smtp.secure;
     if (!ch.smtp.secure && /STARTTLS/i.test(ehlo)) {
       await session.cmd('STARTTLS', [220]);
-      const tls = tlsConnect({ socket: session.raw() as Socket, servername: ch.smtp.host });
+      const tls = tlsConnect({ socket: session.raw() as Socket, servername: ch.smtp.host, ...ca });
       await new Promise<void>((resolve, reject) => {
         tls.once('secureConnect', resolve);
         tls.once('error', reject);

@@ -10,7 +10,7 @@
 // SIGINT (restic then writes no snapshot). Nothing here ever writes a secret to a persistent disk:
 // ssh keys and the app's state slice live in /run (tmpfs) for the length of one step.
 import { spawn } from 'node:child_process';
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
@@ -49,7 +49,7 @@ import {
   type BackupSummary,
   type RepoAccess,
 } from '../backups/restic.js';
-import { writeFileNoFollow } from './safe-write.js';
+import { openDirUnder, readFileNoFollow, type DirHandle } from './safe-write.js';
 import {
   BACKUP_ROOT_STATE,
   BACKUP_RUN_DIR,
@@ -75,10 +75,11 @@ function requireRoot(): void {
   if (typeof process.getuid === 'function' && process.getuid() !== 0) throw new HarborError('INVALID_REQUEST', 'backup-step must run as root');
 }
 
-function writeJson(file: string, doc: unknown, owner: { uid: number; gid: number }): void {
+function writeJson(dir: DirHandle, name: string, doc: unknown, owner: { uid: number; gid: number }): void {
   try {
-    // decision 169: the request folder is harbor-owned: open O_NOFOLLOW and fchown the fd, never the path
-    writeFileNoFollow(file, JSON.stringify(doc), { mode: 0o640, owner });
+    // decision 169: the request folder is harbor-owned: written through the folder's fd (pinned at the start
+    // of the step), O_NOFOLLOW, and fchown on the file's fd, never by path
+    dir.writeFile(name, JSON.stringify(doc), { mode: 0o640, owner });
   } catch {
     /* the unit's exit code still carries the verdict */
   }
@@ -269,8 +270,10 @@ function readTree(root: string, base = ''): StageFile[] {
 async function writeOut(fifo: string, doc: unknown): Promise<void> {
   const st = lstatSync(fifo, { throwIfNoEntry: false });
   if (!st || !st.isFIFO()) throw new HarborError('INVALID_REQUEST', 'no out.fifo for this step');
-  const fh = await Promise.race([open(fifo, 'w'), new Promise<never>((_, rej) => setTimeout(() => rej(new HarborError('OPERATION_FAILED', 'the daemon did not read the restored state in time')), 120_000).unref())]);
+  // decision 169: no O_CREAT/O_TRUNC and no link followed; what was opened must still be the FIFO
+  const fh = await Promise.race([open(fifo, constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0)), new Promise<never>((_, rej) => setTimeout(() => rej(new HarborError('OPERATION_FAILED', 'the daemon did not read the restored state in time')), 120_000).unref())]);
   try {
+    if (!(await fh.stat()).isFIFO()) throw new HarborError('INVALID_REQUEST', 'out.fifo is not a FIFO');
     await fh.writeFile(JSON.stringify(doc));
   } finally {
     await fh.close();
@@ -286,18 +289,35 @@ export async function applyBackupStep(spec: string, log: Log): Promise<void> {
   const owner = statSync(config.stateDir);
   const harbor = { uid: owner.uid, gid: owner.gid };
   const files = backupRequestFiles(config.stateDir, requestId);
-  const dirSt = lstatSync(files.dir, { throwIfNoEntry: false });
-  if (!dirSt || !dirSt.isDirectory() || dirSt.uid !== harbor.uid) throw new HarborError('INVALID_REQUEST', `${files.dir} is not a request folder of the ${PRODUCT.serviceUser} account`);
+  // decision 169: the request folder (and every folder above it up to the state dir) is harbor-owned. Pin it
+  // once: every later read and write goes through this fd, so swapping a folder for a link mid-step (a backup
+  // can run for minutes) cannot send root's writes anywhere else.
+  let dir: DirHandle;
+  try {
+    dir = openDirUnder(config.stateDir, files.dir, null);
+  } catch (e) {
+    throw new HarborError('INVALID_REQUEST', `${files.dir} is not a request folder of the ${PRODUCT.serviceUser} account (${e instanceof Error ? e.message : String(e)})`);
+  }
+  try {
+    await runStep(dir, requestId, harbor, log);
+  } finally {
+    dir.close();
+  }
+}
+
+async function runStep(dir: DirHandle, requestId: string, harbor: { uid: number; gid: number }, log: Log): Promise<void> {
+  if (fstatSync(dir.fd).uid !== harbor.uid) throw new HarborError('INVALID_REQUEST', `${dir.path} is not a request folder of the ${PRODUCT.serviceUser} account`);
+  const files = { request: dir.child('request.json'), secrets: dir.child('secrets.fifo'), out: dir.child('out.fifo') };
   const now = () => new Date().toISOString();
   let req: BackupRequest;
   try {
-    req = checkRequestShape(JSON.parse(readFileSync(files.request, 'utf8')));
+    req = checkRequestShape(JSON.parse(readFileNoFollow(files.request, MAX_STAGE_BYTES * 2) ?? '""'));
   } catch (e) {
-    writeJson(files.status, { action: 'test', state: 'failed', message: e instanceof Error ? e.message : String(e), at: now() } satisfies BackupStatus, harbor);
+    writeJson(dir, 'status.json', { action: 'test', state: 'failed', message: e instanceof Error ? e.message : String(e), at: now() } satisfies BackupStatus, harbor);
     throw e;
   }
   rmSync(files.request, { force: true });
-  const status = (s: Omit<BackupStatus, 'action' | 'at'>) => writeJson(files.status, { action: req.action, ...s, at: now() }, harbor);
+  const status = (s: Omit<BackupStatus, 'action' | 'at'>) => writeJson(dir, 'status.json', { action: req.action, ...s, at: now() }, harbor);
   status({ state: 'working', message: `${req.action} started` });
   const runDir = `${BACKUP_RUN_DIR}/${requestId}`;
   mkdirSync(BACKUP_RUN_DIR, { recursive: true, mode: 0o700 });
@@ -382,7 +402,7 @@ export async function applyBackupStep(spec: string, log: Log): Promise<void> {
             else if (l.type === 'error') errors.push(l.message);
             else if (Date.now() - lastProgress > 2000) {
               lastProgress = Date.now();
-              writeJson(files.progress, { percent: l.percent, bytesDone: l.bytesDone, totalBytes: l.totalBytes, at: now() }, harbor);
+              writeJson(dir, 'progress.json', { percent: l.percent, bytesDone: l.bytesDone, totalBytes: l.totalBytes, at: now() }, harbor);
             }
           },
         });
@@ -419,7 +439,7 @@ export async function applyBackupStep(spec: string, log: Log): Promise<void> {
             const l = parseBackupLine(line);
             if (l?.type === 'status' && Date.now() - lastProgress > 2000) {
               lastProgress = Date.now();
-              writeJson(files.progress, { percent: l.percent, bytesDone: l.bytesDone, totalBytes: l.totalBytes, at: now() }, harbor);
+              writeJson(dir, 'progress.json', { percent: l.percent, bytesDone: l.bytesDone, totalBytes: l.totalBytes, at: now() }, harbor);
             }
           },
         });

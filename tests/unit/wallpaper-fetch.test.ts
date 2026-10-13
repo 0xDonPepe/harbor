@@ -38,6 +38,34 @@ describe('wallpaper URL guard', () => {
     expect(isPublicAddress('not-an-ip')).toBe(false);
   });
 
+  it('judges IPv6 forms that carry an IPv4 address by that address, in hex as URLs and DNS write them', () => {
+    const refused = [
+      '64:ff9b::7f00:1', // NAT64 of 127.0.0.1
+      '64:ff9b::a00:1', // NAT64 of 10.0.0.1
+      '64:ff9b::127.0.0.1',
+      '::7f00:1', // IPv4-compatible 127.0.0.1
+      '::127.0.0.1',
+      '::a9fe:a9fe', // 169.254.169.254
+      '::ffff:0:7f00:1', // IPv4-translated (SIIT)
+      '::ffff:0:a00:1',
+      '::ffff:0:10.0.0.1',
+      '2002:7f00:1::1', // 6to4 of 127.0.0.1
+      '2002:c0a8:101::1', // 6to4 of 192.168.1.1
+      '2001:0:4136:e378:8000:63bf:3fff:fdd2', // Teredo
+      '0:0:0:0:0:ffff:7f00:1',
+    ];
+    for (const a of refused) expect(isPublicAddress(a), a).toBe(false);
+    for (const a of ['64:ff9b::808:808', '2002:808:808::1', '::ffff:0:808:808']) expect(isPublicAddress(a), a).toBe(true);
+  });
+
+  it('refuses those forms as URL literals too (the URL parser rewrites them to hex first)', async () => {
+    for (const u of ['https://[64:ff9b::127.0.0.1]/', 'https://[64:ff9b::10.0.0.1]/', 'https://[::127.0.0.1]/', 'https://[::ffff:0:10.0.0.1]/', 'https://[2002:7f00:1::1]/']) {
+      await expect(assertPublicHttpsUrl(u, resolve), u).rejects.toThrow(/local or private/);
+    }
+    // and when a name resolves to one of them
+    await expect(assertPublicHttpsUrl('https://nat64.example.com/', async () => ['64:ff9b::a00:1'])).rejects.toThrow(/resolves to a local or private address/);
+  });
+
   it('allows https to a public name or address, refuses everything else', async () => {
     await expect(assertPublicHttpsUrl('https://images.example.com/a.jpg', resolve)).resolves.toBeInstanceOf(URL);
     await expect(assertPublicHttpsUrl(`https://${PUBLIC}/a.jpg`, resolve)).resolves.toBeInstanceOf(URL);

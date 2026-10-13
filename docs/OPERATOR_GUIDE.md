@@ -52,6 +52,9 @@ is typed on the terminal.
   The installer takes the newest release; pinning is for troubleshooting only. Releases older than 0.17.0 said
   "installed encrypted" and were not — do not install them (`docs/releases/v0.17.0.md`).
 - Lost the setup code? On the machine: `sudo /opt/harbor/bin/harbor setup-code --config /etc/harbor/harbor.json`.
+- The setup page's status route (`GET /v1/setup`) needs no login. Once the administrator exists it only says
+  that setup is done and whether HTTPS is on, with its addresses (the login page uses them to move you to
+  https). The version, machine name, LAN address and remote-access state are shown only after you log in.
 
 **LAN mode** means the console (port 80) and every app port answer to any device on your local network,
 like Umbrel. Protect the console with a strong password and two-factor login (Settings → Account); apps

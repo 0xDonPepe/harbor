@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { randomInt, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
+import { readFileNoFollow, writeFileNoFollow } from '../bootstrap/safe-write.js';
 import type { Repo } from '../state/repo.js';
 import { hashPassword, validatePasswordPolicy } from './password.js';
 import { createSealedMachineKey, zeroMachineKey } from './machine-key.js';
@@ -13,16 +14,21 @@ import type { SessionService } from './sessions.js';
 // stranger on the same network cannot claim the box first). The code lives in <stateDir>/setup-code.
 export const SETUP_CODE_FILE = 'setup-code';
 
+// Decision 169: bootstrap (root) reads and writes this file inside the harbor-owned state dir, so neither
+// side follows a link at its name: a link planted there is refused instead of being read or overwritten.
 export function writeSetupCode(stateDir: string): string {
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-  writeFileSync(path.join(stateDir, SETUP_CODE_FILE), code + '\n', { mode: 0o600 });
+  writeFileNoFollow(path.join(stateDir, SETUP_CODE_FILE), code + '\n', { mode: 0o600 });
   return code;
 }
 export function readSetupCode(stateDir: string): string | null {
-  const f = path.join(stateDir, SETUP_CODE_FILE);
-  if (!existsSync(f)) return null;
-  const c = readFileSync(f, 'utf8').trim();
-  return /^\d{6}$/.test(c) ? c : null;
+  let c: string | undefined;
+  try {
+    c = readFileNoFollow(path.join(stateDir, SETUP_CODE_FILE), 64)?.trim();
+  } catch {
+    return null; // a link or anything odd is no code (and writeSetupCode refuses to write through it)
+  }
+  return c && /^\d{6}$/.test(c) ? c : null;
 }
 
 export class SetupService {

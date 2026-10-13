@@ -41,23 +41,54 @@ const blocked = new BlockList();
 for (const [net, bits] of BLOCKED_V4) blocked.addSubnet(net, bits, 'ipv4');
 for (const [net, bits] of BLOCKED_V6) blocked.addSubnet(net, bits, 'ipv6');
 
+/** The eight 16-bit groups of an IPv6 address (dotted IPv4 tail allowed), or null. */
+function v6Groups(a: string): number[] | null {
+  let s = a;
+  const dotted = /^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(s);
+  if (dotted) {
+    const o = dotted[2]!.split('.').map(Number);
+    if (o.some((n) => n > 255)) return null;
+    s = `${dotted[1]}${((o[0]! << 8) | o[1]!).toString(16)}:${((o[2]! << 8) | o[3]!).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const part = (h: string): number[] => (h ? h.split(':').map((g) => parseInt(g, 16)) : []);
+  const head = part(halves[0]!);
+  const tail = halves.length === 2 ? part(halves[1]!) : [];
+  const fill = 8 - head.length - tail.length;
+  if (halves.length === 1 ? head.length !== 8 : fill < 1) return null;
+  const g = [...head, ...Array<number>(halves.length === 2 ? fill : 0).fill(0), ...tail];
+  return g.length === 8 && g.every((n) => Number.isInteger(n) && n >= 0 && n <= 0xffff) ? g : null;
+}
+
+const v4Of = (hi: number, lo: number): string => [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
+
+/**
+ * The IPv4 address an IPv6 address stands for, when it is one of the forms that carry one: IPv4-compatible
+ * (::/96), IPv4-mapped (::ffff:0:0/96), IPv4-translated (::ffff:0:0:0/96), NAT64 (64:ff9b::/96) and 6to4
+ * (2002::/16). URLs and getaddrinfo write these in hex (`64:ff9b::7f00:1`), so the groups are read, not the text.
+ */
+function embeddedV4(g: number[]): string | null {
+  const zero = (from: number, to: number) => g.slice(from, to).every((n) => n === 0);
+  if (zero(0, 6)) return v4Of(g[6]!, g[7]!); // ::a.b.c.d (also :: and ::1, which become 0.0.0.x: refused)
+  if (zero(0, 5) && g[5] === 0xffff) return v4Of(g[6]!, g[7]!); // ::ffff:a.b.c.d
+  if (zero(0, 4) && g[4] === 0xffff && g[5] === 0) return v4Of(g[6]!, g[7]!); // ::ffff:0:a.b.c.d
+  if (g[0] === 0x64 && g[1] === 0xff9b && zero(2, 6)) return v4Of(g[6]!, g[7]!); // 64:ff9b::a.b.c.d
+  if (g[0] === 0x2002) return v4Of(g[1]!, g[2]!); // 6to4: 2002:AABB:CCDD::/48
+  return null;
+}
+
 /** True for an address the wallpaper fetcher may talk to (a public unicast address). */
 export function isPublicAddress(address: string): boolean {
   let a = address.trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
   const fam = isIP(a);
   if (!fam) return false;
   if (fam === 6) {
-    // IPv4-mapped / -compatible / NAT64 well-known forms carry an IPv4 address: judge that one.
-    const m = /^(?:::ffff:(?:0:)?|::|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/.exec(a);
-    if (m) a = m[1]!;
-    else {
-      const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(a);
-      if (hex) {
-        const hi = parseInt(hex[1]!, 16);
-        const lo = parseInt(hex[2]!, 16);
-        a = [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.');
-      }
-    }
+    const g = v6Groups(a);
+    if (!g) return false;
+    if (g[0] === 0x2001 && g[1] === 0) return false; // Teredo (2001::/32): tunnels to an IPv4 address it hides
+    const v4 = embeddedV4(g);
+    if (v4) a = v4;
   }
   try {
     return !blocked.check(a, isIP(a) === 6 ? 'ipv6' : 'ipv4');

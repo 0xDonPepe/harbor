@@ -28,8 +28,21 @@ export function InstanceIcon({ inst, size = 44 }: { inst: InstanceSummary; size?
   return <AppIcon packageId={inst.packageId} icon={inst.icon} name={inst.packageName} size={size} custom={inst.customIcon} />;
 }
 // What the launcher calls an app: the custom name, else the package name (plus the instance name when it differs).
-export function appLabel(inst: InstanceSummary): string {
+// Decision 170: with `all` given and more than one copy of the same app, every copy carries its own name.
+export function appLabel(inst: InstanceSummary, all?: InstanceSummary[]): string {
+  if (!inst.displayName && copyName(inst, all ?? [])) return `${inst.packageName} · ${inst.name}`;
   return inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} · ${inst.name}`);
+}
+// The instance name to show under the icon when several copies of one app exist (and the operator has not
+// named this one); null when the label alone already tells it apart.
+export function copyName(inst: InstanceSummary, all: InstanceSummary[]): string | null {
+  if (inst.displayName) return null;
+  return all.some((o) => o.id !== inst.id && o.packageId === inst.packageId) ? inst.name : null;
+}
+// Decision 170: the copies of a package the Store counts (removed ones keep their data but are not "installed").
+export function copiesOf(packageId: string, all: InstanceSummary[]): { active: InstanceSummary[]; removed: InstanceSummary[] } {
+  const mine = all.filter((i) => i.packageId === packageId);
+  return { active: mine.filter((i) => i.installState !== 'retained'), removed: mine.filter((i) => i.installState === 'retained') };
 }
 
 export function Pill({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'muted' | 'busy' | 'info'; children: ReactNode }) {
@@ -100,9 +113,15 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
   );
 }
 
-export function StoreCard({ item, installed = 0, onOpen, onInstall, disabled }: { item: CatalogItemDto; installed?: number; onOpen: () => void; onInstall: () => void; disabled: boolean }) {
+// Decision 170: once an app is installed the card opens it (the first copy) instead of offering a dead or
+// surprising Install; an app that allows copies also offers "Add another copy…" (another label and style).
+export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, disabled }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; disabled: boolean }) {
+  const installed = copies.length;
+  const copyable = item.multiInstance !== false;
+  const available = item.availability === 'available';
+  const addCopy = installed > 0 && available && copyable;
   return (
-    <li className="tile store">
+    <li className={`tile store ${addCopy ? 'two-actions' : ''}`}>
       <button className="tile-main" onClick={onOpen} aria-label={`About ${item.name}`}>
         <AppIcon packageId={item.id} icon={item.presentation.icon} name={item.name} size={56} />
         <div>
@@ -110,6 +129,7 @@ export function StoreCard({ item, installed = 0, onOpen, onInstall, disabled }: 
           <p className="muted small">{item.presentation.tagline ?? item.description}</p>
           <p className="row wrap badges">
             {installed > 0 && <Pill tone="ok">{installed === 1 ? 'Installed' : `${installed} installed`}</Pill>}
+            {installed === 0 && removed.length > 0 && <Pill tone="muted">Removed · data kept</Pill>}
             {item.origin === 'local' && <Pill tone="info">Your app{item.version ? ` · ${item.version}` : ''}</Pill>}
             {item.qualification !== 'passed' && item.availability === 'available' && (
               <Pill tone={item.qualification === 'blocked' ? 'warn' : 'muted'}>{item.qualification === 'blocked' ? 'Live check failed' : 'Not yet live-checked'}</Pill>
@@ -117,14 +137,45 @@ export function StoreCard({ item, installed = 0, onOpen, onInstall, disabled }: 
           </p>
         </div>
       </button>
-      {item.availability === 'unavailable' ? (
+      {installed > 0 ? (
+        <div className="row wrap store-actions">
+          {addCopy && (
+            <button className="btn" disabled={disabled} onClick={onAddCopy} aria-label={`Add another copy of ${item.name}`}>
+              Add another copy…
+            </button>
+          )}
+          <OpenCopy inst={copies[0]!} name={item.name} onManage={onManage} />
+        </div>
+      ) : !available ? (
         <Pill tone="bad">Unavailable</Pill>
+      ) : !copyable && removed.length > 0 ? (
+        // one copy per machine and a removed one keeps its data: bring that one back (its page has Reinstall)
+        <button className="btn primary" disabled={disabled} onClick={() => onManage(removed[0]!)} aria-label={`Reinstall ${item.name}`}>
+          Reinstall…
+        </button>
       ) : (
         <button className="btn primary" disabled={disabled} onClick={onInstall} aria-label={`Install ${item.name}`}>
           Install
         </button>
       )}
     </li>
+  );
+}
+
+// "Open" for an installed copy: its address in a new tab when it is running, else its page in Harbor
+// (where Start, Unlock or Repair live), so the button never does nothing.
+export function OpenCopy({ inst, name, onManage }: { inst: InstanceSummary; name: string; onManage: (i: InstanceSummary) => void }) {
+  const url = openUrl(inst);
+  if (url && inst.installState === 'installed' && inst.runtime === 'running')
+    return (
+      <a className="btn primary" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${name}`}>
+        Open
+      </a>
+    );
+  return (
+    <button className="btn primary" onClick={() => onManage(inst)} aria-label={`Open ${name}`} title={`${appLabel(inst)} is not running; its page shows why`}>
+      Open
+    </button>
   );
 }
 

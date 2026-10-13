@@ -54,6 +54,7 @@ export function mockCatalog(): CatalogItemDto[] {
     claims: [],
     operatorSecrets: [],
     links: [],
+    multiInstance: true,
     ...extra,
   });
   return [
@@ -87,7 +88,9 @@ export function mockCatalog(): CatalogItemDto[] {
         hasWidget: false,
       },
     }),
+    // decision 170: a one-copy app — once installed, its Store card shows Open only
     app('vaultwarden', 'Vaultwarden', 'Password manager for the whole family', {
+      multiInstance: false,
       presentation: {
         tagline: 'Password manager for the whole family',
         category: 'security',
@@ -212,6 +215,19 @@ export function mockInstances(): InstanceSummary[] {
       endpoints: [endpoint(18082)],
       usage: { cpuPercent: 34, memoryBytes: 900 * MiB, sampledAt: t },
       updateAvailable: { revision: '2', version: 'v1.2.0', releaseNotes: 'Faster search' },
+    },
+    // decision 170: a second copy of Immich — both tiles name their copy, the Store offers a third
+    {
+      ...base,
+      id: 'inst-immich-2',
+      name: 'immich-2',
+      packageId: 'immich',
+      packageName: 'Immich',
+      category: 'media',
+      installState: 'installed',
+      runtime: 'running',
+      readiness: 'healthy',
+      endpoints: [endpoint(18087)],
     },
     {
       ...base,

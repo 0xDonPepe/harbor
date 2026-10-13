@@ -3,7 +3,7 @@ import type { DomainsDto, HostStorageDto, InstallCandidateDto } from '../../../s
 import type { AddressOptionsDto, CatalogItemDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageImportResultDto, PlanDto, PlatformToolDto } from '../../../src/contracts/api';
 import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
-import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, Pill, RecoveryCard, StatusPill, appLabel, endpointUrlHere, openUrl } from './components';
+import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, appLabel, copiesOf, endpointUrlHere, openUrl } from './components';
 import { categoryLabel, fmtBytes, fmtTime } from './format';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
@@ -313,8 +313,30 @@ function fmtDeviceSize(size: string): string {
   return fmtGB(Number(m[1]) * 1024 ** ('KMGTP'.indexOf(m[2]!.toUpperCase()) + 1));
 }
 
-export function InstallWizard({ item, instances = [], busy, installed = 0, onClose, onStart, onRemovePackage }: { item: CatalogItemDto; instances?: InstanceSummary[]; busy: boolean; installed?: number; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void }) {
-  const [name, setName] = useState('');
+// The name the daemon proposes for the next copy (catalog `proposedName`, the planner's rule). Should the
+// catalog be a poll behind the instance list, the same rule runs here so the prefill is never a taken name.
+function defaultCopyName(item: CatalogItemDto, instances: InstanceSummary[]): string {
+  const taken = new Set(instances.map((i) => i.name));
+  if (item.proposedName && !taken.has(item.proposedName)) return item.proposedName;
+  if (!taken.has(item.id)) return item.id;
+  for (let n = 2; n < 1000; n++) if (!taken.has(`${item.id}-${n}`)) return `${item.id}-${n}`;
+  return '';
+}
+
+export function InstallWizard({ item, instances = [], busy, installed = 0, mode: startMode = 'page', onClose, onStart, onRemovePackage, onOpenInstance }: { item: CatalogItemDto; instances?: InstanceSummary[]; busy: boolean; installed?: number; mode?: 'page' | 'copy'; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void; onOpenInstance?: (i: InstanceSummary) => void }) {
+  // Decision 170: an installed app's page opens the copy you have; "Add another copy…" (copyable apps only)
+  // turns it into the install page, which says it is a separate copy and asks for its name (prefilled
+  // with the name the daemon proposes, e.g. immich-2).
+  const copies = copiesOf(item.id, instances);
+  const copyable = item.multiInstance !== false;
+  const [mode, setMode] = useState<'page' | 'copy'>(startMode);
+  const appPage = copies.active.length > 0 && (mode === 'page' || !copyable);
+  const copyMode = copies.active.length > 0 && !appPage;
+  const [name, setName] = useState(() => (copies.active.length > 0 ? defaultCopyName(item, instances) : ''));
+  const nameTrim = name.trim();
+  const nameBad = nameTrim !== '' && !/^[a-z][a-z0-9-]{0,62}$/.test(nameTrim);
+  const nameTaken = nameTrim !== '' && instances.some((i) => i.name === nameTrim);
+  const nameBlocked = (copyMode && nameTrim === '') || nameBad || nameTaken;
   // Decision 126: which installed app satisfies each link ('' = none, optional links only).
   const [linkPick, setLinkPick] = useState<Record<string, string>>({});
   const linkSel = (l: CatalogItemDto['links'][number]) => linkPick[l.id] ?? (l.optional ? '' : (linkCandidates(l, instances)[0]?.id ?? ''));
@@ -609,6 +631,41 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
   );
   return (
     <Dialog title={item.name} onClose={onClose} wide>
+      {copyMode && (
+        <div className="copy-notice" role="note" aria-label="Another copy">
+          <p>
+            <strong>{copies.active.length === 1 ? `You already have ${item.name}.` : `You already have ${copies.active.length} copies of ${item.name}.`}</strong>{' '}
+            {copies.active.length === 1 ? 'This installs a separate copy with its own data, address and login; the first one is not touched.' : 'This installs another separate copy with its own data, address and login; the others are not touched.'}
+          </p>
+          <label className="small">
+            Name for this copy
+            <input value={name} onChange={(e) => setName(e.target.value)} required pattern="[a-z][a-z0-9-]{0,62}" aria-label="Name for this copy" aria-invalid={nameBlocked} autoComplete="off" spellCheck={false} />
+          </label>
+          {nameTaken ? (
+            <p className="error small" role="alert">
+              {nameTrim} is already the name of another app here. Pick another.
+            </p>
+          ) : nameBad ? (
+            <p className="error small" role="alert">
+              Use lowercase letters, digits and dashes, starting with a letter.
+            </p>
+          ) : (
+            <p className="muted small">It shows under the icon on Home, so you can tell the copies apart.</p>
+          )}
+        </div>
+      )}
+      {!appPage && !copyMode && copies.removed.length > 0 && copyable && (
+        <div className="copy-notice" role="note" aria-label="A removed copy">
+          <p>A removed copy of {item.name} still keeps its data. This installs a new, separate copy; to get that data back, reinstall the removed copy instead.</p>
+          {onOpenInstance && (
+            <p>
+              <button className="btn small" type="button" onClick={() => onOpenInstance(copies.removed[0]!)} aria-label={`Show the removed copy of ${item.name}`}>
+                Show the removed copy
+              </button>
+            </p>
+          )}
+        </div>
+      )}
       <div className="app-head">
         <AppIcon packageId={item.id} icon={item.presentation.icon} name={item.name} size={56} />
         <div className="stack app-head-text">
@@ -666,315 +723,355 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, onClo
           )}
         </div>
       )}
-      {item.defaultCredentials && <DefaultLogin creds={item.defaultCredentials} />}
-      <section className="install-section" aria-labelledby={`${sectionId}-storage`}>
-        <h3 className="section-kicker" id={`${sectionId}-storage`}>
-          Storage
-        </h3>
-        <div className="choice">
-          <span className="choice-icon">
-            <DriveIcon />
-          </span>
-          <div className="choice-text">
-            <p className="choice-main">
-              <strong>{storeName}</strong>
-              {storeFree}
-            </p>
-            {item.presentation.sizeHint && <p className="muted small">Needs {item.presentation.sizeHint.charAt(0).toLowerCase() + item.presentation.sizeHint.slice(1)}</p>}
-          </div>
-          <button className="btn ghost small" type="button" aria-expanded={changing.storage} aria-controls={`${sectionId}-where`} aria-label={`Change where ${item.name} is stored`} onClick={() => setChanging({ ...changing, storage: !changing.storage })}>
-            {changing.storage ? 'Done' : 'Change'}
-          </button>
-        </div>
-        <div className="choice">
-          <span className="choice-icon">
-            <LockIcon />
-          </span>
-          <div className="choice-text">
-            <p className="choice-main">
-              {plainParts.length ? `Encrypted, except ${plainParts.join(' and ')} (your folder)` : customPass ? 'Encrypted with your own passphrase' : 'Encrypted — unlocks automatically when you sign in'}{' '}
-              <button className="btn ghost small" type="button" aria-expanded={howOpen} onClick={() => setHowOpen(!howOpen)} aria-label="How the encryption works">
-                How?
+      {appPage ? (
+        <>
+          <section className="install-section" aria-labelledby={`${sectionId}-have`}>
+            <h3 className="section-kicker" id={`${sectionId}-have`}>
+              On this machine
+            </h3>
+            <ul className="plain copies">
+              {copies.active.map((i) => (
+                <li key={i.id} className="row between wrap">
+                  <span className="row">
+                    <InstanceIcon inst={i} size={28} />
+                    <strong>{appLabel(i, instances)}</strong>
+                    <StatusPill inst={i} />
+                  </span>
+                  <button className="btn ghost small" type="button" onClick={() => (onOpenInstance ?? onClose)(i)} aria-label={`See details of ${i.name}`}>
+                    Details
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {!copyable && <p className="muted small">{item.name} runs as one copy per machine.</p>}
+          </section>
+          <div className="row end">
+            <button className="btn" onClick={onClose}>
+              Close
+            </button>
+            {copyable && item.availability === 'available' && (
+              <button className="btn" disabled={busy} onClick={() => setMode('copy')} aria-label={`Add another copy of ${item.name}`}>
+                Add another copy…
               </button>
-            </p>
-            {place === 'external' && <p className="muted small">Unplug the drive and {item.name} pauses until it is back.</p>}
-            {howOpen && (
-              <p className="muted small">
-                Harbor seals the whole app, database and files, with Linux's built-in encryption: on disk nothing is readable without the key, not even by root. Your Harbor recovery key opens it on another
-                machine{customPass ? ', and so does your passphrase' : ''}.
+            )}
+            <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} />
+          </div>
+        </>
+      ) : (
+        <>
+          {item.defaultCredentials && <DefaultLogin creds={item.defaultCredentials} />}
+          <section className="install-section" aria-labelledby={`${sectionId}-storage`}>
+            <h3 className="section-kicker" id={`${sectionId}-storage`}>
+              Storage
+            </h3>
+            <div className="choice">
+              <span className="choice-icon">
+                <DriveIcon />
+              </span>
+              <div className="choice-text">
+                <p className="choice-main">
+                  <strong>{storeName}</strong>
+                  {storeFree}
+                </p>
+                {item.presentation.sizeHint && <p className="muted small">Needs {item.presentation.sizeHint.charAt(0).toLowerCase() + item.presentation.sizeHint.slice(1)}</p>}
+              </div>
+              <button className="btn ghost small" type="button" aria-expanded={changing.storage} aria-controls={`${sectionId}-where`} aria-label={`Change where ${item.name} is stored`} onClick={() => setChanging({ ...changing, storage: !changing.storage })}>
+                {changing.storage ? 'Done' : 'Change'}
+              </button>
+            </div>
+            <div className="choice">
+              <span className="choice-icon">
+                <LockIcon />
+              </span>
+              <div className="choice-text">
+                <p className="choice-main">
+                  {plainParts.length ? `Encrypted, except ${plainParts.join(' and ')} (your folder)` : customPass ? 'Encrypted with your own passphrase' : 'Encrypted — unlocks automatically when you sign in'}{' '}
+                  <button className="btn ghost small" type="button" aria-expanded={howOpen} onClick={() => setHowOpen(!howOpen)} aria-label="How the encryption works">
+                    How?
+                  </button>
+                </p>
+                {place === 'external' && <p className="muted small">Unplug the drive and {item.name} pauses until it is back.</p>}
+                {howOpen && (
+                  <p className="muted small">
+                    Harbor seals the whole app, database and files, with Linux's built-in encryption: on disk nothing is readable without the key, not even by root. Your Harbor recovery key opens it on another
+                    machine{customPass ? ', and so does your passphrase' : ''}.
+                  </p>
+                )}
+              </div>
+            </div>
+            {ownFolders.map((c) => (
+              <p key={c.id} className="muted small">
+                {c.purpose}: your folder <code>{folders[c.id]}</code> (not encrypted)
+              </p>
+            ))}
+            {requiredFolders.map((c) => (
+              <div key={c.id} className="claim">
+                <p className="claim-title">
+                  <strong>{c.purpose}</strong>
+                  {c.external!.readOnly && <span className="muted small"> · read-only</span>}
+                  <span className="warn small"> · {item.name} needs a folder for this</span>
+                </p>
+                {folderChoice(c)}
+              </div>
+            ))}
+            {place === 'external' && locationNeedsFormat && (
+              <div className="folder-choice">
+                <p className="warn small" role="alert">
+                  This drive{locationFormatDrive?.fsType ? ` is ${locationFormatDrive.fsType}` : ''} — apps need ext4 (or btrfs, xfs, zfs, apfs). Formatting erases everything on it.
+                </p>
+                {locationFormatDrive ? formatButton(locationFormatDrive) : <span className="muted small">Format the drive as ext4 in Settings → Storage to use it.</span>}
+              </div>
+            )}
+            {place === 'external' && !locationNeedsFormat && locationNeedsMount && (locationDrive ?? unmountedDrive) && (
+              <div className="folder-choice">
+                <p className="warn small" role="alert">
+                  {(locationDrive ?? unmountedDrive)!.label ?? (locationDrive ?? unmountedDrive)!.name} is plugged in but not mounted — mount it before installing, or pick another drive.
+                </p>
+                {mountButton((locationDrive ?? unmountedDrive)!)}
+              </div>
+            )}
+            {deviceError && (
+              <p className="error small" role="alert">
+                {deviceError}
               </p>
             )}
-          </div>
-        </div>
-        {ownFolders.map((c) => (
-          <p key={c.id} className="muted small">
-            {c.purpose}: your folder <code>{folders[c.id]}</code> (not encrypted)
-          </p>
-        ))}
-        {requiredFolders.map((c) => (
-          <div key={c.id} className="claim">
-            <p className="claim-title">
-              <strong>{c.purpose}</strong>
-              {c.external!.readOnly && <span className="muted small"> · read-only</span>}
-              <span className="warn small"> · {item.name} needs a folder for this</span>
-            </p>
-            {folderChoice(c)}
-          </div>
-        ))}
-        {place === 'external' && locationNeedsFormat && (
-          <div className="folder-choice">
-            <p className="warn small" role="alert">
-              This drive{locationFormatDrive?.fsType ? ` is ${locationFormatDrive.fsType}` : ''} — apps need ext4 (or btrfs, xfs, zfs, apfs). Formatting erases everything on it.
-            </p>
-            {locationFormatDrive ? formatButton(locationFormatDrive) : <span className="muted small">Format the drive as ext4 in Settings → Storage to use it.</span>}
-          </div>
-        )}
-        {place === 'external' && !locationNeedsFormat && locationNeedsMount && (locationDrive ?? unmountedDrive) && (
-          <div className="folder-choice">
-            <p className="warn small" role="alert">
-              {(locationDrive ?? unmountedDrive)!.label ?? (locationDrive ?? unmountedDrive)!.name} is plugged in but not mounted — mount it before installing, or pick another drive.
-            </p>
-            {mountButton((locationDrive ?? unmountedDrive)!)}
-          </div>
-        )}
-        {deviceError && (
-          <p className="error small" role="alert">
-            {deviceError}
-          </p>
-        )}
-        {changing.storage && (
-          <fieldset className="storage-choices" id={`${sectionId}-where`}>
-            <legend>Where to keep {item.name}</legend>
-            {singlePlace ? (
-              // one place only: plain text, not a one-option radio group (decision 157)
-              <p className="check">This machine{free(dataCandidate)} · the only place right now</p>
-            ) : (
-              <label className="check">
-                <input type="radio" name="loc" checked={place === 'local'} onChange={() => setPlace('local')} /> This machine{free(dataCandidate)}
-              </label>
-            )}
-            {drives.map((cd) => {
-              const drive = deviceFor(cd);
-              return (
-                <label key={cd.dir} className="check" title={cd.eligible ? undefined : (cd.reason ?? 'not available')}>
-                  <input
-                    type="radio"
-                    name="loc"
-                    checked={place === 'external' && driveDir === cd.dir}
-                    disabled={!cd.eligible}
-                    onChange={() => {
-                      setPlace('external');
-                      setDriveDir(cd.dir);
-                    }}
-                  />{' '}
-                  {driveName(cd)}
-                  {free(cd)}
-                  {!cd.eligible && (
-                    <span className="muted small">
-                      {' '}
-                      · {cd.reason} {drive ? formatButton(drive) : <span className="muted small">(format the drive as ext4 in Settings → Storage to use it)</span>}
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-            {formattedDrive && !driveCandidate && (
-              <label className="check">
-                <input type="radio" name="loc" checked={place === 'external'} onChange={() => setPlace('external')} /> {formattedDrive.label ?? formattedDrive.name} · {fmtDeviceSize(formattedDrive.size)}
-              </label>
-            )}
-            {candidates === null && <p className="muted small">Checking drives…</p>}
-            {candidates !== null && drives.length === 0 && unmounted.length === 0 && !formattedDrive && <p className="muted small">No external drive found. Plug one in to see it here.</p>}
-            {unmounted.map((d) => {
-              // A drive on the wrong filesystem can never hold an app even once mounted: offer Format, not Mount.
-              const wrongFs = needsFormatForApps(d.fsType);
-              return (
-                <p key={d.device} className="muted small">
-                  {wrongFs ? `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) uses ${d.fsType}, which cannot hold apps. Format it as ext4 to use it.` : `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) is plugged in. Mount it to use it.`} {wrongFs ? formatButton(d) : mountButton(d)}
-                </p>
-              );
-            })}
-          </fieldset>
-        )}
-      </section>
-      <section className="install-section" aria-labelledby={`${sectionId}-access`}>
-        <h3 className="section-kicker" id={`${sectionId}-access`}>
-          Access
-        </h3>
-        <div className="choice">
-          <span className="choice-icon">
-            <PeopleIcon />
-          </span>
-          <div className="choice-text">
-            <p className="choice-main">
-              <strong>{reach}</strong>
-              {reachUrl ? <span className="url"> · {reachUrl}</span> : null}
-            </p>
-            <p className="muted small">{alsoOn ? <span className="url">{alsoOn}</span> : 'You can share it on Tailscale or your own domain later.'}</p>
-          </div>
-          {mainChoices.length > 1 && (
-            <button className="btn ghost small" type="button" aria-expanded={changing.access} aria-controls={`${sectionId}-main`} aria-label={`Change who can reach ${item.name}`} onClick={() => setChanging({ ...changing, access: !changing.access })}>
-              {changing.access ? 'Done' : 'Change'}
-            </button>
-          )}
-        </div>
-        {mainBlocked && (
-          <p className="warn small" role="alert">
-            {item.name} needs HTTPS: browsers block what it needs on a plain http:// address. Turn on secure addresses in Settings → Network, or connect Tailscale, then install it.
-          </p>
-        )}
-        {changing.access && (
-          <fieldset className="storage-choices" id={`${sectionId}-main`}>
-            <legend>Main address</legend>
-            <p className="muted small">Where {item.name} opens first, and the address it puts in links it sends. Tailscale or a domain also shares it there.</p>
-            {mainChoices.map((m) => (
-              <label key={m.id} className="check url" title={m.ok ? undefined : 'Needs HTTPS'}>
-                <input type="radio" name="main-address" checked={mainSel === m.id} disabled={!m.ok} onChange={() => setMainPick(m.id)} /> {m.label}
-                {!m.ok && <span className="muted small"> — needs HTTPS</span>}
-              </label>
-            ))}
-          </fieldset>
-        )}
-      </section>
-      {item.links.length > 0 && (
-        <fieldset className="storage-choices">
-          <legend>Talks privately to</legend>
-          <p className="muted small">Only these two apps are connected; everything else stays separate.</p>
-          {item.links.map((l) => {
-            const cands = linkCandidates(l, instances);
-            return (
-              <label key={l.id} className="small">
-                <span>
-                  {l.purpose}
-                  {l.optional ? <span className="muted"> · optional</span> : null}
-                </span>
-                {cands.length ? (
-                  <select value={linkSel(l)} onChange={(e) => setLinkPick({ ...linkPick, [l.id]: e.target.value })} aria-label={`Provider for ${l.id}`}>
-                    {l.optional && <option value="">None for now</option>}
-                    {cands.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {appLabel(i)} ({i.name})
-                      </option>
-                    ))}
-                  </select>
+            {changing.storage && (
+              <fieldset className="storage-choices" id={`${sectionId}-where`}>
+                <legend>Where to keep {item.name}</legend>
+                {singlePlace ? (
+                  // one place only: plain text, not a one-option radio group (decision 157)
+                  <p className="check">This machine{free(dataCandidate)} · the only place right now</p>
                 ) : (
-                  <span className={l.optional ? 'muted small' : 'warn small'} role={l.optional ? undefined : 'alert'}>
-                    {l.optional ? 'Nothing to link to yet; you can link it later from the app page.' : `Install ${l.packages ? l.packages.join(' or ') : 'the app it talks to'} first.`}
-                  </span>
+                  <label className="check">
+                    <input type="radio" name="loc" checked={place === 'local'} onChange={() => setPlace('local')} /> This machine{free(dataCandidate)}
+                  </label>
                 )}
-              </label>
-            );
-          })}
-        </fieldset>
-      )}
-      <details className="advanced">
-        <summary>Advanced: name, passphrase, folders, technical details</summary>
-        <div className="advanced-body">
-          <label className="small">
-            Instance name (optional)
-            <input value={name} onChange={(e) => setName(e.target.value)} pattern="[a-z][a-z0-9-]{0,62}" placeholder={item.id} aria-label={`Instance name for ${item.name}`} />
-          </label>
-          {!customPass ? (
-            <p className="muted small">
-              <button className="btn ghost" type="button" onClick={() => setCustomPass(true)}>
-                Use my own passphrase instead…
-              </button>
-            </p>
-          ) : (
-            <label className="small">
-              Encryption passphrase (8+ characters). Write it down: losing it loses the data. Only needed to open {item.name} where your Harbor recovery key is not available, for example on a drive you hand
-              to someone else.
-              <span className="row">
-                <input value={passphrase} onChange={(e) => setPassphrase(e.target.value)} type={showPass ? 'text' : 'password'} autoComplete="new-password" aria-label="Encryption passphrase for this app" placeholder="correct horse battery staple" />
-                <button className="btn ghost" type="button" onClick={() => setShowPass(!showPass)} aria-label={showPass ? 'Hide passphrase' : 'Show passphrase'}>
-                  {showPass ? 'Hide' : 'Show'}
-                </button>
-                <button className="btn ghost" type="button" onClick={genPassphrase} aria-label="Generate a recovery key">
-                  Generate
-                </button>
-              </span>
-            </label>
-          )}
-          {optionalFolders.map((c) => (
-            <div key={c.id} className="claim">
-              <label className="check">
-                <input type="checkbox" checked={c.id in folders} onChange={(e) => (e.target.checked ? setFolders((f) => ({ ...f, [c.id]: f[c.id] ?? '' })) : setFolders(({ [c.id]: _drop, ...rest }) => rest))} /> Keep{' '}
-                {c.purpose.charAt(0).toLowerCase() + c.purpose.slice(1)} in a folder of my own (not encrypted)
-                {c.external!.readOnly && <span className="muted small"> · read-only</span>}
-              </label>
-              {c.id in folders && folderChoice(c)}
-            </div>
-          ))}
-          <dl className="tech">
-            <dt>Stored at</dt>
-            <dd>
-              <code className="path">{locationHome ?? (formattedDrive && driveDir ? `${driveDir}/${item.id}/${slugName}` : '…')}</code>
-            </dd>
-            <dt>Data</dt>
-            <dd>{item.storage ? `${item.storage} data volume${item.storage > 1 ? 's' : ''}, kept when you remove the app` : 'No data of its own'}</dd>
-            <dt>Version</dt>
-            <dd>
-              {[
-                item.version ? `Version ${item.version}` : null,
-                `package revision ${item.revision}`,
-                item.origin === 'local' ? 'your own upload' : item.qualification === 'passed' ? 'tested on a real machine' : 'not yet tested on a real machine',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </dd>
-            <dt>About</dt>
-            <dd>
-              {categoryLabel(item.presentation.category)}
-              {item.presentation.developer ? ` · by ${item.presentation.developer}` : ''}
-            </dd>
-            {item.presentation.releaseNotes && (
-              <>
-                <dt>Release notes</dt>
-                <dd>{item.presentation.releaseNotes}</dd>
-              </>
+                {drives.map((cd) => {
+                  const drive = deviceFor(cd);
+                  return (
+                    <label key={cd.dir} className="check" title={cd.eligible ? undefined : (cd.reason ?? 'not available')}>
+                      <input
+                        type="radio"
+                        name="loc"
+                        checked={place === 'external' && driveDir === cd.dir}
+                        disabled={!cd.eligible}
+                        onChange={() => {
+                          setPlace('external');
+                          setDriveDir(cd.dir);
+                        }}
+                      />{' '}
+                      {driveName(cd)}
+                      {free(cd)}
+                      {!cd.eligible && (
+                        <span className="muted small">
+                          {' '}
+                          · {cd.reason} {drive ? formatButton(drive) : <span className="muted small">(format the drive as ext4 in Settings → Storage to use it)</span>}
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+                {formattedDrive && !driveCandidate && (
+                  <label className="check">
+                    <input type="radio" name="loc" checked={place === 'external'} onChange={() => setPlace('external')} /> {formattedDrive.label ?? formattedDrive.name} · {fmtDeviceSize(formattedDrive.size)}
+                  </label>
+                )}
+                {candidates === null && <p className="muted small">Checking drives…</p>}
+                {candidates !== null && drives.length === 0 && unmounted.length === 0 && !formattedDrive && <p className="muted small">No external drive found. Plug one in to see it here.</p>}
+                {unmounted.map((d) => {
+                  // A drive on the wrong filesystem can never hold an app even once mounted: offer Format, not Mount.
+                  const wrongFs = needsFormatForApps(d.fsType);
+                  return (
+                    <p key={d.device} className="muted small">
+                      {wrongFs ? `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) uses ${d.fsType}, which cannot hold apps. Format it as ext4 to use it.` : `${d.label ?? d.name} (${fmtDeviceSize(d.size)}) is plugged in. Mount it to use it.`} {wrongFs ? formatButton(d) : mountButton(d)}
+                    </p>
+                  );
+                })}
+              </fieldset>
             )}
-          </dl>
-          {item.origin === 'local' && onRemovePackage && (
-            <p className="muted small">
-              This package was uploaded to this Harbor.{' '}
-              {installed > 0 ? (
-                'Uninstall its apps completely before removing it.'
-              ) : (
-                <button className="btn ghost danger" onClick={onRemovePackage} aria-label={`Remove package ${item.name}`}>
-                  Remove package
+          </section>
+          <section className="install-section" aria-labelledby={`${sectionId}-access`}>
+            <h3 className="section-kicker" id={`${sectionId}-access`}>
+              Access
+            </h3>
+            <div className="choice">
+              <span className="choice-icon">
+                <PeopleIcon />
+              </span>
+              <div className="choice-text">
+                <p className="choice-main">
+                  <strong>{reach}</strong>
+                  {reachUrl ? <span className="url"> · {reachUrl}</span> : null}
+                </p>
+                <p className="muted small">{alsoOn ? <span className="url">{alsoOn}</span> : 'You can share it on Tailscale or your own domain later.'}</p>
+              </div>
+              {mainChoices.length > 1 && (
+                <button className="btn ghost small" type="button" aria-expanded={changing.access} aria-controls={`${sectionId}-main`} aria-label={`Change who can reach ${item.name}`} onClick={() => setChanging({ ...changing, access: !changing.access })}>
+                  {changing.access ? 'Done' : 'Change'}
                 </button>
               )}
-            </p>
+            </div>
+            {mainBlocked && (
+              <p className="warn small" role="alert">
+                {item.name} needs HTTPS: browsers block what it needs on a plain http:// address. Turn on secure addresses in Settings → Network, or connect Tailscale, then install it.
+              </p>
+            )}
+            {changing.access && (
+              <fieldset className="storage-choices" id={`${sectionId}-main`}>
+                <legend>Main address</legend>
+                <p className="muted small">Where {item.name} opens first, and the address it puts in links it sends. Tailscale or a domain also shares it there.</p>
+                {mainChoices.map((m) => (
+                  <label key={m.id} className="check url" title={m.ok ? undefined : 'Needs HTTPS'}>
+                    <input type="radio" name="main-address" checked={mainSel === m.id} disabled={!m.ok} onChange={() => setMainPick(m.id)} /> {m.label}
+                    {!m.ok && <span className="muted small"> — needs HTTPS</span>}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+          </section>
+          {item.links.length > 0 && (
+            <fieldset className="storage-choices">
+              <legend>Talks privately to</legend>
+              <p className="muted small">Only these two apps are connected; everything else stays separate.</p>
+              {item.links.map((l) => {
+                const cands = linkCandidates(l, instances);
+                return (
+                  <label key={l.id} className="small">
+                    <span>
+                      {l.purpose}
+                      {l.optional ? <span className="muted"> · optional</span> : null}
+                    </span>
+                    {cands.length ? (
+                      <select value={linkSel(l)} onChange={(e) => setLinkPick({ ...linkPick, [l.id]: e.target.value })} aria-label={`Provider for ${l.id}`}>
+                        {l.optional && <option value="">None for now</option>}
+                        {cands.map((i) => (
+                          <option key={i.id} value={i.id}>
+                            {appLabel(i)} ({i.name})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={l.optional ? 'muted small' : 'warn small'} role={l.optional ? undefined : 'alert'}>
+                        {l.optional ? 'Nothing to link to yet; you can link it later from the app page.' : `Install ${l.packages ? l.packages.join(' or ') : 'the app it talks to'} first.`}
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </fieldset>
           )}
-        </div>
-      </details>
-      {picking && (
-        <FolderPicker
-          title={`Folder for ${external.find((c) => c.id === picking)?.purpose ?? 'this app'}`}
-          hint={external.find((c) => c.id === picking)?.external?.hint}
-          initial={folders[picking] || null}
-          onClose={() => setPicking(null)}
-          onPick={(p) => {
-            setFolders((f) => ({ ...f, [picking]: p }));
-            setPicking(null);
-          }}
-        />
+          <details className="advanced">
+            <summary>Advanced: name, passphrase, folders, technical details</summary>
+            <div className="advanced-body">
+              {!copyMode && (
+                <label className="small">
+                  Instance name (optional)
+                  <input value={name} onChange={(e) => setName(e.target.value)} pattern="[a-z][a-z0-9-]{0,62}" placeholder={item.id} aria-label={`Instance name for ${item.name}`} />
+                </label>
+              )}
+              {!customPass ? (
+                <p className="muted small">
+                  <button className="btn ghost" type="button" onClick={() => setCustomPass(true)}>
+                    Use my own passphrase instead…
+                  </button>
+                </p>
+              ) : (
+                <label className="small">
+                  Encryption passphrase (8+ characters). Write it down: losing it loses the data. Only needed to open {item.name} where your Harbor recovery key is not available, for example on a drive you hand
+                  to someone else.
+                  <span className="row">
+                    <input value={passphrase} onChange={(e) => setPassphrase(e.target.value)} type={showPass ? 'text' : 'password'} autoComplete="new-password" aria-label="Encryption passphrase for this app" placeholder="correct horse battery staple" />
+                    <button className="btn ghost" type="button" onClick={() => setShowPass(!showPass)} aria-label={showPass ? 'Hide passphrase' : 'Show passphrase'}>
+                      {showPass ? 'Hide' : 'Show'}
+                    </button>
+                    <button className="btn ghost" type="button" onClick={genPassphrase} aria-label="Generate a recovery key">
+                      Generate
+                    </button>
+                  </span>
+                </label>
+              )}
+              {optionalFolders.map((c) => (
+                <div key={c.id} className="claim">
+                  <label className="check">
+                    <input type="checkbox" checked={c.id in folders} onChange={(e) => (e.target.checked ? setFolders((f) => ({ ...f, [c.id]: f[c.id] ?? '' })) : setFolders(({ [c.id]: _drop, ...rest }) => rest))} /> Keep{' '}
+                    {c.purpose.charAt(0).toLowerCase() + c.purpose.slice(1)} in a folder of my own (not encrypted)
+                    {c.external!.readOnly && <span className="muted small"> · read-only</span>}
+                  </label>
+                  {c.id in folders && folderChoice(c)}
+                </div>
+              ))}
+              <dl className="tech">
+                <dt>Stored at</dt>
+                <dd>
+                  <code className="path">{locationHome ?? (formattedDrive && driveDir ? `${driveDir}/${item.id}/${slugName}` : '…')}</code>
+                </dd>
+                <dt>Data</dt>
+                <dd>{item.storage ? `${item.storage} data volume${item.storage > 1 ? 's' : ''}, kept when you remove the app` : 'No data of its own'}</dd>
+                <dt>Version</dt>
+                <dd>
+                  {[
+                    item.version ? `Version ${item.version}` : null,
+                    `package revision ${item.revision}`,
+                    item.origin === 'local' ? 'your own upload' : item.qualification === 'passed' ? 'tested on a real machine' : 'not yet tested on a real machine',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </dd>
+                <dt>About</dt>
+                <dd>
+                  {categoryLabel(item.presentation.category)}
+                  {item.presentation.developer ? ` · by ${item.presentation.developer}` : ''}
+                </dd>
+                {item.presentation.releaseNotes && (
+                  <>
+                    <dt>Release notes</dt>
+                    <dd>{item.presentation.releaseNotes}</dd>
+                  </>
+                )}
+              </dl>
+              {item.origin === 'local' && onRemovePackage && (
+                <p className="muted small">
+                  This package was uploaded to this Harbor.{' '}
+                  {installed > 0 ? (
+                    'Uninstall its apps completely before removing it.'
+                  ) : (
+                    <button className="btn ghost danger" onClick={onRemovePackage} aria-label={`Remove package ${item.name}`}>
+                      Remove package
+                    </button>
+                  )}
+                </p>
+              )}
+            </div>
+          </details>
+          {picking && (
+            <FolderPicker
+              title={`Folder for ${external.find((c) => c.id === picking)?.purpose ?? 'this app'}`}
+              hint={external.find((c) => c.id === picking)?.external?.hint}
+              initial={folders[picking] || null}
+              onClose={() => setPicking(null)}
+              onPick={(p) => {
+                setFolders((f) => ({ ...f, [picking]: p }));
+                setPicking(null);
+              }}
+            />
+          )}
+          <p className="next-step muted small">{nextStep}</p>
+          <div className="row end">
+            <button className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              disabled={busy || item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
+              onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
+              aria-label={`Install ${item.name} now`}
+              title={nameBlocked ? 'This copy needs a free name' : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
+            >
+              Install
+            </button>
+          </div>
+        </>
       )}
-      <p className="next-step muted small">{nextStep}</p>
-      <div className="row end">
-        <button className="btn" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          className="btn primary"
-          disabled={busy || item.availability !== 'available' || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
-          onClick={() => onStart({ kind: 'install', packageId: item.id, name: name.trim(), storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
-          aria-label={`Install ${item.name} now`}
-          title={locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
-        >
-          Install
-        </button>
-      </div>
       {formatTarget && (
         <Dialog title={`Format ${formatTarget.label ?? formatTarget.name} as ext4?`} onClose={() => setFormatTarget(null)}>
           <p>
@@ -1336,7 +1433,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
   const canStop = (inst.installState === 'installed' || inst.installState === 'needs_action' || inst.installState === 'failed') && inst.runtime !== 'stopped';
   const canStart = inst.installState === 'installed' && inst.desired === 'stopped' && !need;
   return (
-    <Dialog title={appLabel(inst)} onClose={onClose} wide>
+    <Dialog title={appLabel(inst, instances)} onClose={onClose} wide>
       <div className="app-head">
         <InstanceIcon inst={inst} size={72} />
         <div>

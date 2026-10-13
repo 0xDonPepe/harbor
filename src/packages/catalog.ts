@@ -132,6 +132,7 @@ export interface CatalogItem {
   claims: { id: string; purpose: string; external: { hint: string; required: boolean; readOnly: boolean } | null }[];
   operatorSecrets: { id: string; prompt: string; optional: boolean; minLength: number | null; maxLength: number | null }[];
   links: { id: string; purpose: string; optional: boolean; packages: string[] | null; endpoint: string | null }[];
+  multiInstance?: boolean; // decision 170
 }
 
 // Decisions 125/126: what an install asks for besides storage.
@@ -167,6 +168,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         claims: (pkg.manifest.storage ?? []).map((s) => ({ id: s.id, purpose: s.purpose, external: s.external ? { hint: s.external.hint, required: s.external.required ?? false, readOnly: s.external.readOnly ?? false } : null })),
         operatorSecrets: operatorSecretsOf(pkg.manifest),
         links: linksOf(pkg.manifest),
+        multiInstance: pkg.manifest.deployment.multiInstance,
       });
     } catch (e) {
       // A package that needs a newer Harbor still shows its name and look when this Harbor can read them.
@@ -196,6 +198,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         claims: [],
         operatorSecrets: [],
         links: [],
+        ...(peek ? { multiInstance: peek.manifest.deployment.multiInstance } : {}),
       });
     }
   }

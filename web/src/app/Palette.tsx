@@ -68,7 +68,7 @@ export function Palette({ c, go, onOpenApp, onAbout, onClose }: { c: Console; go
       out.push({
         id: `app-${i.id}`,
         kind: 'app',
-        title: appLabel(i),
+        title: appLabel(i, c.data.instances),
         subtitle: `${plainStatus(i).label}${canOpen ? ' · Enter opens it' : ' · Enter shows details'}`,
         inst: i,
         run: () => {

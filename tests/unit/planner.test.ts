@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { allocateEndpoints } from '../../src/planner/ports.js';
-import { identityFor, proposeName } from '../../src/planner/identity.js';
+import { copyNote, identityFor, proposeName } from '../../src/planner/identity.js';
 import { escapeCompose, renderCompose } from '../../src/planner/render.js';
 import { validateManifestShape } from '../../src/packages/manifest.js';
 import { validateComposeSource } from '../../src/packages/compose-source.js';
@@ -27,6 +27,12 @@ describe('identity', () => {
     expect(proposeName('excalidraw', new Set(['excalidraw', 'excalidraw-2']))).toEqual({ name: 'excalidraw-3' });
     expect(proposeName('excalidraw', new Set(['x']), 'Bad_Name').error).toMatch(/must match/);
     expect(proposeName('excalidraw', new Set(['mine']), 'mine').error).toMatch(/already used/);
+  });
+  it('says when an install adds a separate copy (decision 170)', () => {
+    expect(copyNote('Immich', 'immich', { active: 0, removed: 0 })).toBeNull();
+    expect(copyNote('Immich', 'immich-2', { active: 1, removed: 0 })).toBe('You already have Immich. This installs a separate copy (immich-2) with its own data, address and login; the first one is not touched.');
+    expect(copyNote('Immich', 'immich-3', { active: 2, removed: 1 })).toMatch(/^You already have 2 copies of Immich\. This installs another separate copy \(immich-3\).*the others are not touched\.$/);
+    expect(copyNote('Immich', 'immich-2', { active: 0, removed: 1 })).toMatch(/^A removed copy of Immich still keeps its data\..*reinstall the removed copy from Home instead\.$/);
   });
 });
 

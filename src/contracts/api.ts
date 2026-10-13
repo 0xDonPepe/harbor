@@ -350,6 +350,11 @@ export interface CatalogItemDto {
   operatorSecrets: { id: string; prompt: string; optional: boolean; minLength: number | null; maxLength: number | null }[];
   // decision 126: other apps this one talks to privately (the install picks a provider for each)
   links: { id: string; purpose: string; optional: boolean; packages: string[] | null; endpoint: string | null }[];
+  // decision 170: whether the package allows several copies (manifest deployment.multiInstance); absent when
+  // Harbor cannot read the package. false = one copy per machine (the Store shows Open, never a second Install).
+  multiInstance?: boolean;
+  // decision 170: the name the next install gets by default (the planner's rule: the package id, else -2, -3…)
+  proposedName?: string;
 }
 
 export interface SystemMetricsDto {

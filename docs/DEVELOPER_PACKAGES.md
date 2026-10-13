@@ -60,7 +60,7 @@ ports:                           # optional (Harbor 0.29.0, decision 163; set re
     containerPort: 51820         # a port another app holds, something on the machine uses, or one inside
     hostPort: 51820              # Harbor's own range. The console says which port to forward on the router.
     protocol: udp                # udp only for now
-    purpose: WireGuard VPN tunnels
+    purpose: WireGuard VPN tunnels   # A release that ADDS a port is accepted like a new permission (0.31.0).
 permissions:                     # optional (0.29.0, decision 163): per service, from this fixed list only.
   app: [net-admin, ip-forwarding]  # net-admin = NET_ADMIN (tunnels, routes, firewall rules); tun = the
                                  # /dev/net/tun device (OpenVPN); ip-forwarding = net.ipv4.ip_forward and friends,
@@ -287,6 +287,11 @@ services:
       context: ../app        # relative to harbor/; may step up into the repo, never out of it
       dockerfile: Dockerfile # optional, defaults to Dockerfile
 ```
+
+The context and its Dockerfile must be real folders and files inside the repository (checked on disk, not
+only by name: a symbolic link that leads out of the repository is refused). Links *inside* the context are
+fine as long as they are relative and stay inside the context. `harbor/` itself and the files in it must not
+be links (decision 165).
 
 What Harbor does: shallow-clones the branch, records the **commit SHA** (the provenance pin for
 built services — registry digests still pin `image:` services), appends the committer date to

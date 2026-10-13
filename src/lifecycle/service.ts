@@ -40,6 +40,7 @@ import { validateGitSourceInput } from '../packages/git.js';
 import { ComposeError } from '../docker/adapter.js';
 import type { Ctx } from './context.js';
 import { exposureDto, instanceSummary, operationDto, planDto } from './dto.js';
+import { ONE_TIME_TTL_MS } from '../state/one-time.js';
 import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
 import { retainedExposures } from './retained-exposures.js';
@@ -503,13 +504,24 @@ export class ApplicationService {
   }
   setNotificationChannels(channels: NotificationChannelDto[]): { channels: NotificationChannelDto[] } {
     if (channels.length > 5) throw new HarborError('INVALID_REQUEST', 'at most 5 notification channels');
-    // A redacted secret in the payload means "keep the stored one".
+    // A redacted secret in the payload means "keep the stored one" — decision 165: only while it still goes to the
+    // same place. A session that repoints a channel must type the secret again, or "Test" would hand it to the new host.
     const stored = this.ctx.notifier.channels();
+    const kept = (what: string) => new HarborError('INVALID_REQUEST', `type the ${what} again: the address changed, and a stored secret only goes where it went before`);
     const merged = channels.map((c, idx) => {
       const prev = stored[idx];
-      if (c.kind === 'ntfy' && c.token === '••••' && prev?.kind === 'ntfy') return { ...c, ...(prev.token !== undefined ? { token: prev.token } : {}) };
-      if (c.kind === 'webhook' && c.secret === '••••' && prev?.kind === 'webhook') return { ...c, ...(prev.secret !== undefined ? { secret: prev.secret } : {}) };
-      if (c.kind === 'email' && c.smtp.pass === '••••' && prev?.kind === 'email') return { ...c, smtp: { ...c.smtp, ...(prev.smtp.pass !== undefined ? { pass: prev.smtp.pass } : {}) } };
+      if (c.kind === 'ntfy' && c.token === '••••') {
+        if (prev?.kind !== 'ntfy' || prev.server !== c.server) throw kept('ntfy token');
+        return { ...c, ...(prev.token !== undefined ? { token: prev.token } : {}) };
+      }
+      if (c.kind === 'webhook' && c.secret === '••••') {
+        if (prev?.kind !== 'webhook' || prev.url !== c.url) throw kept('webhook secret');
+        return { ...c, ...(prev.secret !== undefined ? { secret: prev.secret } : {}) };
+      }
+      if (c.kind === 'email' && c.smtp.pass === '••••') {
+        if (prev?.kind !== 'email' || prev.smtp.host !== c.smtp.host || prev.smtp.port !== c.smtp.port || prev.smtp.user !== c.smtp.user) throw kept('mail password');
+        return { ...c, smtp: { ...c.smtp, ...(prev.smtp.pass !== undefined ? { pass: prev.smtp.pass } : {}) } };
+      }
       return c;
     });
     this.ctx.notifier.setChannels(merged);
@@ -599,7 +611,7 @@ export class ApplicationService {
   networkHttps(): NetworkHttpsDto {
     const enabled = this.httpsEnabled();
     const tls = readTlsState(this.ctx.config.stateDir);
-    return { enabled, url: enabled ? 'https://harbor.local/' : null, fingerprint: tls?.fingerprint ?? null, expiresAt: tls?.expiresAt ?? null, hosts: tls?.hosts ?? [], ...this.addressDependents() };
+    return { enabled, url: enabled ? 'https://harbor.local/' : null, fingerprint: tls?.fingerprint ?? null, expiresAt: tls?.expiresAt ?? null, hosts: tls?.hosts ?? [], ...(tls ? { caLimited: tls.caLimited } : {}), ...this.addressDependents() };
   }
 
   // Decision 116: who a LAN HTTPS switch affects. breaksWhenOff = apps that need HTTPS whose main address
@@ -659,6 +671,15 @@ export class ApplicationService {
       this.ctx.repo.setSetting('network.httpsEnabled', false);
       this.ctx.log.info('LAN HTTPS disabled', {});
     }
+    await reconcileLanHttps(this.ctx);
+    return this.networkHttps();
+  }
+  // Decision 165: a new local CA (name-constrained) and server cert. Every device has to trust the new one;
+  // the old CA key is deleted, so nothing can be signed with it any more.
+  async replaceLanCa(): Promise<NetworkHttpsDto> {
+    if (!this.httpsEnabled()) throw new HarborError('INVALID_STATE', 'secure addresses are off', { nextAction: 'Turn them on first; that mints a new certificate authority anyway.' });
+    await ensureTlsCerts(this.ctx.config.stateDir, lanHttpsHosts(), { replaceCa: true });
+    this.ctx.log.info('LAN HTTPS certificate authority replaced', {});
     await reconcileLanHttps(this.ctx);
     return this.networkHttps();
   }
@@ -1602,7 +1623,28 @@ export class ApplicationService {
   operation(id: string): OperationDto {
     const o = this.ctx.repo.operation(id);
     if (!o) throw new HarborError('NOT_FOUND', `unknown operation ${id}`);
-    return operationDto(o, this.ctx.repo.eventsForOperation(id, 200));
+    const dto = operationDto(o, this.ctx.repo.eventsForOperation(id, 200));
+    const once = this.oneTimeResult(id);
+    return once && dto.result ? { ...dto, result: { ...dto.result, ...once } } : dto;
+  }
+
+  // Recovery words an operation minted (decision 165): never written to the operations table (a copy of
+  // harbor.db would otherwise open every sealed app without the password). Held in memory for a day so the
+  // tray and the CLI can show them; a daemon restart loses them (the card can be replaced in Settings).
+  private oneTime = new Map<string, { values: Record<string, unknown>; until: number }>();
+  keepOneTimeResult(operationId: string, values: Record<string, unknown>): void {
+    const now = this.ctx.clock.now().getTime();
+    for (const [k, v] of this.oneTime) if (v.until <= now) this.oneTime.delete(k);
+    if (Object.keys(values).length) this.oneTime.set(operationId, { values, until: now + ONE_TIME_TTL_MS });
+  }
+  private oneTimeResult(operationId: string): Record<string, unknown> | null {
+    const v = this.oneTime.get(operationId);
+    if (!v) return null;
+    if (v.until <= this.ctx.clock.now().getTime()) {
+      this.oneTime.delete(operationId);
+      return null;
+    }
+    return v.values;
   }
 
   // Folders bound into apps ("bring your own folder"), for the storage overview.
@@ -1939,6 +1981,7 @@ export class ApplicationService {
       endpoints,
       ports: fixedPorts,
       permissions: addedPermissions,
+      opensPorts: fixedPorts.filter((p) => !heldPorts.has(p.hostPort)).map((p) => p.hostPort),
       storage: [...keptStorage, ...newStorage],
       location: null,
       secrets: plannedSecrets(next.manifest, keptSecrets),
@@ -2601,9 +2644,13 @@ export class ApplicationService {
       checked = checkSubmittedSecrets((plan.proposal.secrets ?? []) as PlannedSecret[], opts.secrets);
       // Decision 163: permissions are accepted by the person approving, never by default. Update-all, auto-update
       // and git redeploys submit without it, so an update that asks for more stops here and waits for a person.
+      // Decision 165: so does an update that opens fixed ports the current release does not publish (a release from
+      // a compromised catalog or git source would otherwise open a port to the internet with nobody asked).
       const asked = plan.proposal.permissions ?? [];
-      if (asked.length && opts.acceptPermissions !== true) {
-        throw new HarborError('PERMISSION_REQUIRED', `${plan.proposal.name} asks for permissions you have not accepted: ${asked.map((p) => `${p.service} ${p.permission}`).join(', ')}`, { nextAction: 'Review them in the plan and approve with them accepted (console: tick the box; CLI: --accept-permissions).' });
+      const opened = plan.proposal.opensPorts ?? [];
+      if ((asked.length || opened.length) && opts.acceptPermissions !== true) {
+        const what = [...asked.map((p) => `${p.service} ${p.permission}`), ...opened.map((p) => `open port ${p}`)].join(', ');
+        throw new HarborError('PERMISSION_REQUIRED', `${plan.proposal.name} asks for permissions you have not accepted: ${what}`, { nextAction: 'Review them in the plan and approve with them accepted (console: tick the box; CLI: --accept-permissions).' });
       }
       // fixed ports (decision 163): the planner checked them; claim them now, unless this instance already holds one
       const fixedClaims = (instanceId: string) => {

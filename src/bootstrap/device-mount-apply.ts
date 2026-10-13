@@ -110,6 +110,31 @@ export function reownMarkers(root: string, uid: number, gid: number, log: (m: st
   return fixed;
 }
 
+// Decision 165: a drive is data, never a way onto the host. nosuid + nodev on every mount (udisks does the
+// same), so a stick carrying a setuid-root shell or a raw device node gains nothing from being mounted by root.
+export const SAFE_MOUNT_OPTIONS = 'nosuid,nodev';
+export function mountArgsFor(device: string, mountpoint: string, fatOwner: { uid: number; gid: number } | null): string[] {
+  const opts = fatOwner ? `${SAFE_MOUNT_OPTIONS},uid=${fatOwner.uid},gid=${fatOwner.gid},utf8` : SAFE_MOUNT_OPTIONS;
+  return ['-o', opts, device, mountpoint];
+}
+
+// What is mounted exactly at `mountpoint` right now (its source), or null.
+export function mountedAt(mountpoint: string, procMounts?: string): string | null {
+  let text = procMounts;
+  if (text === undefined) {
+    try {
+      text = readFileSync('/proc/self/mounts', 'utf8');
+    } catch {
+      return null;
+    }
+  }
+  for (const line of text.split('\n')) {
+    const [src, target] = line.split(' ');
+    if (src && target && target.replace(/\\040/g, ' ') === mountpoint) return src;
+  }
+  return null;
+}
+
 export async function applyDeviceMount(device: string, action: 'mount' | 'unmount' | 'takeover', log: (m: string) => void): Promise<void> {
   if (!validDeviceName(device)) throw new HarborError('INVALID_REQUEST', `not a device name: ${device}`);
   if (typeof process.getuid === 'function' && process.getuid() !== 0) throw new HarborError('INVALID_REQUEST', 'device-mount must run as root (it is started by harbor-device-mount@.service)');
@@ -150,6 +175,14 @@ export async function applyDeviceMount(device: string, action: 'mount' | 'unmoun
       return;
     }
     const mp = suggestedMountpoint(found);
+    const holder = mountedAt(mp);
+    if (holder) {
+      // Decision 165: never stack a drive on top of another one (a stick labelled like the app drive would
+      // otherwise take its place under the same path).
+      const msg = `${mp} already holds ${holder}; Harbor will not mount ${found.device} on top of it. Eject that drive first, or give this one a different label.`;
+      writeStatus(stateDir, device, 'failed', msg, null);
+      throw new HarborError('INVALID_REQUEST', msg, { nextAction: 'Eject the other drive or relabel this one, then mount again.' });
+    }
     writeStatus(stateDir, device, 'mounting', `mounting ${found.device} at ${mp}`, mp);
     log(`mounting ${found.device} at ${mp}`);
     try {
@@ -159,7 +192,7 @@ export async function applyDeviceMount(device: string, action: 'mount' | 'unmoun
       const fat = found.fsType === 'vfat' || found.fsType === 'exfat' || found.fsType === 'ntfs' || found.fsType === 'ntfs3' || found.fsType === 'fuseblk';
       const uid = Number((await exec('/usr/bin/id', ['-u', PRODUCT.serviceUser])).stdout.trim());
       const gid = Number((await exec('/usr/bin/id', ['-g', PRODUCT.serviceUser])).stdout.trim());
-      const mountArgs = fat ? ['-o', `uid=${uid},gid=${gid},utf8`, found.device, mp] : [found.device, mp];
+      const mountArgs = mountArgsFor(found.device, mp, fat ? { uid, gid } : null);
       // One self-retry on transient lock contention (see isDriveBusyError):
       // the first attempt often races a just-finished format or a ghost
       // mount layer; the second, a few seconds later, lands.

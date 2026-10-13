@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { DeviceMountService } from '../../src/system/device-mount.js';
-import { friendlyBusyMessage, isDriveBusyError } from '../../src/bootstrap/device-mount-apply.js';
+import { friendlyBusyMessage, isDriveBusyError, mountArgsFor, mountedAt } from '../../src/bootstrap/device-mount-apply.js';
 import type { HarborError } from '../../src/errors.js';
 import { systemClock } from '../../src/util.js';
 import type * as HostStorage from '../../src/system/host-storage.js';
@@ -96,5 +96,18 @@ describe('device mount service', () => {
   it('translates lock contention into a plain-words retry message', () => {
     expect(friendlyBusyMessage('mount', 'exit 18 raw')).toMatch(/Wait a few seconds and try Mount again/);
     expect(friendlyBusyMessage('unmount', 'exit 32 raw')).toMatch(/try Eject again/);
+  });
+});
+
+describe('drive mounts are data only (decision 165)', () => {
+  it('every mount carries nosuid,nodev; FAT drives add the harbor owner', () => {
+    expect(mountArgsFor('/dev/sdc1', '/mnt/stick', null)).toEqual(['-o', 'nosuid,nodev', '/dev/sdc1', '/mnt/stick']);
+    expect(mountArgsFor('/dev/sdc1', '/mnt/stick', { uid: 998, gid: 997 })).toEqual(['-o', 'nosuid,nodev,uid=998,gid=997,utf8', '/dev/sdc1', '/mnt/stick']);
+  });
+  it('knows what already sits at a mountpoint (so a drive never stacks on another)', () => {
+    const mounts = '/dev/sda2 / ext4 rw 0 0\n/dev/sdb1 /mnt/appdrive ext4 rw,nosuid,nodev 0 0\n/dev/sdd1 /mnt/my\\040drive vfat rw 0 0\n';
+    expect(mountedAt('/mnt/appdrive', mounts)).toBe('/dev/sdb1');
+    expect(mountedAt('/mnt/my drive', mounts)).toBe('/dev/sdd1');
+    expect(mountedAt('/mnt/other', mounts)).toBeNull();
   });
 });

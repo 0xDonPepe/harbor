@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import type { Ctx } from './context.js';
 import { HarborError, type ErrorCode } from '../errors.js';
 import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
@@ -22,8 +23,9 @@ import { appAuthorities, exposureCheck, exposureUrl, primaryUrlFor } from '../ex
 import { retainedExposures, setRetainedExposures, toRetained } from './retained-exposures.js';
 import type { VolumeImport } from '../storage/fscrypt.js';
 import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type CaddyRoute } from '../exposure/caddy.js';
-import { lanAppHost, lanHostnames, lanNames, machineAddresses } from '../system/lan.js';
+import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
 import { HTTPS_SETTING, lanHttpsHosts, readTlsState } from '../system/lan-https.js';
+import { splitOneTime } from '../state/one-time.js';
 import type { ExposureRow, PrimaryExposure } from '../state/repo.js';
 import bcrypt from 'bcryptjs';
 
@@ -140,8 +142,9 @@ export class OperationRunner {
         case 'backup': await this.backupCold(op, plan, inst); break;
         case 'restore': await this.restoreInPlace(op, plan, inst, secretValues); break;
       }
-      const result = { instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) };
+      const { stored: result, memory } = splitOneTime({ instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) });
       this.opResult = null;
+      this.ctx.service.keepOneTimeResult(op.id, memory);
       repo.transaction(() => {
         repo.finishOperation(op.id, 'succeeded', { result });
         repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id });
@@ -161,7 +164,9 @@ export class OperationRunner {
       const stale = code === 'PLAN_STALE';
       const dropInstall = stale && op.kind === 'install' && repo.resources(inst.id).length === 0;
       if (stale && op.kind === 'install') this.ctx.service.takeInstallLocationSecret(plan.id);
-      const result = rolledBack ? { instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) } : undefined;
+      const split = rolledBack ? splitOneTime({ instanceId: inst.id, name: inst.name, ...(this.opResult ?? {}) }) : null;
+      const result = split?.stored;
+      if (split) this.ctx.service.keepOneTimeResult(op.id, split.memory);
       this.opResult = null;
       this.ctx.log.warn(`${op.kind} ${state}: ${message}`, { operationId: op.id, instanceId: inst.id, code });
       repo.transaction(() => {
@@ -1231,7 +1236,8 @@ export class OperationRunner {
         }
         // Cards are shown once in the operation result (same UX as
         // provisioned credentials / exposure basic-auth). Never logged, never
-        // stored — the operator writes them down or loses the data with them.
+        // stored (decision 165: the runner keeps these keys out of the
+        // operations table) — the operator writes them down or loses them.
         // A custom passphrase earns the app its OWN words; every home is also
         // covered by the Harbor card, which is only ever displayed the once it
         // is issued.
@@ -2144,7 +2150,7 @@ export function caddySignature(ctx: Ctx): string {
 }
 export function caddyLanConsole(config: Ctx['config']): CaddyLanConsole | null {
   if (!config.lan.enabled) return null;
-  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port };
+  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port, peers: [...LAN_PEER_RANGES, ...localSubnets()] };
 }
 // LAN HTTPS served through Caddy (decision 109 + Caddy-owns-443 fix): when LAN HTTPS is on and the Harbor
 // cert exists, Caddy terminates TLS for the LAN hostnames (harbor.local, <hostname>.local, the machine's
@@ -2156,7 +2162,14 @@ export function caddyLanHttps(ctx: Ctx): CaddyLanHttps | null {
   const tls = readTlsState(ctx.config.stateDir);
   if (!tls) return null;
   const hosts = lanHttpsHosts().filter((h) => !h.includes(':'));
-  return { hosts, consolePort: ctx.config.listen.port, cert: path.join(ctx.config.stateDir, 'tls', 'server.crt'), key: path.join(ctx.config.stateDir, 'tls', 'server.key') };
+  const cert = path.join(ctx.config.stateDir, 'tls', 'server.crt');
+  let certVersion: string | undefined;
+  try {
+    certVersion = createHash('sha256').update(readFileSync(cert)).digest('hex').slice(0, 12);
+  } catch {
+    certVersion = undefined;
+  }
+  return { hosts, consolePort: ctx.config.listen.port, cert, key: path.join(ctx.config.stateDir, 'tls', 'server.key'), peers: [...LAN_PEER_RANGES, ...localSubnets()], ...(certVersion ? { certVersion } : {}) };
 }
 
 // ---------- exposure helpers (module scope; used by the class below via prototype extension)

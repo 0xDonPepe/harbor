@@ -101,6 +101,11 @@ describe('notifications engine', () => {
 
     // Re-PUT with redacted secrets: stored values must be kept (delivery still authenticates).
     await h.api.expect(200, 'PUT', '/v1/notifications/channels', { channels: read.channels });
+    // Decision 165: … but never sent somewhere new: repointing a channel needs the secret typed again.
+    const moved = read.channels.map((c, i) => (i === 0 ? { ...c, server: 'https://ntfy.attacker.example' } : c));
+    await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: moved });
+    const hookMoved = read.channels.map((c, i) => (i === 1 ? { ...c, url: 'https://hooks.attacker.example/x' } : c));
+    await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', '/v1/notifications/channels', { channels: hookMoved });
 
     h.notifyTransport.posts.length = 0;
     // A new error-severity notification (failed op) must hit both channels; info only ntfy.

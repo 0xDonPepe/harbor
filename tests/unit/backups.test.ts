@@ -119,6 +119,11 @@ describe('target packages (decision 152)', () => {
     const v = checkTargetValues(s3, { endpoint: ' s3.example.com ', bucket: 'b1', accessKeyId: 'k', secretAccessKey: 's' });
     expect(v).toEqual({ config: { endpoint: 's3.example.com', bucket: 'b1', path: 'harbor', accessKeyId: 'k' }, secrets: { secretAccessKey: 's' } });
     expect(checkTargetValues(s3, { endpoint: 'e', bucket: 'b1', accessKeyId: 'k', secretAccessKey: '••••' }, { secretAccessKey: 'kept' }).secrets).toEqual({ secretAccessKey: 'kept' });
+    // decision 165: the stored secret stays only while the place stays the same place
+    const where = checkTargetValues(s3, { endpoint: 'e', bucket: 'b1', accessKeyId: 'k', secretAccessKey: 's' }).config;
+    expect(checkTargetValues(s3, { endpoint: 'e', bucket: 'b1', accessKeyId: 'k', secretAccessKey: '••••' }, { secretAccessKey: 'kept' }, where).secrets).toEqual({ secretAccessKey: 'kept' });
+    expect(() => checkTargetValues(s3, { endpoint: 'evil.example.com', bucket: 'b1', accessKeyId: 'k', secretAccessKey: '••••' }, { secretAccessKey: 'kept' }, where)).toThrow(/place changed/);
+    expect(checkTargetValues(s3, { endpoint: 'evil.example.com', bucket: 'b1', accessKeyId: 'k', secretAccessKey: 'typed-again' }, { secretAccessKey: 'kept' }, where).secrets).toEqual({ secretAccessKey: 'typed-again' });
     expect(() => checkTargetValues(s3, { endpoint: 'e', bucket: 'b1', accessKeyId: 'k' })).toThrow(/Secret access key is required/);
     expect(() => checkTargetValues(s3, { endpoint: 'e\nx', bucket: 'b1', accessKeyId: 'k', secretAccessKey: 's' })).toThrow(/one line/);
   });

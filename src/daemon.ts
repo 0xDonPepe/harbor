@@ -212,7 +212,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     // LAN HTTPS (decision 109): daemon-terminated TLS on 443 + one proxy per
     // app endpoint. The routing function is stashed on the ctx so the HTTPS
     // console listener serves the same Fastify routes (same guards, auth).
-    const { LanHttpsServers, reconcileLanHttps } = await import('./system/lan-https.js');
+    const { LanHttpsServers, reconcileLanHttps, refuseNonLanPeers } = await import('./system/lan-https.js');
     ctx.lanHttps = new LanHttpsServers();
     // Every login: kernel-unlock machine-wrapped homes (data-folder apps and
     // drive apps sealed with the Harbor password) and try the login password
@@ -249,6 +249,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     let lanServer: HttpServer | null = null;
     if (config.lan.enabled) {
       lanServer = createHttpServer((req, res) => app.routing(req, res));
+      refuseNonLanPeers(lanServer);
       lanServer.on('upgrade', (req, socket, head) => app.server.emit('upgrade', req, socket, head));
       const failure = await new Promise<void>((resolve, reject) => {
         lanServer!.once('error', reject);

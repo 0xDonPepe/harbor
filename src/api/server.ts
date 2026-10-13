@@ -20,7 +20,7 @@ import type { SetupService } from '../auth/setup.js';
 import type { BackupService } from '../backups/service.js';
 import type { BackupAppPolicyDto, BackupPolicyDto } from '../contracts/api.js';
 import { CATALOG_STATUS_SCHEMA } from '../contracts/api.js';
-import { lanHostAllowed } from '../system/lan.js';
+import { isLanPeer, lanHostAllowed } from '../system/lan.js';
 import { hostname as osHostname } from 'node:os';
 import { hostFacts } from '../system/metrics.js';
 import { ID_PATTERN, UUID_PATTERN } from '../contracts/patterns.js';
@@ -86,6 +86,19 @@ const errorBodySchema = {
   required: ['error'],
 } as const;
 
+// Decision 165: who is asking, for the login limits. Fastify never trusts X-Forwarded-For (trustProxy off), so
+// every request through Caddy or `tailscale serve` arrives from 127.0.0.1. Both set X-Forwarded-For to the real
+// client (Caddy drops a client-sent one), so a loopback peer with that header is that client and not local; a
+// loopback peer without it is a program on this machine (the CLI, a local browser).
+export function clientOf(req: { socket: { remoteAddress?: string | undefined }; headers: Record<string, string | string[] | undefined> }): { id: string; local: boolean } {
+  const peer = (req.socket.remoteAddress ?? '').replace(/^::ffff:(?=\d+\.)/, '');
+  const loopback = peer === '::1' || peer.startsWith('127.');
+  const raw = req.headers['x-forwarded-for'];
+  const forwarded = (Array.isArray(raw) ? raw.join(',') : raw ?? '').split(',').map((x) => x.trim()).filter(Boolean).pop();
+  if (loopback && forwarded) return { id: `via-proxy:${forwarded}`, local: false };
+  return { id: peer || 'unknown', local: loopback };
+}
+
 export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   const { config, service, sessions, tools, devices, log, appearance, power, terminals, setup, tailscaleFacts } = deps;
   const devices_ = devices; // the mount service, for routes that also list devices
@@ -119,7 +132,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     reply.header('referrer-policy', 'no-referrer');
     const host = req.headers.host ?? '';
     const extra = tools.extraOrigins(); // tailnet UI exposure, when configured
-    const lanOk = (h: string) => config.lan.enabled && lanHostAllowed(h, config.lan.port, config.listen.port);
+    // Decision 165: a LAN name only counts from a peer on a local network (Caddy, in front, checks the same).
+    const lanOk = (h: string) => config.lan.enabled && lanHostAllowed(h, config.lan.port, config.listen.port) && isLanPeer(req.socket.remoteAddress);
     if (!allowedHosts.has(host) && !extra.hosts.includes(host) && !lanOk(host)) {
       throw new HarborError('FORBIDDEN_ORIGIN', `Host ${host || '(missing)'} is not the configured management address`, { nextAction: `Use ${origin}.` });
     }
@@ -201,7 +215,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
         body: { type: 'object', additionalProperties: false, required: ['code', 'username', 'password'], properties: { code: { type: 'string', minLength: 6, maxLength: 8 }, username: { type: 'string', minLength: 1, maxLength: 64 }, password: { type: 'string', minLength: 1, maxLength: 256 }, deviceName: { type: 'string', maxLength: 80 }, displayName: { type: 'string', maxLength: 80 } } },
       },
     },
-    async (req, reply) => reply.status(201).send(await setup.claim(req.body as SetupRequest, req.ip)),
+    async (req, reply) => reply.status(201).send(await setup.claim(req.body as SetupRequest, clientOf(req).id)),
   );
 
   // --- Harbor's own updates
@@ -222,7 +236,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     },
     async (req, reply) => {
       const { username, password, code, remember } = req.body as { username: string; password: string; code?: string; remember?: boolean };
-      const result = await sessions.login(username, password, req.ip, code, { remember: remember === true });
+      const who = clientOf(req);
+      const result = await sessions.login(username, password, who.id, code, { remember: remember === true, local: who.local });
       return reply.status(201).send(result);
     },
   );
@@ -431,7 +446,10 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   app.post(
     '/v1/account/unlock',
     { preHandler: requireAuth, schema: { description: 'Unlock this machine\'s key with the administrator password after a daemon restart (decision 164), so encrypted installs, restores and backups work without logging out and in. Wrong passwords count against the login limits.', body: { type: 'object', additionalProperties: false, required: ['password'], properties: { password: { type: 'string', minLength: 1, maxLength: 1024 } } } } },
-    async (req) => sessions.unlock((req.body as { password: string }).password, req.ip),
+    async (req) => {
+      const who = clientOf(req);
+      return sessions.unlock((req.body as { password: string }).password, who.id, { local: who.local });
+    },
   );
 
   // --- two-factor authentication (TOTP)
@@ -998,6 +1016,11 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     '/v1/network/https',
     { preHandler: requireAuth, schema: { description: 'Turn LAN HTTPS on (mints the local CA + server cert, starts the secure listeners) or off (closes them; plain HTTP stays).', body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
     async (req) => service.setNetworkHttps((req.body as { enabled: boolean }).enabled),
+  );
+  app.post(
+    '/v1/network/https/ca',
+    { preHandler: requireAuth, schema: { description: 'Replace the local certificate authority with a new, name-constrained one (decision 165) and re-issue the server cert. Every device must trust the new CA again; the old CA key is deleted.' } },
+    async () => service.replaceLanCa(),
   );
   app.get(
     '/v1/network/https/ca.crt',

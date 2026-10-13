@@ -195,6 +195,7 @@ const realApi = {
   networkHttps: () => call<NetworkHttpsDto>('GET', '/v1/network/https'),
   addressOptions: () => call<AddressOptionsDto>('GET', '/v1/network/addresses'),
   setNetworkHttps: (enabled: boolean) => call<NetworkHttpsDto>('PUT', '/v1/network/https', { enabled }),
+  replaceLanCa: () => call<NetworkHttpsDto>('POST', '/v1/network/https/ca', {}),
   // The trust probe: fetch the secure console address and report whether THIS
   // browser already trusts the Harbor CA. A trusted browser gets 200 through
   // fetch; an untrusted one fails the TLS handshake (TypeError), which is the

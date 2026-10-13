@@ -1,5 +1,6 @@
 import { request as httpRequest } from 'node:http';
 import { HarborError } from '../errors.js';
+import { LAN_PEER_RANGES } from '../system/lan.js';
 
 // Caddy admin API client (127.0.0.1:2019) plus the pure renderer that turns Harbor's exposure
 // records into one complete Caddy JSON config. Harbor owns the whole config (POST /load); nothing is
@@ -19,6 +20,7 @@ export const CADDY_MARKER = 'harbor-managed';
 export interface CaddyLanConsole {
   hosts: string[]; // harbor.local, <hostname>.local, *.local, the machine's addresses
   consolePort: number;
+  peers?: string[]; // decision 165: client ranges allowed to use the LAN names (default LAN_PEER_RANGES)
 }
 // LAN HTTPS with Caddy installed (decision 109 + this fix): Caddy owns :443 for public hostnames, so it also
 // terminates TLS for the LAN hostnames using the Harbor-minted cert (apps.tls.certificates.load_files) and
@@ -29,9 +31,12 @@ export interface CaddyLanHttps {
   consolePort: number;
   cert: string; // server.crt path
   key: string; // server.key path
+  peers?: string[]; // decision 165: client ranges allowed to use the LAN names (default LAN_PEER_RANGES)
+  certVersion?: string; // decision 165: a short hash of the cert, so a new cert is a new config (Caddy skips identical ones)
 }
 export function renderCaddyConfig(routes: CaddyRoute[], opts: { adminListen?: string; email?: string | null; lan?: CaddyLanConsole | null; lanHttps?: CaddyLanHttps | null } = {}): Record<string, unknown> {
   const sorted = [...routes].sort((a, b) => a.hostname.localeCompare(b.hostname));
+  const lanTag = opts.lanHttps?.certVersion ? `harbor-lan-${opts.lanHttps.certVersion}` : 'harbor-lan';
   const lanServer = opts.lan
     ? {
         harbor_lan: {
@@ -40,7 +45,7 @@ export function renderCaddyConfig(routes: CaddyRoute[], opts: { adminListen?: st
           routes: [
             {
               '@id': 'lan-console',
-              match: [{ host: [...new Set(opts.lan.hosts)].sort() }],
+              match: [{ host: [...new Set(opts.lan.hosts)].sort(), remote_ip: { ranges: opts.lan.peers ?? LAN_PEER_RANGES } }],
               handle: [{ handler: 'reverse_proxy', upstreams: [{ dial: `127.0.0.1:${opts.lan.consolePort}` }] }],
               terminal: true,
             },
@@ -56,19 +61,19 @@ export function renderCaddyConfig(routes: CaddyRoute[], opts: { adminListen?: st
     ? [
         {
           '@id': 'lan-https-console',
-          match: [{ host: lanHttpsHosts }],
+          match: [{ host: lanHttpsHosts, remote_ip: { ranges: opts.lanHttps.peers ?? LAN_PEER_RANGES } }],
           handle: [{ handler: 'reverse_proxy', upstreams: [{ dial: `127.0.0.1:${opts.lanHttps.consolePort}` }] }],
           terminal: true,
         },
       ]
     : [];
   const lanHttpsPolicy = opts.lanHttps
-    ? [{ match: { sni: lanHttpsHosts }, certificate_selection: { any_tag: ['harbor-lan'] } }, {}]
+    ? [{ match: { sni: lanHttpsHosts }, certificate_selection: { any_tag: [lanTag] } }, {}]
     : [];
   const tlsCerts = opts.lanHttps
     ? {
         certificates: {
-          load_files: [{ certificate: opts.lanHttps.cert, key: opts.lanHttps.key, tags: ['harbor-lan'] }],
+          load_files: [{ certificate: opts.lanHttps.cert, key: opts.lanHttps.key, tags: [lanTag] }],
         },
       }
     : {};

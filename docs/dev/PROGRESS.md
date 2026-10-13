@@ -448,6 +448,11 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
+## Phase 60 — security round (2026-10-12, 0.31.0)
+- [x] Decision 165: LAN names only from local peers (Caddy `remote_ip`, daemon guard, listener filter); drives `nosuid,nodev`, no stacking, system disk never removable; git build contexts checked on disk; recovery words kept out of `harbor.db` (schema v12 strips old ones, `secure_delete`); login attempts reserved before the hash, global window spares local clients, setup-code back-off doubles; BFU password change re-seals; fscrypt key file on `/run`; name-constrained local CA + `POST /v1/network/https/ca`; new fixed ports on update need acceptance (`opensPorts`); stored secrets only for the same destination; relay only for LAN-bound endpoints, real `X-Forwarded-For`
+- [x] Tests: unit 351, integration 228 + 3 skipped (new `lan-ca.test.ts`), e2e 35; openapi 103 paths
+- [ ] Live: harbor-old + droplet (public-IP Host test, `nosuid` mount, CA replacement)
+
 ## Phase 59 — LAN firewall (2026-10-12, 0.28.1)
 - [x] Decision 160: LAN bootstrap allows console, 443, app range + LAN HTTPS twin and mDNS in ufw from private networks only (comment `harbor`); uninstall deletes them
 - [x] Found live on the home server: ufw dropped every secure app address (`https://<hostname>.local:38xxx`); fixed there by hand first

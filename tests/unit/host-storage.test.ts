@@ -47,6 +47,21 @@ describe('host storage', () => {
     expect(parseDevices('not json')).toEqual([]);
   });
 
+  it('decision 165: a system disk is never removable media, even on a hotplug port or the USB bus', () => {
+    const json = JSON.stringify({
+      blockdevices: [
+        { name: 'sda', size: '465G', type: 'disk', rm: false, hotplug: true, tran: 'sata', children: [
+          { name: 'sda1', size: '1G', type: 'part', mountpoint: '/boot/efi', fstype: 'vfat', rm: false, hotplug: true },
+          { name: 'sda2', size: '400G', type: 'part', mountpoint: '/', fstype: 'ext4', rm: false, hotplug: true },
+          { name: 'sda3', size: '64G', type: 'part', mountpoint: null, fstype: 'ext4', rm: false, hotplug: true },
+        ] },
+        { name: 'sdb', size: '64G', type: 'disk', rm: true, hotplug: true, tran: 'usb', children: [{ name: 'sdb1', size: '64G', type: 'part', mountpoint: '[SWAP]', rm: true, hotplug: true }] },
+        { name: 'sdc', size: '14G', type: 'disk', rm: true, hotplug: true, tran: 'usb', children: [{ name: 'sdc1', size: '14G', type: 'part', fstype: 'ext4', label: 'stick', rm: true, hotplug: true }] },
+      ],
+    });
+    expect(parseDevices(json).map((d) => d.name)).toEqual(['sdc1']);
+  });
+
   it('backfills a blank lsblk fstype from the live mount table (stale partition type after format)', () => {
     // Live on home-server: Harbor formatted /dev/sdb1 as ext4 in place,
     // but the partition still types W95 FAT32, so lsblk reports fstype null

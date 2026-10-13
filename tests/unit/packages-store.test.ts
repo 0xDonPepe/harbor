@@ -1,9 +1,9 @@
-import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FakeRegistry, parseImageRef } from '../../src/packages/registry.js';
-import { PackageStore, compareRevisions, normalizeBuildContextModes } from '../../src/packages/store.js';
+import { PackageStore, checkBuildContext, compareRevisions, normalizeBuildContextModes } from '../../src/packages/store.js';
 import { readZip, writeZip } from '../../src/packages/zip.js';
 import { systemClock } from '../../src/util.js';
 import { DIGEST_A, DIGEST_B, REPO_CATALOG } from './helpers.js';
@@ -53,6 +53,41 @@ describe('build context modes', () => {
     normalizeBuildContextModes(dir);
     const mode = (p: string) => statSync(path.join(dir, p)).mode & 0o777;
     expect([mode('.'), mode('Dockerfile'), mode('startup'), mode('startup/run.sh')]).toEqual([0o755, 0o644, 0o755, 0o755]);
+  });
+});
+
+describe('build contexts stay inside the repository (decision 165)', () => {
+  const setup = () => {
+    const outside = mkdtempSync(path.join(tmpdir(), 'harbor-state-'));
+    writeFileSync(path.join(outside, 'harbor.db'), 'secret', { mode: 0o600 });
+    const repo = mkdtempSync(path.join(tmpdir(), 'harbor-repo-'));
+    mkdirSync(path.join(repo, 'app'));
+    writeFileSync(path.join(repo, 'app', 'Dockerfile'), 'FROM scratch\n');
+    return { outside, repo };
+  };
+  it('accepts a real folder, and links that stay inside the context', () => {
+    const { repo } = setup();
+    symlinkSync('Dockerfile', path.join(repo, 'app', 'Dockerfile.link'));
+    expect(() => checkBuildContext('web', repo, path.join(repo, 'app'), 'Dockerfile')).not.toThrow();
+  });
+  it('refuses a context that is a link out of the repository, without touching the target', () => {
+    const { outside, repo } = setup();
+    symlinkSync(outside, path.join(repo, 'loot'));
+    expect(() => checkBuildContext('web', repo, path.join(repo, 'loot'), 'harbor.db')).toThrow(/escapes the repository/);
+    expect(() => normalizeBuildContextModes(path.join(repo, 'loot'))).toThrow(/symbolic link/);
+    expect(statSync(outside).mode & 0o777).not.toBe(0o755);
+    expect(statSync(path.join(outside, 'harbor.db')).mode & 0o777).toBe(0o600);
+  });
+  it('refuses a Dockerfile or an inner link that leaves the context', () => {
+    const { outside, repo } = setup();
+    symlinkSync(path.join(outside, 'harbor.db'), path.join(repo, 'app', 'Evil'));
+    expect(() => checkBuildContext('web', repo, path.join(repo, 'app'), 'Evil')).toThrow(/not a file inside the build context/);
+    const repo2 = setup().repo;
+    symlinkSync('../../etc', path.join(repo2, 'app', 'etc'));
+    expect(() => checkBuildContext('web', repo2, path.join(repo2, 'app'), 'Dockerfile')).toThrow(/links outside the build context/);
+    const repo3 = setup().repo;
+    symlinkSync('/etc/passwd', path.join(repo3, 'app', 'passwd'));
+    expect(() => checkBuildContext('web', repo3, path.join(repo3, 'app'), 'Dockerfile')).toThrow(/links outside the build context/);
   });
 });
 

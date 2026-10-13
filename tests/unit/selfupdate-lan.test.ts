@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { FakeFetcher, json } from '../../src/appearance/fetcher.js';
 import { readSetupCode, writeSetupCode } from '../../src/auth/setup.js';
 import { harborUnit, polkitPowerRule, selfUpdateUnit, toolsInstallUnit } from '../../src/bootstrap/systemd.js';
-import { isPrivateIPv4, lanHostAllowed } from '../../src/system/lan.js';
+import { BlockList } from 'node:net';
+import { isLanPeer, isPrivateIPv4, LAN_PEER_RANGES, lanHostAllowed, localSubnets } from '../../src/system/lan.js';
+import { refuseNonLanPeers } from '../../src/system/lan-https.js';
 import { GitHubReleaseFeed, compareVersions } from '../../src/system/selfupdate.js';
 import { renderCaddyConfig } from '../../src/exposure/caddy.js';
 
@@ -54,12 +56,41 @@ describe('LAN mode', () => {
     expect(lanHostAllowed('evil.example.com', 80, 18000, addrs)).toBe(false);
     expect(lanHostAllowed('harbor.local:8443', 80, 18000, addrs)).toBe(false);
   });
+  it('decision 165: only loopback and local-network peers count as LAN peers', () => {
+    for (const ok of ['127.0.0.1', '::1', '::ffff:192.168.1.7', '10.1.2.3', '172.16.0.9', '169.254.3.3', '100.101.102.103', 'fd7a:115c:a1e0::1', 'fe80::1']) expect(isLanPeer(ok), ok).toBe(true);
+    for (const bad of ['8.8.8.8', '::ffff:203.0.113.9', '2001:db8::1', '172.32.0.1', '', undefined]) expect(isLanPeer(bad), String(bad)).toBe(false);
+    // a home network that hands out global IPv6 addresses: peers on this machine's own subnet count as LAN
+    const ifaces = { en0: [
+      { family: 'IPv6', cidr: '2a02:1234:5678:9abc:1:2:3:4/64', internal: false },
+      { family: 'IPv4', cidr: '192.168.1.20/24', internal: false },
+      { family: 'IPv4', cidr: '10.0.0.5/8', internal: false }, // wider than /16: not a home subnet
+      { family: 'IPv4', cidr: '127.0.0.1/8', internal: true },
+    ] } as never;
+    expect(localSubnets(ifaces)).toEqual(['192.168.1.0/24', '2a02:1234:5678:9abc:0:0:0:0/64']);
+    const list = new BlockList();
+    list.addSubnet('2a02:1234:5678:9abc::', 64, 'ipv6');
+    expect(isLanPeer('2a02:1234:5678:9abc:aaaa::1', list)).toBe(true);
+    expect(isLanPeer('2a02:1234:5678:ffff::1', list)).toBe(false);
+    const listeners: ((s: { remoteAddress?: string; destroy: () => void }) => void)[] = [];
+    refuseNonLanPeers({ on: (_e: 'connection', fn: (s: never) => void) => listeners.push(fn as never) });
+    const sock = (remoteAddress: string) => ({ remoteAddress, destroyed: false, destroy() { this.destroyed = true; } });
+    const pub = sock('203.0.113.9');
+    const lan = sock('192.168.1.7');
+    listeners[0]!(pub);
+    listeners[0]!(lan);
+    expect(pub.destroyed).toBe(true);
+    expect(lan.destroyed).toBe(false);
+  });
   it('Caddy config gains a :80 server that proxies LAN names to the console; :443 keeps the public routes', () => {
     const cfg = renderCaddyConfig([{ id: 'e1', hostname: 'photos.example.com', upstreamPort: 18089, basicAuth: null }], { lan: { hosts: ['harbor.local', '*.local', '192.168.1.20', 'harbor.local'], consolePort: 18000 } }) as { apps: { http: { servers: Record<string, { listen: string[]; routes: { match: { host: string[] }[]; handle: { handler: string; upstreams?: { dial: string }[] }[] }[] }> } } };
     const lan = cfg.apps.http.servers['harbor_lan']!;
     expect(lan.listen).toEqual([':80']);
     expect(lan.routes[0]!.match[0]!.host).toEqual(['*.local', '192.168.1.20', 'harbor.local']);
     expect(lan.routes[0]!.handle[0]).toMatchObject({ handler: 'reverse_proxy', upstreams: [{ dial: '127.0.0.1:18000' }] });
+    // decision 165: a Host header alone never reaches the console; the peer must be on a local network
+    expect((lan.routes[0]!.match[0] as unknown as { remote_ip: { ranges: string[] } }).remote_ip.ranges).toEqual(LAN_PEER_RANGES);
+    const withSubnet = renderCaddyConfig([], { lan: { hosts: ['harbor.local'], consolePort: 18000, peers: [...LAN_PEER_RANGES, '2a02:1234:5678:9abc:0:0:0:0/64'] } }) as { apps: { http: { servers: Record<string, { routes: { match: { remote_ip: { ranges: string[] } }[] }[] }> } } };
+    expect(withSubnet.apps.http.servers['harbor_lan']!.routes[0]!.match[0]!.remote_ip.ranges).toContain('2a02:1234:5678:9abc:0:0:0:0/64');
     expect(cfg.apps.http.servers['harbor']!.listen).toEqual([':443']);
     expect(renderCaddyConfig([]).apps).not.toHaveProperty(['http', 'servers', 'harbor_lan']);
   });
@@ -72,6 +103,7 @@ describe('LAN mode', () => {
     const harbor = cfg.apps.http.servers['harbor']!;
     expect(harbor.listen).toEqual([':443']);
     expect(harbor.routes[0]!.match[0]!.host).toEqual(['192.168.1.20', 'harbor.local']);
+    expect((harbor.routes[0]!.match[0] as unknown as { remote_ip: { ranges: string[] } }).remote_ip.ranges).toEqual(LAN_PEER_RANGES);
     expect(harbor.tls_connection_policies![0]).toEqual({ match: { sni: ['192.168.1.20', 'harbor.local'] }, certificate_selection: { any_tag: ['harbor-lan'] } });
     expect(cfg.apps.tls.certificates.load_files).toEqual([{ certificate: '/var/lib/harbor/tls/server.crt', key: '/var/lib/harbor/tls/server.key', tags: ['harbor-lan'] }]);
     // public routes still present on the same server

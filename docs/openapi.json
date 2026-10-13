@@ -3122,6 +3122,16 @@
         }
       }
     },
+    "/v1/network/https/ca": {
+      "post": {
+        "description": "Replace the local certificate authority with a new, name-constrained one (decision 165) and re-issue the server cert. Every device must trust the new CA again; the old CA key is deleted.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/v1/network/https/ca.crt": {
       "get": {
         "description": "The Harbor local CA certificate (PEM). Trust it once per device, then https://harbor.local/ opens with no warning.",

@@ -8,7 +8,17 @@ Docker (root-equivalent) authority. This policy describes what that means for re
 - The `harbor` service user is in the `docker` group and is therefore **root-equivalent**.
   The API is not a sandbox against anyone with Docker or root access on the machine.
 - Loopback by default; LAN mode, tailnet and public HTTPS are opt-in providers.
-  The console itself is loopback + tailnet only, never public.
+  The console itself is loopback, LAN and tailnet only, never public: its LAN names are only answered to peers on
+  a local network (loopback, RFC 1918, link-local, CGNAT, IPv6 ULA, or one of the machine's own subnets), whatever
+  `Host` a request sends (decision 165).
+- Apps in LAN mode share one host name (`harbor.local:<port>`), and browsers scope cookies by host, not port: a
+  malicious app you install can read the cookies of your other apps in the same browser. Install apps you trust;
+  one address per app is planned for 1.0.
+- The plain-http console (`http://harbor.local/`) stays reachable after LAN HTTPS is on (the move to https is done
+  by the page itself); a hostile device on your network can imitate it. Use the https address once it is trusted.
+- The local certificate authority (LAN HTTPS) is name-constrained to `.local`, the machine's own name and private
+  addresses; one minted before 0.31.0 is not, and Settings → Network offers to replace it.
+- Releases and the app catalog are checked against checksums from GitHub over HTTPS, not signed (yet).
 - Application secrets live in `/var/lib/harbor/instances/<uuid>/secrets/` (0600) and appear in
   plaintext in the private generated Compose file. That is deliberate for the trusted local
   preview; there is no encrypted vault for them.

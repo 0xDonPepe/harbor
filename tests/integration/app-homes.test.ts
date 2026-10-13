@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FoundAppDto, InstanceDetail, InstanceSummary, PlanDto, RecoveryKeyRotationDto, SecurityDto } from '../../src/contracts/api.js';
 import Database from 'better-sqlite3';
 import { FakeCryptoProvider } from '../../src/storage/crypto-provider.js';
+import { unsealMachineKey } from '../../src/auth/machine-key.js';
 import { ADMIN, startHarness, type Harness } from './harness.js';
 
 // Whole-app install locations: the app (including its database) lives
@@ -89,6 +90,30 @@ describe('install to an encrypted app home', () => {
     }
   });
 
+  it('decision 165: a password change after a restart re-seals the machine key under the NEW password', async () => {
+    await h.restart({ login: false });
+    const NEW = 'a-new-Password-1234';
+    const sealedBlob = () => {
+      const db = new Database(path.join(h.stateDir, 'harbor.db'), { readonly: true });
+      try {
+        return JSON.parse((db.prepare("SELECT value_json FROM settings WHERE key = 'security.machineKey'").get() as { value_json: string }).value_json);
+      } finally {
+        db.close();
+      }
+    };
+    try {
+      await h.api.expect(200, 'PUT', '/v1/account/password', { currentPassword: ADMIN.password, newPassword: NEW });
+      const key = await unsealMachineKey(sealedBlob(), NEW);
+      expect(key.length).toBe(32);
+      await expect(unsealMachineKey(sealedBlob(), ADMIN.password)).rejects.toThrow();
+      // and the change itself unlocked the machine (the password was just proved)
+      expect((await h.api.plan({ kind: 'install', packageId: 'excalidraw', name: 'after-change', location: { dir: path.join(h.userDataDir, 'harbor-apps', 'excalidraw') } })).location?.defaultKey).toBe(true);
+    } finally {
+      await h.api.expect(200, 'PUT', '/v1/account/password', { currentPassword: NEW, newPassword: ADMIN.password });
+      await h.restart();
+    }
+  });
+
   it('the data-folder plan needs no passphrase at submit; the home unlocks silently', async () => {
     const appsDir = path.join(h.userDataDir, 'harbor-apps');
     const p = await h.api.plan({ kind: 'install', packageId: 'excalidraw', name: 'defaultkey', location: { dir: path.join(appsDir, 'excalidraw') } });
@@ -106,6 +131,15 @@ describe('install to an encrypted app home', () => {
     harborCard = op.result?.['installationRecoveryKey'] as string;
     expect(harborCard.split(' ')).toHaveLength(12);
     expect(op.result?.['installationRecoveryNote']).toMatch(/opens every app this Harbor encrypts/);
+    // Decision 165: the words reach the API from memory only; the state database never holds them.
+    const db = new Database(path.join(h.stateDir, 'harbor.db'), { readonly: true });
+    try {
+      const row = db.prepare('SELECT result_json FROM operations WHERE id = ?').get(sub.operationId) as { result_json: string };
+      expect(row.result_json).not.toContain(harborCard);
+      expect(JSON.parse(row.result_json)).not.toHaveProperty('installationRecoveryKey');
+    } finally {
+      db.close();
+    }
     // A default-key home has no passphrase to forget, so it gets no per-app
     // words: the Harbor card is its one way back.
     expect(op.result?.['recoveryKey']).toBeUndefined();
@@ -150,6 +184,12 @@ describe('install to an encrypted app home', () => {
     // Own passphrase => own words, on top of the Harbor card. The card itself
     // is issued once, so this later install does not show it again.
     expect((op.result?.['recoveryKey'] as string).split(' ')).toHaveLength(12);
+    const db = new Database(path.join(h.stateDir, 'harbor.db'), { readonly: true });
+    try {
+      expect((db.prepare('SELECT result_json FROM operations WHERE id = ?').get(sub.operationId) as { result_json: string }).result_json).not.toContain(op.result?.['recoveryKey'] as string);
+    } finally {
+      db.close();
+    }
     expect(op.result?.['installationRecoveryKey']).toBeUndefined();
     expect(crypto.calls.filter((c) => c.op === 'sealApp').map((c) => c.home)).toContain(inst.home!.path);
   });

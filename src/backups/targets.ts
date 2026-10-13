@@ -70,13 +70,23 @@ export function loadTargetPackages(dir: string): LoadedTargetPackage[] {
 // Split an operator's answers into the stored (non-secret) config and the secrets, checking the form.
 // `keep` = the secret ids whose stored value stays (the console sent the redacted marker back).
 export const REDACTED = '••••';
-export function checkTargetValues(m: BackupTargetManifest, values: Record<string, string>, stored: Record<string, string> = {}): { config: Record<string, string>; secrets: Record<string, string> } {
+// Decision 165: a kept secret (REDACTED) is only kept while the place is the same place: when any other field
+// changed (host, bucket, URL …), every secret must be typed again, or the next test would send it to the new place.
+export function checkTargetValues(m: BackupTargetManifest, values: Record<string, string>, stored: Record<string, string> = {}, storedConfig?: Record<string, string>): { config: Record<string, string>; secrets: Record<string, string> } {
   const config: Record<string, string> = {};
   const secrets: Record<string, string> = {};
   for (const key of Object.keys(values)) if (!m.fields.some((f) => f.id === key)) throw new HarborError('INVALID_REQUEST', `${m.metadata.name} has no field ${key}`);
+  const norm = (f: (typeof m.fields)[number], v: string | undefined) => {
+    const x = v === undefined || v === '' ? f.default : v;
+    return x !== undefined && f.type !== 'textarea' ? x.trim() : x;
+  };
+  const moved = storedConfig !== undefined && m.fields.some((f) => f.type !== 'secret' && f.id in values && (norm(f, values[f.id]) ?? '') !== (storedConfig[f.id] ?? ''));
   for (const f of m.fields) {
     let v = values[f.id];
-    if (f.type === 'secret' && v === REDACTED) v = stored[f.id];
+    if (f.type === 'secret' && v === REDACTED) {
+      if (moved) throw new HarborError('INVALID_REQUEST', `type ${f.label} again: the place changed, and a stored secret only goes where it went before`);
+      v = stored[f.id];
+    }
     v = v === undefined || v === '' ? f.default : v;
     if (v !== undefined && f.type !== 'textarea' && f.type !== 'secret') v = v.trim();
     if (v === undefined || v === '') {

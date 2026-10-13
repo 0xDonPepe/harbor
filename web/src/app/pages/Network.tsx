@@ -43,6 +43,7 @@ export function Network({ c }: { c: Console }) {
   const [trust, setTrust] = useState<Trust>('unknown');
   const [sheet, setSheet] = useState(false);
   const [confirmOff, setConfirmOff] = useState(false);
+  const [confirmCa, setConfirmCa] = useState(false);
   const [restartNote, setRestartNote] = useState<string | null>(null);
   const lanOn = c.data.system?.lan.enabled ?? false;
   const lanUrl = c.data.system?.lan.url ?? null;
@@ -90,6 +91,19 @@ export function Network({ c }: { c: Console }) {
       // Decision 116: apps that keep their own address pick up the change on Restart.
       setRestartNote(next.restartToApply?.length ? `Restart ${next.restartToApply.join(', ')} so ${next.restartToApply.length === 1 ? 'it uses' : 'they use'} the new address (open the app, then Restart).` : null);
       await c.refresh();
+    } catch (e) {
+      setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const replaceCa = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setSt(await api.replaceLanCa());
+      setSheet(true);
     } catch (e) {
       setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
     } finally {
@@ -176,6 +190,33 @@ export function Network({ c }: { c: Console }) {
               How to trust it on a new device…
             </button>
           </div>
+        )}
+        {st?.enabled && st.caLimited === false && (
+          <div className="row between wrap">
+            <p className="warn small">This certificate was made by an older Harbor and could vouch for any website, not just this one. Replace it, then trust the new one on each device.</p>
+            <button className="btn" disabled={busy} onClick={() => setConfirmCa(true)}>
+              Replace certificate…
+            </button>
+          </div>
+        )}
+        {confirmCa && (
+          <Dialog title="Replace the certificate?" onClose={() => setConfirmCa(false)}>
+            <p>Harbor makes a new certificate that only covers this machine and your home network. Every device that trusts the old one shows a warning until you trust the new one there.</p>
+            <div className="row end">
+              <button className="btn" onClick={() => setConfirmCa(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  setConfirmCa(false);
+                  void replaceCa();
+                }}
+              >
+                Replace certificate
+              </button>
+            </div>
+          </Dialog>
         )}
         {!st?.enabled && lanUrl && <p className="muted small">Plain addresses stay as they are: {lanUrl} (this console) plus one HTTP address per app.</p>}
         {msg && (

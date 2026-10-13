@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
@@ -133,12 +133,16 @@ export class FakeGit implements GitFetcher {
 export function readPackageTree(tree: GitTree, subpath: string | null): Map<string, Buffer> {
   const base = subpath ? path.join(tree.dir, subpath) : tree.dir;
   const pkgDir = path.join(base, 'harbor');
-  const st = statSync(pkgDir, { throwIfNoEntry: false });
+  // lstat (decision 165): neither harbor/ nor a file in it may be a link (it could read any host file into the package).
+  const st = lstatSync(pkgDir, { throwIfNoEntry: false });
+  if (st?.isSymbolicLink()) throw new HarborError('INVALID_PACKAGE', 'harbor/ is a symbolic link', { nextAction: 'Keep manifest.yaml and compose.yaml in a real harbor/ folder.' });
   if (!st?.isDirectory()) throw new HarborError('INVALID_PACKAGE', `the repository has no harbor/ folder${subpath ? ` under ${subpath}` : ''}`, { nextAction: 'A Harbor app repository keeps manifest.yaml and compose.yaml in a harbor/ folder. See docs/DEVELOPER_PACKAGES.md.' });
   const files = new Map<string, Buffer>();
   for (const name of readdirSync(pkgDir)) {
     const p = path.join(pkgDir, name);
-    if (!statSync(p).isFile()) continue;
+    const fst = lstatSync(p);
+    if (fst.isSymbolicLink()) throw new HarborError('INVALID_PACKAGE', `harbor/${name} is a symbolic link`, { nextAction: 'Package files must be real files.' });
+    if (!fst.isFile()) continue;
     if (files.size >= 64) throw new HarborError('INVALID_PACKAGE', 'too many files in harbor/');
     const b = readFileSync(p);
     if (b.length > 4 * 1024 * 1024) throw new HarborError('INVALID_PACKAGE', `${name} is too large`);

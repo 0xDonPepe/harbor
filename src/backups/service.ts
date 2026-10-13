@@ -299,7 +299,7 @@ export class BackupService {
     }
     if (o.values) {
       const stored = this.secretsFor(id);
-      const { config, secrets } = checkTargetValues(p.manifest, o.values, stored);
+      const { config, secrets } = checkTargetValues(p.manifest, o.values, stored, t.config);
       // keep a pinned server key unless the operator replaced it
       if (t.config['hostKey'] && config['hostKey'] === undefined && p.manifest.transport === 'sftp' && config['host'] === t.config['host']) config['hostKey'] = t.config['hostKey'];
       next = { ...next, config };

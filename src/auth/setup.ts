@@ -27,6 +27,7 @@ export function readSetupCode(stateDir: string): string | null {
 
 export class SetupService {
   private failures = 0;
+  private blocks = 0;
   private blockedUntil = 0;
   constructor(
     private readonly repo: Repo,
@@ -47,7 +48,10 @@ export class SetupService {
     if (given.length !== 6 || !timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
       this.failures += 1;
       if (this.failures >= 5) {
-        this.blockedUntil = now + 60_000;
+        // Decision 165: every block doubles (1 min, 2, 4 … capped at an hour), so the 6-digit code cannot be
+        // walked through in the weeks an unclaimed box might sit on a network.
+        this.blockedUntil = now + Math.min(60_000 * 2 ** this.blocks, 3_600_000);
+        this.blocks += 1;
         this.failures = 0;
       }
       throw new HarborError('UNAUTHENTICATED', 'wrong setup code', { nextAction: 'Type the 6-digit code the installer printed (or run `harbor setup-code` on the machine).' });

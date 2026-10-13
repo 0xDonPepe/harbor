@@ -61,7 +61,8 @@ export function PlanDialog({ c }: { c: Console }) {
   }, [plan?.id]);
   if (!pending) return null;
   const missingSecret = plan ? plan.secrets.some((s) => s.ask === 'required' && (secretValues[s.id] ?? '').length < Math.max(1, s.minLength ?? 1)) : false;
-  const needsPermission = plan ? plan.permissions.length > 0 && !permissionsAccepted : false;
+  const opensPorts = plan?.opensPorts ?? [];
+  const needsPermission = plan ? (plan.permissions.length > 0 || opensPorts.length > 0) && !permissionsAccepted : false;
   const typed = Object.fromEntries(Object.entries(secretValues).filter(([id, v]) => v !== '' || plan?.secrets.find((s) => s.id === id)?.ask === 'optional' && plan.kind === 'configure'));
   const title = plan ? (plan.kind === 'install' && pending.kind === 'restore-app' ? 'Review restore' : `Review ${verb(plan.kind)}`) : `Planning ${pending.kind === 'restore-app' ? 'restore' : verb(pending.kind)}…`;
   const appName = plan ? (c.data.catalog.find((i) => i.id === plan.packageId)?.name ?? plan.name) : '';
@@ -185,13 +186,18 @@ export function PlanDialog({ c }: { c: Console }) {
               </li>
             )}
           </ul>
-          {plan.permissions.length > 0 && (
+          {(plan.permissions.length > 0 || opensPorts.length > 0) && (
             <fieldset className="permissions">
               <legend>{plan.kind === 'update' ? 'This update also asks to' : 'This app asks to'}</legend>
               <ul className="plain">
                 {plan.permissions.map((x) => (
                   <li key={`${x.service}-${x.permission}`}>
                     {x.label} <span className="muted small">· {x.service}</span>
+                  </li>
+                ))}
+                {opensPorts.map((p) => (
+                  <li key={`port-${p}`}>
+                    Open port {p} on every network this machine is on <span className="muted small">· reachable from outside if your router forwards it</span>
                   </li>
                 ))}
               </ul>

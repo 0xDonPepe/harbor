@@ -15,7 +15,7 @@
 // + per-mount metadata via `fscrypt setup`. Bootstrap calls the same helper
 // for the Harbor data folder so the first local install seals without a
 // detour.
-import { chownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { HarborError } from '../errors.js';
@@ -158,10 +158,21 @@ async function readKeyFromFifo(fifo: string): Promise<string> {
   return hex.toLowerCase();
 }
 
-// Root-only temp file for --key=FILE, zeroed + unlinked by the caller.
+// Root-only temp file for --key=FILE, zeroed + unlinked by the caller. Decision 165: it lives on /run (tmpfs,
+// RAM only), never on a disk: zeroing a file on ext4 writes new blocks and leaves the key in the old ones (and in
+// the journal), where anyone imaging the disk later could carve every app's master key.
+export const KEY_FILE_DIR = '/run/harbor-crypto';
 function writeKeyFile(masterKeyHex: string): string {
-  const p = `/root/.harbor-fscrypt-${randomBytes(8).toString('hex')}.key`;
-  writeFileSync(p, Buffer.from(masterKeyHex, 'hex'), { mode: 0o600 });
+  // Releases before 0.31.0 put the file under /root; a crash could leave one behind.
+  try {
+    for (const d of readdirSync('/root', { withFileTypes: true })) if (d.isFile() && /^\.harbor-fscrypt-[0-9a-f]{16}\.key$/.test(d.name)) shredKeyFile(path.join('/root', d.name));
+  } catch {
+    /* no /root to sweep */
+  }
+  mkdirSync(KEY_FILE_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(KEY_FILE_DIR, 0o700);
+  const p = path.join(KEY_FILE_DIR, `${randomBytes(8).toString('hex')}.key`);
+  writeFileSync(p, Buffer.from(masterKeyHex, 'hex'), { mode: 0o600, flag: 'wx' });
   return p;
 }
 

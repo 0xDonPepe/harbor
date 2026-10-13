@@ -1,4 +1,4 @@
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { CatalogIndex, LoadedPackage, Manifest, ReleaseInventory } from '../contracts/types.js';
 import { HarborError } from '../errors.js';
@@ -183,6 +183,7 @@ export class PackageStore {
           const abs = path.resolve(ctx.allowBuilds.contextRoot, context);
           if (abs !== path.resolve(ctx.allowBuilds.boundary) && !abs.startsWith(path.resolve(ctx.allowBuilds.boundary) + path.sep)) throw new HarborError('INVALID_PACKAGE', `service ${service}: build context escapes the repository`);
           if (!existsSync(path.join(abs, dockerfile))) throw new HarborError('INVALID_PACKAGE', `service ${service}: no ${dockerfile} in build context ${context}`);
+          checkBuildContext(service, ctx.allowBuilds.boundary, abs, dockerfile);
           builds[service] = { context, ...(dockerfile !== 'Dockerfile' ? { dockerfile } : {}), commit: ctx.allowBuilds.commit, tag: `harbor-src/${id}-${service}:${ctx.allowBuilds.commit.slice(0, 12)}` };
           continue;
         }
@@ -275,7 +276,9 @@ export class PackageStore {
       const src = path.resolve(ctx.allowBuilds!.contextRoot, b.context);
       const dst = path.join(staging, 'build', service);
       mkdirSync(path.dirname(dst), { recursive: true, mode: 0o700 });
-      cpSync(src, dst, { recursive: true, verbatimSymlinks: false, filter: (p) => !p.includes(`${path.sep}.git`) });
+      // realpath + verbatim links: checkBuildContext proved every link stays inside the context, so the copy
+      // keeps them relative and never points back into the fetched tree (or anywhere else on the host).
+      cpSync(realpathSync(src), dst, { recursive: true, verbatimSymlinks: true, filter: (p) => !p.includes(`${path.sep}.git`) });
       normalizeBuildContextModes(dst);
     }
     try {
@@ -320,10 +323,47 @@ function replaceImage(text: string, from: string, to: string): string {
 
 export type { Manifest };
 
+// Decision 165: a git source's build context is checked on disk, not only by name. A symlink in the repository
+// (`loot -> /var/lib/harbor`) passes a lexical check, so the context and its Dockerfile must REALLY sit inside
+// the repository, and every link inside the context must stay inside the context. Anything else is refused.
+export function checkBuildContext(service: string, boundary: string, contextAbs: string, dockerfile: string): void {
+  const refuse = (why: string) => new HarborError('INVALID_PACKAGE', `service ${service}: ${why}`, { nextAction: 'Keep the build context and its Dockerfile as real folders and files inside the repository; links may only point inside the context.' });
+  const inside = (root: string, p: string) => p === root || p.startsWith(root + path.sep);
+  let realBoundary: string;
+  let realCtx: string;
+  try {
+    realBoundary = realpathSync(boundary);
+    realCtx = realpathSync(contextAbs);
+  } catch {
+    throw refuse('the build context cannot be resolved');
+  }
+  if (!inside(realBoundary, realCtx)) throw refuse('build context escapes the repository');
+  let realDockerfile: string;
+  try {
+    realDockerfile = realpathSync(path.join(realCtx, dockerfile));
+  } catch {
+    throw refuse(`no ${dockerfile} in the build context`);
+  }
+  if (!inside(realCtx, realDockerfile) || !lstatSync(realDockerfile).isFile()) throw refuse(`${dockerfile} is not a file inside the build context`);
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      if (name === '.git') continue;
+      const p = path.join(dir, name);
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) {
+        const target = readlinkSync(p);
+        if (path.isAbsolute(target) || !inside(realCtx, path.resolve(dir, target))) throw refuse(`${path.relative(realCtx, p)} links outside the build context`);
+      } else if (st.isDirectory()) walk(p);
+    }
+  };
+  walk(realCtx);
+}
+
 // A build context gets git's modes (0644, 0755 for executables and folders), not the daemon's umask
 // (0077): Docker's COPY keeps mode bits, so an owner-only file would be unreadable to an image that
 // runs as a non-root USER. The package folder itself stays 0700, so nothing becomes visible to others.
 export function normalizeBuildContextModes(dir: string): void {
+  if (lstatSync(dir).isSymbolicLink()) throw new HarborError('INVALID_PACKAGE', 'a build context is a symbolic link'); // never chmod through a link
   chmodSync(dir, 0o755);
   for (const name of readdirSync(dir)) {
     const p = path.join(dir, name);

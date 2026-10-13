@@ -11,6 +11,7 @@ import { PRODUCT } from '../naming.js';
 import { loadConfig } from '../config.js';
 import { exec, execOk } from './exec.js';
 import { listDevices } from '../system/host-storage.js';
+import { mountArgsFor, mountedAt } from './device-mount-apply.js';
 
 export type DeviceFormatState = 'requested' | 'formatting' | 'formatted' | 'failed';
 export interface DeviceFormatStatus {
@@ -111,8 +112,10 @@ export async function applyDeviceFormat(device: string, log: (m: string) => void
     const fresh = listDevices().find((d) => d.name === device);
     const { suggestedMountpoint } = await import('../system/host-storage.js');
     const mp = suggestedMountpoint({ name: device, label: fresh?.label ?? found.label ?? device });
+    const holder = mountedAt(mp);
+    if (holder) throw new HarborError('INVALID_REQUEST', `formatted ${found.device}, but ${mp} already holds ${holder}; not mounting on top of it`, { nextAction: 'Eject the other drive, then mount this one from Storage.' });
     mkdirSync(mp, { recursive: true, mode: 0o755 });
-    await execOk('/usr/bin/mount', [found.device, mp], { timeoutMs: 60_000 });
+    await execOk('/usr/bin/mount', mountArgsFor(found.device, mp, null), { timeoutMs: 60_000 });
     const uid = Number((await exec('/usr/bin/id', ['-u', PRODUCT.serviceUser])).stdout.trim());
     const gid = Number((await exec('/usr/bin/id', ['-g', PRODUCT.serviceUser])).stdout.trim());
     await execOk('/usr/bin/chown', [`${uid}:${gid}`, mp], { timeoutMs: 30_000 });

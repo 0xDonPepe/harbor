@@ -56,6 +56,27 @@ describe('authentication and request controls', () => {
     h.clock.advance(-11 * 60_000);
   });
 
+  it('decision 165: a parallel burst of guesses cannot outrun the limit', async () => {
+    h.clock.advance(15 * 60_000); // past the window the test above filled
+    const anon = new Api(h.baseUrl, null);
+    const via = { 'x-forwarded-for': '203.0.113.5' }; // as Caddy / tailscale serve forward a client
+    const statuses = await Promise.all(Array.from({ length: 12 }, (_, i) => anon.json('POST', '/v1/sessions', { username: ADMIN.username, password: `burst-${i}-xxxxxxxxxx` }, via).then((r) => r.status)));
+    expect(statuses.filter((x) => x === 401).length).toBe(5);
+    expect(statuses.filter((x) => x === 429).length).toBe(7);
+  });
+
+  it('decision 165: strangers filling the global window never lock the machine itself out', async () => {
+    h.clock.advance(15 * 60_000);
+    const anon = new Api(h.baseUrl, null);
+    for (const peer of ['203.0.113.10', '203.0.113.11', '203.0.113.12', '203.0.113.13'])
+      for (let i = 0; i < 5; i++) await anon.json('POST', '/v1/sessions', { username: ADMIN.username, password: `wrong-${i}-xxxxxxxxxx` }, { 'x-forwarded-for': peer });
+    // the global window (20) is full: a fifth stranger is refused even with the right password …
+    expect((await anon.json('POST', '/v1/sessions', { username: ADMIN.username, password: ADMIN.password }, { 'x-forwarded-for': '203.0.113.14' })).status).toBe(429);
+    // … while a client on the machine itself (loopback, no proxy) still logs in, and a right password costs nothing
+    for (let i = 0; i < 6; i++) expect((await anon.json('POST', '/v1/sessions', { username: ADMIN.username, password: ADMIN.password })).status).toBe(201);
+    h.clock.advance(15 * 60_000);
+  });
+
   it('Host, Origin, Sec-Fetch-Site and content-type controls', async () => {
     const good = { authorization: `Bearer ${h.token}` };
     const port = h.config.listen.port;

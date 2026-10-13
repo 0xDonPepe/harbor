@@ -133,4 +133,21 @@ describe('fixed UDP ports and permissions (decision 163)', () => {
     const ok = await submit(plan.id);
     expect((await h.api.waitOperation(ok.body.operationId)).state).toBe('succeeded');
   });
+
+  it('decision 165: an update that opens a new port needs the same explicit yes, and never applies by itself', async () => {
+    const second = await freeUdpPort();
+    const text = manifest('tunnel', '4', port, ['net-admin', 'tun']).replace('permissions:', `  extra:\n    service: web\n    containerPort: 51821\n    hostPort: ${second}\n    protocol: udp\n    purpose: Second tunnel\npermissions:`);
+    await h.api.expect<PackageImportResultDto>(201, 'POST', '/v1/packages', { fileName: 'tunnel.zip', dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': text, 'compose.yaml': COMPOSE }, { folder: 'tunnel' }).toString('base64')}` });
+    const plan: PlanDto = await h.api.plan({ kind: 'update', instanceId: installed.id });
+    expect(plan.permissions).toEqual([]);
+    expect(plan.opensPorts).toEqual([second]);
+    const all = await h.api.expect<{ started: unknown[]; skipped: { name: string; reason: string }[] }>(200, 'POST', '/v1/updates/apply-all', {});
+    expect(all.started).toEqual([]);
+    expect(all.skipped.find((s) => s.name === installed.name)?.reason).toContain(`open port ${second}`);
+    const refused = await submit(plan.id);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error?.code).toBe('PERMISSION_REQUIRED');
+    const ok = await submit(plan.id, { acceptPermissions: true });
+    expect((await h.api.waitOperation(ok.body.operationId)).state).toBe('succeeded');
+  });
 });

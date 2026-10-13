@@ -145,6 +145,8 @@ export interface NetworkHttpsDto {
   fingerprint: string | null; // SHA-256 of the CA cert, for the "compare on the device" step
   expiresAt: string | null; // server cert notAfter
   hosts: string[]; // names the server cert covers
+  // Decision 165: false = a CA minted before 0.31.0, which can sign any name; POST /v1/network/https/ca replaces it.
+  caLimited?: boolean;
   // Decision 116: apps whose only HTTPS address is the secure LAN one (they stop working when it is
   // turned off), and running apps that must be restarted to pick up a change of addresses.
   // (only on GET/PUT /v1/network/https; the system DTO's copy omits them)
@@ -294,6 +296,8 @@ export interface PlanDto {
   // decision 163: fixed ports this plan publishes; permissions the approver must accept (update: only new ones)
   ports: FixedPortDto[];
   permissions: PermissionDto[];
+  // decision 165: update plans: fixed ports the update newly opens on every interface; accepted like permissions
+  opensPorts?: number[];
   storage: StorageDto[];
   // install-location plans: where the whole app will live (null = system disk). Decision 157: onDrive =
   // not the Harbor data folder; defaultKey = Harbor's own key (unlocks at sign-in), false = own passphrase

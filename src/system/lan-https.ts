@@ -16,11 +16,12 @@ import { X509Certificate } from 'node:crypto';
 import { request as httpRequest, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import type { Socket } from 'node:net';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { parse as parseYaml } from 'yaml';
 import path from 'node:path';
 import { hostname } from 'node:os';
 import { HarborError } from '../errors.js';
-import { machineAddresses } from './lan.js';
+import { isLanPeer, isPrivateIPv4, machineAddresses } from './lan.js';
 import type { Ctx } from '../lifecycle/context.js';
 
 // Console HTTPS port + deterministic per-app secure ports (no allocation, no
@@ -77,6 +78,7 @@ const tlsDir = (stateDir: string) => path.join(stateDir, 'tls');
 const P = (stateDir: string) => ({
   caKey: path.join(tlsDir(stateDir), 'ca.key'),
   caCrt: path.join(tlsDir(stateDir), 'ca.crt'),
+  caMeta: path.join(tlsDir(stateDir), 'ca.json'),
   key: path.join(tlsDir(stateDir), 'server.key'),
   crt: path.join(tlsDir(stateDir), 'server.crt'),
   meta: path.join(tlsDir(stateDir), 'meta.json'),
@@ -108,6 +110,38 @@ export interface TlsState {
   expiresAt: string; // server cert notAfter
   caExpiresAt: string;
   hosts: string[];
+  caLimited: boolean; // decision 165: the CA can only sign .local names, its own host name and private addresses
+}
+
+// Decision 165: a device that trusts Harbor's CA must not trust it for the whole internet. The CA is minted with
+// critical name constraints (`local`, the machine's bare name, private IPv4 ranges) and pathlen:0, so even its
+// leaked key could not sign a certificate for a bank or a mail provider that a trusting device would accept.
+const PRIVATE_V4 = ['10.0.0.0/255.0.0.0', '172.16.0.0/255.240.0.0', '192.168.0.0/255.255.0.0', '169.254.0.0/255.255.0.0', '100.64.0.0/255.192.0.0'];
+export function caConfig(bareHost: string): string {
+  const dns = ['local', ...(/^[a-z0-9-]{1,63}$/.test(bareHost) && bareHost !== 'local' ? [bareHost] : [])];
+  const permitted = [...dns.map((d) => `permitted;DNS:${d}`), ...PRIVATE_V4.map((r) => `permitted;IP:${r}`)].join(',');
+  return [
+    '[req]',
+    'distinguished_name = dn',
+    'prompt = no',
+    'x509_extensions = v3_ca',
+    '[dn]',
+    'CN = Harbor Local CA',
+    '[v3_ca]',
+    'basicConstraints = critical,CA:TRUE,pathlen:0',
+    'keyUsage = critical,keyCertSign,cRLSign',
+    'subjectKeyIdentifier = hash',
+    `nameConstraints = critical,${permitted}`,
+    '',
+  ].join('\n');
+}
+// The names a constrained CA may sign: what the server cert then covers (others would void the whole cert).
+export function signableHosts(hosts: string[], bareHost: string): string[] {
+  return hosts.filter((h) => (/^\d+\.\d+\.\d+\.\d+$/.test(h) ? isPrivateIPv4(h) : h === 'local' || h.endsWith('.local') || h === bareHost));
+}
+interface CaMeta {
+  limited: boolean;
+  bareHost: string;
 }
 
 export function fingerprintOfPem(pem: string): string {
@@ -123,11 +157,21 @@ export function readTlsState(stateDir: string): TlsState | null {
     const leaf = new X509Certificate(readFileSync(p.crt));
     let hosts: string[] = [];
     try {
-      hosts = JSON.parse(readFileSync(p.meta, 'utf8') as string).hosts ?? [];
+      const meta = JSON.parse(readFileSync(p.meta, 'utf8') as string) as { hosts?: string[]; covered?: string[] };
+      hosts = meta.covered ?? meta.hosts ?? [];
     } catch {
       hosts = [];
     }
-    return { fingerprint: ca.fingerprint256, expiresAt: leaf.validTo, caExpiresAt: ca.validTo, hosts };
+    return { fingerprint: ca.fingerprint256, expiresAt: leaf.validTo, caExpiresAt: ca.validTo, hosts, caLimited: readCaMeta(stateDir)?.limited === true };
+  } catch {
+    return null;
+  }
+}
+
+function readCaMeta(stateDir: string): CaMeta | null {
+  try {
+    const m = JSON.parse(readFileSync(P(stateDir).caMeta, 'utf8')) as Partial<CaMeta>;
+    return typeof m.bareHost === 'string' ? { limited: m.limited === true, bareHost: m.bareHost } : null;
   } catch {
     return null;
   }
@@ -143,20 +187,36 @@ function daysUntil(iso: string, now = Date.now()): number {
 // (the public proxy) is installed it terminates TLS for the LAN hostnames and must
 // read the server key. The group is `harbor`; bootstrap adds the caddy user to it.
 // The CA key stays 0600 — Caddy never needs it.
-export async function ensureTlsCerts(stateDir: string, hosts: string[]): Promise<TlsState> {
+export async function ensureTlsCerts(stateDir: string, hosts: string[], opts: { replaceCa?: boolean } = {}): Promise<TlsState> {
   const p = P(stateDir);
   mkdirSync(tlsDir(stateDir), { recursive: true, mode: 0o750 });
   // mkdir's mode is masked by the service's UMask=0077 (the dir came out 0700 and Caddy could not read the
   // cert, which wedged Caddy on a real host): set it explicitly, which also repairs a dir made before.
   chmodSync(tlsDir(stateDir), 0o750);
   const cur = readTlsState(stateDir);
-  const sameHosts = cur && hosts.length === cur.hosts.length && hosts.every((h) => cur.hosts.includes(h));
-  if (cur && sameHosts && daysUntil(cur.expiresAt) > 30 && daysUntil(cur.caExpiresAt) > 30) return cur;
-  const needCa = !cur || daysUntil(cur.caExpiresAt) <= 30;
-  if (needCa) {
-    await openssl(['req', '-x509', '-newkey', 'EC', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', p.caKey, '-out', p.caCrt, '-days', '3650', '-sha256', '-subj', '/CN=Harbor Local CA']);
-    chmodSync(p.caKey, 0o600);
+  let requested: string[] = [];
+  try {
+    requested = (JSON.parse(readFileSync(p.meta, 'utf8')) as { hosts?: string[] }).hosts ?? [];
+  } catch {
+    requested = [];
   }
+  const sameHosts = cur && hosts.length === requested.length && hosts.every((h) => requested.includes(h));
+  if (cur && sameHosts && !opts.replaceCa && daysUntil(cur.expiresAt) > 30 && daysUntil(cur.caExpiresAt) > 30) return cur;
+  const needCa = !cur || opts.replaceCa === true || daysUntil(cur.caExpiresAt) <= 30;
+  const bareHost = hostname().toLowerCase().replace(/\.local$/, '');
+  if (needCa) {
+    const cnf = path.join(tlsDir(stateDir), 'ca.cnf');
+    writeFileSync(cnf, caConfig(bareHost), { mode: 0o600 });
+    try {
+      await openssl(['req', '-x509', '-newkey', 'EC', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-keyout', p.caKey, '-out', p.caCrt, '-days', '3650', '-sha256', '-config', cnf]);
+    } finally {
+      rmSync(cnf, { force: true });
+    }
+    chmodSync(p.caKey, 0o600);
+    writeFileSync(p.caMeta, JSON.stringify({ limited: true, bareHost } satisfies CaMeta) + '\n', { mode: 0o600 });
+  }
+  const ca = readCaMeta(stateDir);
+  const covered = ca?.limited ? signableHosts(hosts, ca.bareHost) : hosts;
   await openssl(['ecparam', '-genkey', '-name', 'prime256v1', '-out', p.key]);
   chmodSync(p.key, 0o640);
   const csr = path.join(tlsDir(stateDir), 'server.csr');
@@ -164,7 +224,7 @@ export async function ensureTlsCerts(stateDir: string, hosts: string[]): Promise
   const srl = path.join(tlsDir(stateDir), 'ca.srl');
   try {
     await openssl(['req', '-new', '-key', p.key, '-out', csr, '-subj', '/CN=harbor.local']);
-    writeFileSync(ext, sanExt(hosts), { mode: 0o600 });
+    writeFileSync(ext, sanExt(covered), { mode: 0o600 });
     await openssl(['x509', '-req', '-in', csr, '-CA', p.caCrt, '-CAkey', p.caKey, '-CAcreateserial', '-out', p.crt, '-days', '825', '-sha256', '-extfile', ext]);
   } finally {
     rmSync(csr, { force: true });
@@ -172,7 +232,7 @@ export async function ensureTlsCerts(stateDir: string, hosts: string[]): Promise
     rmSync(srl, { force: true });
   }
   chmodSync(p.crt, 0o640);
-  writeFileSync(p.meta, JSON.stringify({ hosts, createdAt: new Date().toISOString() }) + '\n', { mode: 0o600 });
+  writeFileSync(p.meta, JSON.stringify({ hosts, covered, createdAt: new Date().toISOString() }) + '\n', { mode: 0o600 });
   const st = readTlsState(stateDir);
   if (!st) throw new HarborError('OPERATION_FAILED', 'certificate generation produced no readable cert');
   return st;
@@ -191,6 +251,14 @@ export function tlsKeyPair(stateDir: string): { key: Buffer; cert: Buffer } {
 
 // ---- servers (daemon-owned; closed on disable/shutdown)
 
+// Decision 165: these listeners are for the local network. A peer from anywhere else (a forwarded port, a
+// public address) is dropped before TLS or HTTP, whatever Host it would send.
+export function refuseNonLanPeers(server: { on(event: 'connection', fn: (s: Socket) => void): unknown }): void {
+  server.on('connection', (s: Socket) => {
+    if (!isLanPeer(s.remoteAddress)) s.destroy();
+  });
+}
+
 function listen(server: HttpsServer | HttpServer, port: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (e: NodeJS.ErrnoException) => {
@@ -201,6 +269,7 @@ function listen(server: HttpsServer | HttpServer, port: number): Promise<void> {
       reject(e);
     };
     server.once('error', onError);
+    refuseNonLanPeers(server);
     server.listen({ host: '::', port }, () => {
       server.removeListener('error', onError);
       resolve();
@@ -208,12 +277,22 @@ function listen(server: HttpsServer | HttpServer, port: number): Promise<void> {
   });
 }
 
+// What the app sees: the client's own forwarding headers are dropped (an app trusting loopback would take a
+// forged client address), and the relay states the real peer, scheme and host (decision 165).
+const CLIENT_FORWARDING = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-real-ip', 'proxy-connection', 'keep-alive', 'te', 'trailer'];
+export function forwardHeaders(req: Pick<IncomingMessage, 'headers' | 'socket'>, targetPort: number): Record<string, string | string[] | undefined> {
+  const headers: Record<string, string | string[] | undefined> = { ...req.headers };
+  for (const h of CLIENT_FORWARDING) delete headers[h];
+  const peer = (req.socket.remoteAddress ?? '').replace(/^::ffff:(?=\d+\.)/, '');
+  return { ...headers, host: `127.0.0.1:${targetPort}`, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host ?? '', ...(peer ? { 'x-forwarded-for': peer } : {}) };
+}
+
 // Minimal reverse proxy to one loopback app port (headers + streaming +
 // websocket upgrades). Apps stay plain HTTP on 127.0.0.1; only this listener
 // speaks TLS, so Docker binds never move.
 function proxyHandler(targetPort: number) {
   return (req: IncomingMessage, res: ServerResponse) => {
-    const headers: Record<string, string | string[] | undefined> = { ...req.headers, host: `127.0.0.1:${targetPort}`, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host ?? '' };
+    const headers: Record<string, string | string[] | undefined> = forwardHeaders(req, targetPort);
     delete headers['connection'];
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]> }, (down) => {
       res.writeHead(down.statusCode ?? 502, down.headers);
@@ -241,7 +320,7 @@ function proxyUpgrade(server: HttpsServer, targetPort: number): void {
   server.on('upgrade', (req: IncomingMessage, socket, head: Buffer) => {
     const sock = socket as Socket;
     sock.on('error', () => sock.destroy());
-    const headers = { ...req.headers, host: `127.0.0.1:${targetPort}`, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host ?? '' };
+    const headers = forwardHeaders(req, targetPort);
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]>, agent: false });
     up.on('upgrade', (down, downSocket, downHead) => {
       const d = downSocket as Socket;
@@ -317,7 +396,31 @@ export class LanHttpsServers {
   }
 }
 
-// Desired HTTPS surface from state: console 443 + one proxy per endpoint of
+// Decision 165: only an endpoint Docker publishes on every interface gets a LAN HTTPS twin. An app rendered
+// while LAN mode was off (decision 71) stays on 127.0.0.1, and the relay must not open it to the network.
+const boundCache = new Map<string, { mtimeMs: number; ports: Set<number> }>();
+export function lanBoundPorts(stateDir: string, instanceId: string): Set<number> {
+  const file = path.join(stateDir, 'instances', instanceId, 'runtime', 'compose.yaml');
+  let mtimeMs: number;
+  try {
+    mtimeMs = statSync(file).mtimeMs;
+  } catch {
+    return new Set();
+  }
+  const hit = boundCache.get(file);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.ports;
+  const ports = new Set<number>();
+  try {
+    const doc = parseYaml(readFileSync(file, 'utf8')) as { services?: Record<string, { ports?: { published?: string | number; host_ip?: string; protocol?: string }[] }> };
+    for (const svc of Object.values(doc.services ?? {})) for (const p of svc.ports ?? []) if (p.host_ip === '0.0.0.0' && (p.protocol ?? 'tcp') === 'tcp') ports.add(Number(p.published));
+  } catch {
+    /* unreadable: nothing is LAN-bound */
+  }
+  boundCache.set(file, { mtimeMs, ports });
+  return ports;
+}
+
+// Desired HTTPS surface from state: console 443 + one proxy per LAN-bound endpoint of
 // every non-retained instance. Called at startup, on toggle, and every
 // observer tick (cheap no-op when the signature matches).
 export function lanHttpsSignature(ctx: Ctx): string {
@@ -326,7 +429,8 @@ export function lanHttpsSignature(ctx: Ctx): string {
   const ports: number[] = [];
   for (const i of ctx.repo.listInstances()) {
     if (i.purgedAt) continue;
-    for (const e of i.endpoints) ports.push(lanHttpsPort(e.hostPort));
+    const bound = lanBoundPorts(ctx.config.stateDir, i.id);
+    for (const e of i.endpoints) if (bound.has(e.hostPort)) ports.push(lanHttpsPort(e.hostPort));
   }
   const tls = readTlsState(ctx.config.stateDir);
   return JSON.stringify({ on: true, ports: ports.sort((a, b) => a - b), fp: tls?.fingerprint ?? null });
@@ -367,7 +471,9 @@ export async function reconcileLanHttps(ctx: Ctx): Promise<void> {
   const wanted = new Set<number>(caddyOwns443 ? [] : [consoleHttpsPort()]);
   for (const i of ctx.repo.listInstances()) {
     if (i.purgedAt) continue;
+    const bound = lanBoundPorts(ctx.config.stateDir, i.id);
     for (const e of i.endpoints) {
+      if (!bound.has(e.hostPort)) continue;
       const sp = lanHttpsPort(e.hostPort);
       wanted.add(sp);
       try {

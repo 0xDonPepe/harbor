@@ -379,7 +379,10 @@ Plug in a drive and it appears under **Settings → Storage → Removable** and 
 picker's *Removable* section — mounted drives open like any disk, unmounted ones show *Mount*.
 Mounting puts the drive at `/mnt/<label>` (the label, lowercased and sanitized, or the device
 name); unmounting is the *Eject* button. Harbor only ever mounts removable media — system disks
-are never touched.
+are never touched (a disk that holds anything the system runs from is never listed as removable,
+whatever the hardware reports). Drives are mounted `nosuid,nodev`: a program or device file on a
+drive never gains extra rights from it. A drive is never mounted on top of another one: if
+`/mnt/<label>` already holds a drive, Mount says so — eject that one or give the new drive another label.
 
 - Insert and removal also raise a bell notification (one row per drive, resolved when it leaves).
   A freshly inserted drive is mounted automatically (Settings → Storage has an
@@ -473,7 +476,10 @@ and never again. They are the master key to everything this Harbor encrypts:
 with them you open your apps on another machine even if this one is stolen,
 wiped or dead. Harbor keeps them only behind your password, which is why it
 cannot show them twice. Write them on paper and keep them away from the
-machine, the way you would a spare house key. Settings → Account tells you
+machine, the way you would a spare house key. When an install issues words (the Harbor key the
+first time, or an app's own words), the tray shows them; Harbor keeps them in memory for a day and
+never writes them to its database, so a daemon restart before you have copied them loses them —
+then make new ones (*Replace it…* below, or *Change passphrase…* for an app's own words). Settings → Account tells you
 when they were issued and lets you *Replace it…* if the paper is lost or
 someone saw it. Replacing re-stamps every app Harbor can reach at that moment
 and names any it could not, for example an app on an unplugged drive: those
@@ -566,7 +572,7 @@ The console's **Settings** page covers what a household operator needs after boo
 | Section | What you can do |
 |---|---|
 | Account | change the administrator password (every other logged-in browser or CLI is signed out); *Remember this browser* (30-day session), the session list, *Log out of other sessions*, *Log out*; *What should Home call you?* sets the greeting name Home shows ("Good evening, Carlos") — the login name stays the credential, clearing it falls back to the login name |
-| Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note. Once a browser trusts the certificate, opening `http://harbor.local/` moves to `https://harbor.local/` by itself (Harbor checks the browser really trusts it first, so an untrusted device stays on http with no warning page). To stay on plain http in one tab anyway, add `?skiphttps` to the address (`http://harbor.local/?skiphttps`); `?skiphttps=false` undoes it |
+| Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note. Once a browser trusts the certificate, opening `http://harbor.local/` moves to `https://harbor.local/` by itself (Harbor checks the browser really trusts it first, so an untrusted device stays on http with no warning page). To stay on plain http in one tab anyway, add `?skiphttps` to the address (`http://harbor.local/?skiphttps`); `?skiphttps=false` undoes it. The certificate can only vouch for this machine's `.local` names, its own name and private addresses — never another website. A certificate from Harbor 0.30 or older could vouch for any site: the card then says so and offers *Replace certificate…* (`harbor network replace-ca`); trust the new one once per device afterwards. Harbor answers its console names only to devices on your own network, even when a public domain is published |
 | Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; log out of the tailnet |
 | Public addresses | the wizard for publishing on the internet: this machine's public address, your domains with a DNS check (*Points here* / *Points elsewhere* / *No DNS record yet*), which app uses each, re-check and forget; certificates are automatic |
 | Remote access (details) | tailnet addresses, node key expiry, link to the Tailscale admin console; the auth key you used is single-use and is not stored |
@@ -686,7 +692,8 @@ UDP port on your machine. Harbor lets an app ask for only a short, fixed list (d
 
 The **Install** button stays off until you tick **Allow … to do this**. On the command line, add
 `--accept-permissions` (`harbor --accept-permissions install wireguard`); `--yes` alone never accepts them.
-An update that asks for a new permission waits for you: *Update all* and automatic updates skip it.
+An update that asks for a new permission, or opens a port the app did not have before, waits for you:
+*Update all* and automatic updates skip it, and the review lists the new port next to the permissions.
 
 **Reaching the VPN from outside.** Forward the UDP port on your router to this machine (the app's drawer shows
 which), and tell the app your public IP or a domain when it asks for its host. Inside your home network it works

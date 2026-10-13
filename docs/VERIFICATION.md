@@ -685,6 +685,28 @@ see the 0.24.0 section once it exists):
   "Basic-auth login for https://draw.example.com/, shown once").
 - `pnpm catalog:verify`, `pnpm openapi -- --check` (84 paths, no new route): pass.
 
+## 3l. Security round (2026-10-12, Harbor 0.31.0, decision 165)
+
+A read-only audit by five reviewers (auth/guards, root boundary, packages, secrets/crypto, console/proxies); every
+high and medium finding was confirmed against the code before it was fixed. **Developer host only — no live run yet.**
+
+| Fix | Evidence |
+|---|---|
+| LAN names only from local peers | unit `selfupdate-lan.test.ts` (`isLanPeer`, Caddy `remote_ip` on both LAN routes, `refuseNonLanPeers` drops a public peer) |
+| Drives `nosuid,nodev`, no stacking, system disk never removable | unit `device-mount.test.ts` (`mountArgsFor`, `mountedAt`), `host-storage.test.ts` (hotplug SATA system disk, USB swap disk) |
+| Git build context on disk | unit `packages-store.test.ts`: a `loot -> <state>` link is refused and the target's 0700/0600 modes stay; inner links out (relative and absolute) refused; integration `git-sources.test.ts` unchanged |
+| Recovery words never in `harbor.db` | integration `app-homes.test.ts` reads `operations.result_json` after the install (words absent, API still shows them); unit `migration.test.ts` v11→v12 strips them, `secure_delete` on |
+| Login limits | integration `auth.test.ts`: 12 parallel guesses → exactly 5 evaluated; a full global window refuses a fifth stranger while a local client still logs in |
+| Password change after a restart | integration `app-homes.test.ts`: the sealed blob opens with the new password, not the old one, and the change unlocks the machine |
+| Local CA | integration `lan-ca.test.ts` (real openssl): critical name constraints + pathlen:0, a public address dropped from the leaf, a `bank.example.com` cert signed with the CA's own key fails `openssl verify` (*permitted subtree violation*); an older CA reads `caLimited: false` and replacing it changes fingerprint and key |
+| New fixed port on update | integration `permissions.test.ts`: `opensPorts`, Update all skips it, submit without acceptance 409 `PERMISSION_REQUIRED` |
+| Stored secrets keep their destination | integration `notifications.test.ts` (ntfy server / webhook url moved → 422), unit `backups.test.ts` (S3 endpoint moved → refused) |
+| Relay scope and headers | unit `lan-https.test.ts` (`lanBoundPorts`, `forwardHeaders`); integration `lan-https-ws.test.ts` unchanged |
+
+Gate: lint, typecheck, unit 351, integration 228 + 3 skipped, e2e 35, catalog verify/hash, openapi (103 paths) — all green.
+**Not verified live yet:** Caddy's `remote_ip` match from a real public address, a real `nosuid` mount, the CA
+replacement with a trusting browser, the fscrypt key file on `/run`.
+
 ## 3. Live acceptance runs (`pnpm test:vm -- --fresh`)
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed

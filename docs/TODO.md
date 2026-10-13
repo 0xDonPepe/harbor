@@ -161,3 +161,25 @@ without a restart; each Harbor release ships the latest as the seed. Next:
       droplet run.
 - [ ] Small: the catalog fetch still sends the wallpaper fetcher's User-Agent; icons are cached for up to
       5 minutes after a swap.
+
+## Security review (decision 165): what 0.31.0 left
+
+The audit of 2026-10-12 fixed every high and medium finding in 0.31.0. Still open:
+
+- [ ] **One address per app** (1.0 design). In LAN mode every app is `harbor.local:<port>`; browsers scope cookies by
+      host, not port, so a malicious app's server receives the session cookies of every other app the admin uses
+      (and all apps are same-site, so SameSite gives no CSRF protection between them). Needs `<app>.harbor.local`
+      (mDNS names or a resolver, one SAN per app or a constrained wildcard) and the relay routing by name.
+- [ ] **Link service-name shadowing.** On a link network Compose adds each bound service's own name as an alias, so a
+      consumer service named like a provider-internal service (`db`) can answer the provider's lookups. Needs a
+      naming scheme on link networks that keeps existing links working (refusing clashes would break common names).
+- [ ] **Signed releases + catalog with one key** (already listed under the catalog); also refuse a self-update to an
+      older version without an explicit flag.
+- [ ] Low: an open terminal survives logout / password change (check the session on each frame or close terminals on
+      revoke); SMTP must require TLS when a password is set and refuse CR/LF in from/to; the Reddit wallpaper fetch
+      must not follow redirects to private addresses; GCM decrypt should pin `authTagLength: 16` and a 12-byte nonce;
+      root helpers should open status files with `O_NOFOLLOW` and `chownTree` should `lstat`; SFTP places should show
+      the host-key fingerprint for confirmation instead of trusting the first answer; the setup routes could say less
+      once an administrator exists; the plain-http console could become redirect-only once HTTPS is trusted.
+- [ ] Live checks: a request with `Host: harbor.local` from a real public address is refused by Caddy; a stick with a
+      setuid binary mounts `nosuid`; *Replace certificate…* with a trusting browser; the key file on `/run`.

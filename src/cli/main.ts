@@ -203,10 +203,11 @@ async function approveAndApply(api: ApiClient, plan: PlanDto, opts: { yes?: bool
   }
   // Decision 163: permissions are their own yes, never implied by --yes
   let acceptPermissions = false;
-  if (plan.permissions?.length) {
+  const asks = [...(plan.permissions ?? []).map((x) => `${x.service} ${x.permission}`), ...(plan.opensPorts ?? []).map((p) => `open port ${p}`)]; // decision 165: new ports too
+  if (asks.length) {
     if (globals().acceptPermissions) acceptPermissions = true;
-    else if (!opts.yes && (await confirm(`Allow ${plan.name} the permission${plan.permissions.length === 1 ? '' : 's'} listed above?`))) acceptPermissions = true;
-    else throw new HarborError('PERMISSION_REQUIRED', `${plan.name} asks for permissions: ${plan.permissions.map((x) => `${x.service} ${x.permission}`).join(', ')}`, { nextAction: `Re-run with --accept-permissions to allow them (${PRODUCT.cliName} --accept-permissions …).` });
+    else if (!opts.yes && (await confirm(`Allow ${plan.name} ${asks.length === 1 ? 'this' : 'these'} (${asks.join(', ')})?`))) acceptPermissions = true;
+    else throw new HarborError('PERMISSION_REQUIRED', `${plan.name} asks for permissions: ${asks.join(', ')}`, { nextAction: `Re-run with --accept-permissions to allow them (${PRODUCT.cliName} --accept-permissions …).` });
   }
   const key = opts.idempotencyKey ?? `cli-${randomUUID()}`;
   const secrets = await askMissingSecrets(plan, opts.secrets ?? {}, Boolean(opts.yes));
@@ -1187,12 +1188,19 @@ networkCmd
   .action(async (state?: string) => {
     if (state !== undefined && state !== 'on' && state !== 'off') throw new HarborError('INVALID_REQUEST', 'expected "on" or "off"');
     if (state === undefined) {
-      const s = await client().get<{ enabled: boolean; url: string | null; fingerprint: string | null; expiresAt: string | null; hosts: string[] }>('/v1/network/https');
-      out(s, () => (s.enabled ? `Secure addresses ON: ${s.url}\nCA fingerprint: ${s.fingerprint}\nCovers: ${s.hosts.join(', ')}` : 'Secure addresses off. Turn on with: harbor network https on'));
+      const s = await client().get<{ enabled: boolean; url: string | null; fingerprint: string | null; expiresAt: string | null; hosts: string[]; caLimited?: boolean }>('/v1/network/https');
+      out(s, () => (s.enabled ? `Secure addresses ON: ${s.url}\nCA fingerprint: ${s.fingerprint}\nCovers: ${s.hosts.join(', ')}${s.caLimited === false ? '\nThis certificate authority predates 0.31.0 and can sign any name. Replace it: harbor network replace-ca' : ''}` : 'Secure addresses off. Turn on with: harbor network https on'));
       return;
     }
     const s = await client().post<{ enabled: boolean; url: string | null; fingerprint: string | null }>('/v1/network/https', { enabled: state === 'on' }, {}, 'PUT');
     out(s, () => (s.enabled ? `Secure addresses on: ${s.url}\nTrust the certificate once per device (Settings → Network shows how).` : 'Secure addresses off; plain HTTP stays.'));
+  });
+networkCmd
+  .command('replace-ca')
+  .description('replace the local certificate authority with a name-limited one (every device must trust the new one)')
+  .action(async () => {
+    const s = await client().post<{ fingerprint: string | null }>('/v1/network/https/ca', {});
+    out(s, () => `New certificate authority: ${s.fingerprint}\nTrust it again on every device (harbor network ca prints it); the old one can sign nothing any more.`);
   });
 networkCmd
   .command('ca')

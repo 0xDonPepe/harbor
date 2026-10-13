@@ -3,8 +3,9 @@ import { chmodSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
 import { rfc3339, type Clock, type Ids } from '../util.js';
+import { splitOneTime } from './one-time.js';
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 // Decision 126: one row per (consumer, link id). provider_instance_id NULL = needs a provider;
 // 'dormant' = the consumer is removed (retained) and Reinstall re-creates the link.
@@ -236,6 +237,8 @@ function applyPragmas(db: Db): void {
   db.pragma('synchronous = FULL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 5000');
+  // Decision 165: deleted and overwritten rows are zeroed in the file, not left in free pages.
+  db.pragma('secure_delete = ON');
 }
 
 // Explicit fresh-state initialization. Refuses to run when a database already exists.
@@ -330,6 +333,10 @@ export function openState(stateDir: string, opts: { readonly?: boolean } = {}): 
         if (version === 10) {
           migrateV10toV11(db);
           version = 11;
+        }
+        if (version === 11) {
+          migrateV11toV12(db);
+          version = 12;
         }
       } finally {
         db.pragma('foreign_keys = ON');
@@ -452,6 +459,26 @@ function migrateV10toV11(db: Db): void {
     db.exec(BACKUP_RUNS_SQL);
     db.pragma('user_version = 11');
   })();
+}
+
+// v12 (decision 165): no schema change; operation results written before 0.31.0 carried the recovery words an
+// install minted. Strip them (secure_delete zeroes the old cells) and truncate the WAL so no copy stays behind.
+function migrateV11toV12(db: Db): void {
+  db.transaction(() => {
+    const rows = db.prepare("SELECT id, result_json FROM operations WHERE result_json LIKE '%ecoveryKey%'").all() as { id: string; result_json: string }[];
+    const update = db.prepare('UPDATE operations SET result_json = ? WHERE id = ?');
+    for (const r of rows) {
+      let result: Record<string, unknown>;
+      try {
+        result = JSON.parse(r.result_json) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      update.run(JSON.stringify(splitOneTime(result).stored), r.id);
+    }
+    db.pragma('user_version = 12');
+  })();
+  db.pragma('wal_checkpoint(TRUNCATE)');
 }
 
 // v6: notifications, git package sources, per-instance automatic updates (round 9, decision 82).

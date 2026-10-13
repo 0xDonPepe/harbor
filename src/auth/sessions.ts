@@ -32,6 +32,11 @@ class FailureWindow {
     this.trim(now);
     this.hits.push(now);
   }
+  // Undo one record() (a reserved attempt that turned out right).
+  forget(at: number): void {
+    const i = this.hits.lastIndexOf(at);
+    if (i >= 0) this.hits.splice(i, 1);
+  }
   private trim(now: number): void {
     while (this.hits.length && this.hits[0]! < now - this.windowMs) this.hits.shift();
   }
@@ -90,34 +95,45 @@ export class SessionService {
     return w;
   }
 
-  async login(username: string, password: string, client: string, code?: string, opts: { remember?: boolean } = {}): Promise<{ token: string; expiresAt: string }> {
-    const nowMs = this.clock.now().getTime();
+  // Decision 165: an attempt is counted BEFORE the password hash runs (and given back when it was right), so a
+  // burst of parallel guesses cannot all slip past the limit while the first ones are still hashing. A client on
+  // this machine itself (`local`: loopback with no proxy in between, e.g. the CLI) is limited per client only,
+  // so strangers filling the global window can never lock the administrator out of the box itself.
+  private reserve(client: string, local: boolean, nowMs: number, what: string): () => void {
     const w = this.windowFor(client);
-    if (w.blocked(nowMs) || this.global.blocked(nowMs)) {
-      throw new HarborError('RATE_LIMITED', 'too many failed login attempts', { nextAction: 'Wait ten minutes and retry.' });
-    }
+    if (w.blocked(nowMs) || (!local && this.global.blocked(nowMs))) throw new HarborError('RATE_LIMITED', what, { nextAction: 'Wait ten minutes and retry.' });
+    w.record(nowMs);
+    if (!local) this.global.record(nowMs);
+    return () => {
+      w.forget(nowMs);
+      if (!local) this.global.forget(nowMs);
+    };
+  }
+
+  async login(username: string, password: string, client: string, code?: string, opts: { remember?: boolean; local?: boolean } = {}): Promise<{ token: string; expiresAt: string }> {
+    const nowMs = this.clock.now().getTime();
+    const giveBack = this.reserve(client, opts.local === true, nowMs, 'too many failed login attempts');
     const admin = this.repo.administrator();
-    // Always run a hash computation so timing does not reveal whether the username exists.
-    const ok = admin
-      ? admin.username === username && (await verifyPassword(password, { hash: admin.passwordHash, salt: admin.salt, params: admin.params }))
+    // Always run the hash, then compare the name: timing never reveals whether the username exists.
+    const passwordOk = admin
+      ? await verifyPassword(password, { hash: admin.passwordHash, salt: admin.salt, params: admin.params })
       : (await verifyPassword(password, { hash: '00'.repeat(64), salt: '00'.repeat(16), params: {} }), false);
-    if (!ok) {
-      w.record(nowMs);
-      this.global.record(nowMs);
-      throw new HarborError('UNAUTHENTICATED', 'invalid username or password', { nextAction: 'Check the credentials and retry.' });
-    }
+    const ok = passwordOk && admin !== null && admin.username === username;
+    if (!ok) throw new HarborError('UNAUTHENTICATED', 'invalid username or password', { nextAction: 'Check the credentials and retry.' });
     // second factor: only after the password is right, so the code prompt never reveals a valid password
     const totp = this.repo.setting<{ secret: string; enabledAt: string; lastStep?: number }>('security.totp');
     if (totp) {
-      if (!code) throw new HarborError('TOTP_REQUIRED', 'a two-factor code is required', { nextAction: 'Enter the 6-digit code from your authenticator app.' });
+      if (!code) {
+        giveBack(); // the password was right: asking for the code is not a failure
+        throw new HarborError('TOTP_REQUIRED', 'a two-factor code is required', { nextAction: 'Enter the 6-digit code from your authenticator app.' });
+      }
       const step = verifyTotp(totp.secret, code, nowMs);
       if (step === null || (totp.lastStep !== undefined && step <= totp.lastStep)) {
-        w.record(nowMs);
-        this.global.record(nowMs);
         throw new HarborError('UNAUTHENTICATED', step === null ? 'invalid two-factor code' : 'that two-factor code was already used', { nextAction: 'Wait for the next code in your authenticator app and retry.' });
       }
       this.repo.setSetting('security.totp', { ...totp, lastStep: step });
     }
+    giveBack();
     const token = this.ids.token(32).toString('base64url');
     // "Remember this browser": a 30-day session instead of the configured TTL (default 12 h).
     // Same bearer mechanics, same revocation; only the expiry differs.
@@ -206,17 +222,15 @@ export class SessionService {
   // Decision 164: a session that outlived a daemon restart types the password once to unseal the
   // machine key (the console asks in place), instead of logging out and in again. Wrong passwords count
   // against the same limits as logins; the error is not a 401, so the console keeps its session.
-  async unlock(password: string, client: string): Promise<{ unlocked: boolean }> {
+  async unlock(password: string, client: string, opts: { local?: boolean } = {}): Promise<{ unlocked: boolean }> {
     const nowMs = this.clock.now().getTime();
-    const w = this.windowFor(client);
-    if (w.blocked(nowMs) || this.global.blocked(nowMs)) throw new HarborError('RATE_LIMITED', 'too many wrong passwords', { nextAction: 'Wait ten minutes and retry.' });
     const admin = this.repo.administrator();
     if (!admin) throw new HarborError('STATE_UNAVAILABLE', 'no administrator enrolled');
+    const giveBack = this.reserve(client, opts.local === true, nowMs, 'too many wrong passwords');
     if (!(await verifyPassword(password, { hash: admin.passwordHash, salt: admin.salt, params: admin.params }))) {
-      w.record(nowMs);
-      this.global.record(nowMs);
       throw new HarborError('INVALID_REQUEST', 'password is wrong', { nextAction: 'Type your Harbor password again.' });
     }
+    giveBack();
     await this.unlockMachineKey(password);
     return { unlocked: this.machineKey?.unlocked ?? false };
   }
@@ -245,12 +259,23 @@ export class SessionService {
     if (policy) throw new HarborError('INVALID_REQUEST', policy);
     if (newPassword === currentPassword) throw new HarborError('INVALID_REQUEST', 'the new password must differ from the current one');
     const hashed = await hashPassword(newPassword);
-    // Re-seal the live machine key under the new password so AFU survives the
-    // change. When BFU (no live key — e.g. the sealed blob predates app
-    // homes), there is nothing to re-seal; the next login unseals as usual.
-    // A password change without the old password is impossible here (the
-    // current password is required), so the blob is never orphaned by this path.
-    const live = this.machineKey?.take() ?? null;
+    // Re-seal the machine key under the new password so AFU survives the
+    // change. Decision 165: when BFU (the daemon restarted since the session
+    // logged in) the key is unsealed here with the current password, which was
+    // just verified — otherwise the blob would stay sealed under the OLD
+    // password (which then still opens every home) and the new one would not
+    // open it at all. A blob the current password cannot open (damaged) is
+    // left as it is, exactly as a login would leave it.
+    let live = this.machineKey?.take() ?? null;
+    const sealed = this.repo.setting<SealedMachineKey>('security.machineKey');
+    if (!live && sealed) {
+      try {
+        live = await unsealMachineKey(sealed, currentPassword);
+        this.machineKey?.hold(live);
+      } catch {
+        live = null;
+      }
+    }
     try {
       const { resealMachineKey } = await import('./machine-key.js');
       const resealed = live ? await resealMachineKey(live, newPassword) : null;

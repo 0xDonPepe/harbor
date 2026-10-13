@@ -150,14 +150,17 @@ export function parseDevices(lsblkJson: string, procMountsText?: string): Device
   const out: DeviceInfo[] = [];
   // usbDisk: the top-level disk is on the USB bus and holds nothing the system runs from. Big USB disks
   // often report rm=false and hotplug=false, so the bus is the honest signal (decision 147).
-  const walk = (devs: LsblkDevice[] | undefined, usbDisk = false) => {
+  // systemDisk (decision 165): a disk holding anything the system runs from is never removable media, whatever
+  // RM/HOTPLUG say (hotplug-enabled AHCI ports and USB-booted machines report them on the system disk).
+  const walk = (devs: LsblkDevice[] | undefined, usbDisk = false, systemDisk = false) => {
     for (const b of devs ?? []) {
       const kids = b.children ?? [];
       const isPart = b.type === 'part';
       const wholeWithParts = b.type === 'disk' && kids.length > 0;
-      const usb = b.type === 'disk' ? b.tran === 'usb' && !holdsSystem(b) : usbDisk;
+      const system = b.type === 'disk' ? holdsSystem(b) : systemDisk || holdsSystem(b);
+      const usb = b.type === 'disk' ? b.tran === 'usb' && !system : usbDisk;
       if ((isPart || !wholeWithParts) && b.type !== 'loop' && b.type !== 'rom') {
-        const removable = Boolean(b.rm || b.hotplug || usb);
+        const removable = !system && Boolean(b.rm || b.hotplug || usb);
         // Internal partitions are not removable media; whole disks without
         // partitions (e.g. a freshly inserted stick) are included when removable.
         if (removable || (b.type === 'disk' && kids.length === 0)) {
@@ -176,7 +179,7 @@ export function parseDevices(lsblkJson: string, procMountsText?: string): Device
           });
         }
       }
-      walk(kids, usb);
+      walk(kids, usb, system);
     }
   };
   walk(root.blockdevices);

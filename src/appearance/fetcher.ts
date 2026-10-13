@@ -4,20 +4,23 @@ export interface FetchResult {
   status: number;
   contentType: string | null;
   body: Buffer;
+  // the Location header (only meaningful on a 3xx answered with redirect: 'manual')
+  location?: string | null;
 }
 export interface Fetcher {
-  fetch(url: string, opts?: { headers?: Record<string, string>; method?: 'GET' | 'POST'; body?: string; maxBytes?: number; timeoutMs?: number }): Promise<FetchResult>;
+  // redirect 'manual' (decision 168: resolving the newest catalog tag) answers the 3xx itself, with its Location
+  fetch(url: string, opts?: { headers?: Record<string, string>; method?: 'GET' | 'POST'; body?: string; maxBytes?: number; timeoutMs?: number; redirect?: 'follow' | 'manual' }): Promise<FetchResult>;
 }
 
 export const USER_AGENT = 'harbor-wallpapers/0.5 (self-hosted app manager; +https://github.com/carlosalaniz/harbor)';
 
 export class RealFetcher implements Fetcher {
-  async fetch(url: string, opts: { headers?: Record<string, string>; method?: 'GET' | 'POST'; body?: string; maxBytes?: number; timeoutMs?: number } = {}): Promise<FetchResult> {
+  async fetch(url: string, opts: { headers?: Record<string, string>; method?: 'GET' | 'POST'; body?: string; maxBytes?: number; timeoutMs?: number; redirect?: 'follow' | 'manual' } = {}): Promise<FetchResult> {
     const max = opts.maxBytes ?? 16 * 1024 * 1024;
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 20_000);
     try {
-      const res = await fetch(url, { method: opts.method ?? 'GET', headers: { 'user-agent': USER_AGENT, accept: '*/*', ...(opts.headers ?? {}) }, ...(opts.body !== undefined ? { body: opts.body } : {}), redirect: 'follow', signal: ctl.signal });
+      const res = await fetch(url, { method: opts.method ?? 'GET', headers: { 'user-agent': USER_AGENT, accept: '*/*', ...(opts.headers ?? {}) }, ...(opts.body !== undefined ? { body: opts.body } : {}), redirect: opts.redirect ?? 'follow', signal: ctl.signal });
       const len = Number(res.headers.get('content-length') ?? 0);
       if (len > max) throw new Error(`response too large (${len} bytes)`);
       const chunks: Buffer[] = [];
@@ -35,7 +38,7 @@ export class RealFetcher implements Fetcher {
           chunks.push(Buffer.from(value));
         }
       }
-      return { status: res.status, contentType: res.headers.get('content-type'), body: Buffer.concat(chunks) };
+      return { status: res.status, contentType: res.headers.get('content-type'), body: Buffer.concat(chunks), location: res.headers.get('location') };
     } finally {
       clearTimeout(t);
     }

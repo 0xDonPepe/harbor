@@ -88,12 +88,23 @@ describe('Harbor self-update', () => {
     // the harness feed starts empty: "not checked / nothing known"
     expect(st0.latest).toBeNull();
     await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/system/update/apply', {});
-    h.releaseFeed.info = { version: st0.current, tag: `v${st0.current}`, publishedAt: null, notes: null, url: null, archiveUrl: 'x', sumsUrl: 'y' };
+    h.releaseFeed.info = { version: st0.current, tag: `v${st0.current}`, publishedAt: null, notes: null, url: null, archiveUrl: 'x', sumsUrl: 'y', sigUrl: 'z' };
     const same = await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {});
     expect(same.available).toBe(false);
     expect(same.checkedAt).not.toBeNull();
+    // decision 168: an older release is never offered or applied from the console
+    const older = '0.0.1';
+    h.releaseFeed.info = { version: older, tag: `v${older}`, publishedAt: null, notes: null, url: null, archiveUrl: 'x', sumsUrl: 'y', sigUrl: 'z' };
+    expect((await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {})).available).toBe(false);
+    await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/system/update/apply', {});
     const next = st0.current.replace(/\d+$/, (n) => String(Number(n) + 1));
-    h.releaseFeed.info = { version: next, tag: `v${next}`, publishedAt: '2026-09-16T00:00:00Z', notes: 'Shiny', url: 'https://example.com/r', archiveUrl: `https://example.com/harbor-${next}-linux-x64.tar.gz`, sumsUrl: 'https://example.com/SHA256SUMS' };
+    // decision 168: a newer release without SHA256SUMS.sig is offered but never started
+    h.releaseFeed.info = { version: next, tag: `v${next}`, publishedAt: null, notes: null, url: null, archiveUrl: `https://example.com/harbor-${next}-linux-x64.tar.gz`, sumsUrl: 'https://example.com/SHA256SUMS', sigUrl: null };
+    expect((await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {})).available).toBe(true);
+    const unsigned = await h.api.expectError(409, 'INVALID_STATE', 'POST', '/v1/system/update/apply', {});
+    expect(JSON.stringify(unsigned)).toContain('is not signed');
+    expect(h.unitStarter.started).toEqual([]);
+    h.releaseFeed.info = { version: next, tag: `v${next}`, publishedAt: '2026-09-16T00:00:00Z', notes: 'Shiny', url: 'https://example.com/r', archiveUrl: `https://example.com/harbor-${next}-linux-x64.tar.gz`, sumsUrl: 'https://example.com/SHA256SUMS', sigUrl: 'https://example.com/SHA256SUMS.sig' };
     const avail = await h.api.expect<SelfUpdateStatusDto>(200, 'POST', '/v1/system/update/check', {});
     expect(avail.available).toBe(true);
     expect(avail.latest).toMatchObject({ version: next, notes: 'Shiny' });

@@ -37,7 +37,8 @@ curl -fsSL https://raw.githubusercontent.com/carlosalaniz/harbor/main/install.sh
 ```
 
 It checks the machine, installs Docker if needed, downloads the newest release from GitHub and verifies its
-checksum, names the machine `harbor` (so it answers as **http://harbor.local** on your network through mDNS),
+signature (0.32.0 and later: `SHA256SUMS.sig`, Harbor's release key is built into the installer; it stops if
+the signature is missing or wrong) and its checksum, names the machine `harbor` (so it answers as **http://harbor.local** on your network through mDNS),
 installs Tailscale and the HTTPS proxy, and prints a **setup code**. Then open the printed address in a
 browser and follow the wizard: name your Harbor, create your account (type the code, pick a login name,
 tell Home what to call you), pick a look. Nothing
@@ -51,6 +52,9 @@ is typed on the terminal.
 - `HARBOR_TOOLS=1` also sets up Cockpit and Portainer. `HARBOR_VERSION=<version>` pins a release (e.g. `HARBOR_VERSION=0.12.5`).
   The installer takes the newest release; pinning is for troubleshooting only. Releases older than 0.17.0 said
   "installed encrypted" and were not — do not install them (`docs/releases/v0.17.0.md`).
+  Releases older than 0.32.0 are not signed: the installer refuses them unless you add `HARBOR_ALLOW_UNSIGNED=1`
+  next to `HARBOR_VERSION` (it then warns loudly). The same switch lets `HARBOR_ARCHIVE` install an archive you
+  built yourself without a signing key. A signature that is there but does not match is always refused.
 - Lost the setup code? On the machine: `sudo /opt/harbor/bin/harbor setup-code --config /etc/harbor/harbor.json`.
 
 **LAN mode** means the console (port 80) and every app port answer to any device on your local network,
@@ -91,8 +95,11 @@ Running `bootstrap` without `--password-stdin` on a machine that has no administ
 
 ```sh
 # on your workstation
-scp release/harbor-<version>-linux-x64.tar.gz release/SHA256SUMS user@host:
-# on the host
+scp release/harbor-<version>-linux-x64.tar.gz release/SHA256SUMS release/SHA256SUMS.sig user@host:
+# on the host: the signature first (0.32.0 and later; harbor-release-key.pem = the public key in install.sh
+# or src/release-keys.ts), then the checksum
+openssl base64 -d -A -in SHA256SUMS.sig -out SHA256SUMS.sig.bin
+openssl pkeyutl -verify -pubin -inkey harbor-release-key.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig.bin
 sha256sum -c SHA256SUMS
 tar -xzf harbor-<version>-linux-x64.tar.gz
 sudo ./harbor-<version>-linux-x64/bin/harbor bootstrap [--install-docker] [--with-tools] [--port 18000]
@@ -638,7 +645,10 @@ Disconnecting from the tailnet (`tailscale logout`) used to wipe the permission 
 
 - The built-in apps live in their own repository, [harbor-apps](https://github.com/carlosalaniz/harbor-apps).
   Each change there is published as a new catalog on that repository's GitHub releases. Harbor downloads
-  it over HTTPS from GitHub, the same way it downloads its own updates (there is no signature). It only
+  it over HTTPS from GitHub, the same way it downloads its own updates. Since 0.32.0 (decision 168) it only
+  uses a catalog signed with Harbor's release key (`catalog.json.sig`, the same key that signs Harbor
+  releases): an unsigned or badly signed one is refused ("refusing the app catalog …" under *App catalog
+  from …* and in `harbor catalog status`) and the box keeps the catalog it has. It only
   uses a catalog that arrived complete (its archive matches the checksum in its `catalog.json`), whose
   apps all validate, that is newer than the one it has, and that is not dated more than a day ahead of
   the machine's clock. Anything else is ignored and the current catalog stays. If a downloaded catalog
@@ -727,17 +737,27 @@ that wants the same one.
 
 Settings → Overview shows the installed version and, when GitHub has a newer release, an **Update to
 x.y.z** button (release notes underneath; *Check now* asks GitHub immediately, otherwise every 6 hours).
-Harbor downloads the release, verifies its checksum, installs it in place and restarts; your apps keep
+Harbor downloads the release, checks that Harbor's release key signed it (`SHA256SUMS.sig`, 0.32.0 and later)
+and its checksum, installs it in place and restarts; your apps keep
 running, the console is away for about a minute and reconnects by itself. The same from the terminal:
 `harbor self-update`, `harbor self-update check`, `harbor self-update start`. Manual path, still supported:
-download the archive, extract, `sudo ./harbor-<version>-linux-x64/bin/harbor bootstrap --yes`.
+download the archive, check it (section 2b), extract, `sudo ./harbor-<version>-linux-x64/bin/harbor bootstrap --yes`.
+
+**Only signed, only forward** (0.32.0, decision 168). An update from the console or `harbor self-update start`
+only ever goes to a newer release, and only to one that carries a valid signature; anything else is refused
+before a byte is installed ("is not signed", "does not match its SHA256SUMS.sig", "self-update never
+downgrades"). Going back on purpose is a root command on the machine:
+`sudo /opt/harbor/bin/harbor self-update apply --to <version> --allow-downgrade` (add `--allow-unsigned` for a
+release older than 0.32.0, which was published before signing existed). `--allow-unsigned` also lets
+`--archive <file>` install an archive you built yourself without `SHA256SUMS.sig`; a signature that is there but
+wrong is always refused. Neither flag works in the update the console starts.
 
 If the new release fails to start, Harbor puts the previous one back by itself: the running
 release is snapshotted before the update, the console is polled after the restart, and on
 failure the snapshot is restored and the console comes back on the previous version (your
 apps keep running throughout — they belong to Docker, not to the daemon). The Overview card
 then says the update was rolled back. Manual downgrade, if you ever need it:
-`sudo /opt/harbor/bin/harbor self-update apply --to <previous-version>` (state is kept;
+`sudo /opt/harbor/bin/harbor self-update apply --to <previous-version> --allow-downgrade` (plus `--allow-unsigned` below 0.32.0; state is kept;
 migrations only add tables/columns, so the older release opens the newer database).
 
 ## 5. Service operations

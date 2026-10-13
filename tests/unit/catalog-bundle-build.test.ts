@@ -8,6 +8,10 @@ import { planCatalog, verifyCatalog } from '../../scripts/catalog-verify-lib.js'
 import * as bundleLib from '../../src/packages/catalog-bundle.js';
 import { openBundle, parseBundleMeta } from '../../src/packages/catalog-bundle.js';
 import * as catalogLib from '../../src/packages/catalog.js';
+import { RELEASE_KEYS } from '../../src/release-keys.js';
+import * as signLib from '../../src/signing.js';
+import { signDetached } from '../../src/signing.js';
+import { TEST_KEYS, TEST_SIGNER } from './bundle-helpers.js';
 import { listCatalog, readCatalogIndex } from '../../src/packages/catalog.js';
 import { CATALOG_INDEX_SCHEMA } from '../../src/contracts/release.schema.js';
 import { cloneCatalog, DIGEST_A, MINIMAL_COMPOSE, MINIMAL_MANIFEST, REPO_CATALOG, tempDir, writePackage } from './helpers.js';
@@ -95,8 +99,18 @@ describe('catalog bundle build (decision 158)', () => {
     const src = tempDir('harbor-fetch-src-');
     writeFileSync(path.join(src, 'catalog.zip'), built.zip);
     writeFileSync(path.join(src, 'catalog.json'), built.meta);
-    const fetched = await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src });
+    const signing = { signLib, keys: TEST_KEYS, required: false };
+    const fetched = await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src }, signing);
     expect(fetched.official).toBe(false);
+    expect(fetched.signedBy).toBeNull(); // no catalog.json.sig: accepted while HARBOR_REQUIRE_SIGNED_CATALOG is off
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src }, { ...signing, required: true })).rejects.toThrow(/is not signed \(no catalog\.json\.sig\); HARBOR_REQUIRE_SIGNED_CATALOG=1 asks for a signed catalog/);
+    // decision 168: a catalog.json.sig that is there must verify with a pinned key
+    writeFileSync(path.join(src, 'catalog.json.sig'), signDetached(built.meta, TEST_SIGNER.privatePem));
+    expect((await fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src }, { ...signing, required: true })).signedBy).toBe('test-FIXTURE-key');
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src }, { ...signing, keys: RELEASE_KEYS })).rejects.toThrow(/does not match its catalog\.json\.sig/);
+    writeFileSync(path.join(src, 'catalog.json.sig'), signDetached(Buffer.from('other bytes'), TEST_SIGNER.privatePem));
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: src }, signing)).rejects.toThrow(/does not match its catalog\.json\.sig/);
+    rmSync(path.join(src, 'catalog.json.sig'));
     const out = tempDir('harbor-fetch-out-');
     const index = extractCatalog(out, fetched, { bundleLib, catalogLib });
     expect(index).toEqual(readCatalogIndex(REPO_CATALOG));
@@ -110,7 +124,7 @@ describe('catalog bundle build (decision 158)', () => {
     flipped[mid] = flipped[mid]! ^ 0xff;
     writeFileSync(path.join(bad, 'catalog.zip'), flipped);
     writeFileSync(path.join(bad, 'catalog.json'), built.meta);
-    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: bad })).rejects.toThrow(/does not match its catalog\.json checksum/);
+    await expect(fetchCatalogBundle(bundleLib, { HARBOR_CATALOG_BUNDLE: bad }, signing)).rejects.toThrow(/does not match its catalog\.json checksum/);
   });
 });
 

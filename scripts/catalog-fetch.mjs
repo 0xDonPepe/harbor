@@ -1,33 +1,43 @@
 #!/usr/bin/env node
-// Download the latest official app catalog published by carlosalaniz/harbor-apps over HTTPS (decision 158: no
-// signature, trust is HTTPS to GitHub like the self-update), check the zip against its catalog.json (an integrity
-// check, not a trust anchor), and extract it.
+// Download the latest official app catalog published by carlosalaniz/harbor-apps over HTTPS, check its signature
+// (catalog.json.sig, decision 168) when the release carries one, check the zip against its catalog.json, and
+// extract it.
 //   node scripts/catalog-fetch.mjs --out <dir>      (needs `pnpm build:server`: it uses the compiled bundle code)
 // Writes <dir>/index.json + <dir>/<id>/... + catalog.json, the layout `pnpm catalog:verify <dir>`
 // and the daemon read. Used by `pnpm package` (the offline seed) and by Harbor CI's official-catalog job, which
 // checks that THIS commit still loads every published app (decision 159).
-// "Latest" is resolved once to its tag c<serial>; both files come from releases/download/c<serial>, so a
+// "Latest" is resolved once to its tag c<serial>; every file comes from releases/download/c<serial>, so a
 // release landing mid-download can never mix two bundles.
-//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json from <dir> instead of downloading
+// Signature: a catalog.json.sig that is there must verify with a pinned release key (src/release-keys.ts), or the
+// fetch fails. A missing one is accepted with a warning while the catalog repository starts signing, unless
+// HARBOR_REQUIRE_SIGNED_CATALOG=1 (then this CLI, and `pnpm package --require-signature`, refuse it).
+//   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json(/catalog.json.sig) from <dir> instead of downloading
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const NO_RELEASE = 'is there a published catalog release on carlosalaniz/harbor-apps?';
+const SIG_FILE = 'catalog.json.sig';
 
 export async function loadCatalogLibs() {
-  const dist = (f) => path.join(ROOT, 'dist', 'packages', f);
-  if (!existsSync(dist('catalog-bundle.js')) || !existsSync(dist('catalog.js'))) throw new Error('dist/packages is missing: run pnpm build:server first');
+  const dist = (f) => path.join(ROOT, 'dist', f);
+  for (const f of ['packages/catalog-bundle.js', 'packages/catalog.js', 'signing.js', 'release-keys.js']) {
+    if (!existsSync(dist(f))) throw new Error(`dist/${f} is missing: run pnpm build:server first`);
+  }
   return {
-    bundleLib: await import(pathToFileURL(dist('catalog-bundle.js')).href),
-    catalogLib: await import(pathToFileURL(dist('catalog.js')).href),
+    bundleLib: await import(pathToFileURL(dist('packages/catalog-bundle.js')).href),
+    catalogLib: await import(pathToFileURL(dist('packages/catalog.js')).href),
+    signLib: await import(pathToFileURL(dist('signing.js')).href),
+    keys: (await import(pathToFileURL(dist('release-keys.js')).href)).RELEASE_KEYS,
   };
 }
 
-async function fetchAsset(url, max) {
+// null on 404 when `missingOk` (an optional asset)
+async function fetchAsset(url, max, missingOk = false) {
   console.log(`downloading ${url}`);
   const res = await fetch(url, { redirect: 'follow', signal: globalThis.AbortSignal.timeout(120_000) });
+  if (missingOk && res.status === 404) return null;
   if (!res.ok) throw new Error(`${url}: HTTP ${res.status} (${NO_RELEASE})`);
   const bytes = Buffer.from(await res.arrayBuffer());
   if (bytes.length > max) throw new Error(`${url}: ${bytes.length} bytes exceeds ${max}`);
@@ -50,10 +60,23 @@ async function resolveCatalogTag(bundleLib) {
   return { serial, url: bundleLib.catalogDownloadBase(releases, serial) };
 }
 
-// Fetch (or read from HARBOR_CATALOG_BUNDLE) and check one bundle end to end (zip vs catalog.json, schema, zip
-// limits). Throws when the bundle does not check out.
-//   -> { bundle: { meta, files }, raw: { meta, zip }, source, official }   (official = downloaded, not a local dir)
-export async function fetchCatalogBundle(bundleLib, env = process.env) {
+// The signature verdict for catalog.json: throws on a bad one, and on a missing one when `required`.
+// -> the pinned key id that signed it, or null (unsigned, accepted with a warning)
+export function checkCatalogSignature(meta, sig, signing, source) {
+  const v = signing.signLib.checkSignature(meta, sig, signing.keys);
+  if (v.ok) return v.keyId;
+  const problem = signing.signLib.signatureProblem(`the app catalog from ${source}`, SIG_FILE, v.reason, signing.keys);
+  if (v.reason !== 'missing') throw new Error(problem);
+  if (signing.required) throw new Error(`${problem}; HARBOR_REQUIRE_SIGNED_CATALOG=1 asks for a signed catalog`);
+  console.warn(`warning: ${problem}; accepted because HARBOR_REQUIRE_SIGNED_CATALOG is not 1`);
+  return null;
+}
+
+// Fetch (or read from HARBOR_CATALOG_BUNDLE) and check one bundle end to end (signature, zip vs catalog.json,
+// schema, zip limits). Throws when the bundle does not check out.
+//   signing = { signLib, keys, required }  (loadCatalogLibs gives signLib + keys)
+//   -> { bundle: { meta, files }, raw: { meta, zip }, source, official, signedBy }   (official = downloaded, not a local dir)
+export async function fetchCatalogBundle(bundleLib, env, signing) {
   const local = env.HARBOR_CATALOG_BUNDLE;
   const pinned = local ? null : await resolveCatalogTag(bundleLib);
   const source = pinned ? pinned.url : path.resolve(env.INIT_CWD ?? process.cwd(), local);
@@ -62,15 +85,19 @@ export async function fetchCatalogBundle(bundleLib, env = process.env) {
     const max = k === 'zip' ? bundleLib.MAX_BUNDLE_ZIP_BYTES : bundleLib.MAX_BUNDLE_META_BYTES;
     raw[k] = local ? readFileSync(path.join(source, name)) : await fetchAsset(`${source}/${name}`, max);
   }
+  const sigPath = path.join(source, SIG_FILE);
+  const sig = local ? (existsSync(sigPath) ? readFileSync(sigPath) : null) : await fetchAsset(`${source}/${SIG_FILE}`, signing.signLib.MAX_SIGNATURE_BYTES, true);
   let bundle;
+  let signedBy;
   try {
+    signedBy = checkCatalogSignature(raw.meta, sig, signing, source);
     bundle = bundleLib.openBundle({ meta: raw.meta, zip: raw.zip });
     if (pinned && bundle.meta.serial !== pinned.serial) throw new Error(`tag c${pinned.serial} carries a catalog with serial ${bundle.meta.serial}`);
   } catch (e) {
     throw new Error(`app catalog from ${source}: ${e.message}`, { cause: e });
   }
-  console.log(`app catalog serial ${bundle.meta.serial} (${bundle.meta.createdAt}, commit ${bundle.meta.commit.slice(0, 12)}, ${bundle.meta.packages} packages) from ${source}: checksum verified`);
-  return { bundle, raw, source, official: !local };
+  console.log(`app catalog serial ${bundle.meta.serial} (${bundle.meta.createdAt}, commit ${bundle.meta.commit.slice(0, 12)}, ${bundle.meta.packages} packages) from ${source}: ${signedBy ? `signed (${signedBy}), ` : 'UNSIGNED, '}checksum verified`);
+  return { bundle, raw, source, official: !local, signedBy };
 }
 
 // Extract a checked bundle into `dir` (catalog layout) and return its index. catalog.json is written verbatim
@@ -102,7 +129,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (existsSync(dir) && readdirSync(dir).length) throw new Error(`${dir} is not empty; pass a new or empty directory`);
     mkdirSync(dir, { recursive: true });
     const libs = await loadCatalogLibs();
-    const index = extractCatalog(dir, await fetchCatalogBundle(libs.bundleLib), libs);
+    const fetched = await fetchCatalogBundle(libs.bundleLib, process.env, { signLib: libs.signLib, keys: libs.keys, required: process.env.HARBOR_REQUIRE_SIGNED_CATALOG === '1' });
+    const index = extractCatalog(dir, fetched, libs);
     console.log(`${dir}: ${Object.keys(index.packages).length} packages`);
   } catch (e) {
     console.error(`catalog-fetch: ${e.message}`);

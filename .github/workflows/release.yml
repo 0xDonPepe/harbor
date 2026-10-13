@@ -42,11 +42,16 @@ jobs:
       - run: pnpm openapi -- --check
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
-      # Downloads the latest app catalog from carlosalaniz/harbor-apps over HTTPS, checks the zip against its
+      # Downloads the latest app catalog from carlosalaniz/harbor-apps over HTTPS, checks its catalog.json.sig
+      # (when the release has one; required once HARBOR_REQUIRE_SIGNED_CATALOG is 1), the zip against its
       # catalog.json and every app, and ships it as the offline seed (decision 158). Fails the release when
       # there is none or it does not check out.
+      # Signs SHA256SUMS into SHA256SUMS.sig with the release key (decision 168, docs/design/SIGNING.md):
+      # --require-signature fails without the secret, or with a key Harbor does not pin.
       - name: Build release archive
-        run: pnpm package
+        env:
+          HARBOR_SIGNING_KEY: ${{ secrets.HARBOR_SIGNING_KEY }}
+        run: pnpm package --require-signature
       # Hand-written notes live in docs/releases/v<version>.md (what to expect, what not to trust
       # yet). When the file exists it becomes the release body; the generated changelog is appended.
       - name: Pick release notes
@@ -66,6 +71,7 @@ jobs:
           files: |
             release/harbor-${{ steps.version.outputs.version }}-linux-x64.tar.gz
             release/SHA256SUMS
+            release/SHA256SUMS.sig
             install.sh
           fail_on_unmatched_files: true
           generate_release_notes: true

@@ -4,7 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/carlosalaniz/harbor/main/install.sh | sudo bash
 #
 # What it does (each step is printed): checks the machine, installs Docker if needed, downloads the newest
-# Harbor release from GitHub and verifies its checksum, names the machine `harbor` (so it answers as
+# Harbor release from GitHub and verifies its signature and checksum, names the machine `harbor` (so it answers as
 # http://harbor.local on your network through mDNS), installs Harbor, and prints the setup code for the
 # browser wizard where you create your account. Nothing is asked on the terminal.
 #
@@ -16,21 +16,48 @@
 #   HARBOR_FORCE=1           allow a Debian/Ubuntu DERIVATIVE (Linux Mint, Pop!_OS, Raspberry Pi OS, ...):
 #                            not a tested configuration; you keep the pieces
 #   HARBOR_REPO=owner/name   GitHub repository (default carlosalaniz/harbor)
-#   HARBOR_ARCHIVE=/path/harbor-X.Y.Z-linux-x64.tar.gz   install from a local archive (with SHA256SUMS next to it) instead of GitHub
+#   HARBOR_ARCHIVE=/path/harbor-X.Y.Z-linux-x64.tar.gz   install from a local archive (with SHA256SUMS and
+#                            SHA256SUMS.sig next to it) instead of GitHub
+#   HARBOR_ALLOW_UNSIGNED=1  accept a release without SHA256SUMS.sig: only with an explicit HARBOR_VERSION older
+#                            than 0.32.0 (the first signed release) or a local HARBOR_ARCHIVE you built yourself.
+#                            A signature that does not verify is always refused.
+#
+# Signature (decision 168): SHA256SUMS.sig is the Ed25519 signature of SHA256SUMS by Harbor's release key; the
+# public half is below. The installer verifies it with openssl BEFORE it trusts the checksum, and stops otherwise.
 set -euo pipefail
 
 REPO="${HARBOR_REPO:-carlosalaniz/harbor}"
 WANT_HOSTNAME="${HARBOR_HOSTNAME-harbor}"
 LAN="${HARBOR_LAN:-auto}"
 WORK=/root/harbor-install
+FIRST_SIGNED=0.32.0
+
+# Harbor's release public key (src/release-keys.ts, key harbor-2026-10). Keep the two equal.
+HARBOR_RELEASE_KEY='-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAm1Nz4bx1UpDvo+pvgAweZveNPi8c9dH2ze/kPaLPtXA=
+-----END PUBLIC KEY-----'
 
 say()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# verify_sig <sums-file> <base64-sig-file> <work-dir>: 0 when the release key signed the exact bytes of <sums-file>.
+verify_sig() {
+  printf '%s\n' "$HARBOR_RELEASE_KEY" > "$3/harbor-release-key.pem"
+  openssl base64 -d -A -in "$2" -out "$3/SHA256SUMS.sig.bin" 2>/dev/null || return 1
+  [ "$(wc -c < "$3/SHA256SUMS.sig.bin" | tr -d ' ')" = "64" ] || return 1
+  openssl pkeyutl -verify -pubin -inkey "$3/harbor-release-key.pem" -rawin -in "$1" -sigfile "$3/SHA256SUMS.sig.bin" >/dev/null 2>&1
+}
+
+# version_lt A B: 0 when release version A is older than B (x.y.z, numeric per part)
+version_lt() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$1" ]
+}
+
 [ "$(id -u)" -eq 0 ] || die "run as root:  curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sudo bash"
 command -v curl >/dev/null || die "curl is required (apt-get install -y curl)"
 command -v tar  >/dev/null || die "tar is required"
+command -v openssl >/dev/null || die "openssl is required to check the release signature (apt-get install -y openssl)"
 
 say "Checking this machine"
 . /etc/os-release 2>/dev/null || die "cannot read /etc/os-release"
@@ -58,6 +85,7 @@ MEM_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
 echo "    ${PRETTY_NAME}, x86-64, $((MEM_KB/1024/1024)) GB memory, $((FREE_KB/1024/1024)) GB free"
 
 mkdir -p "$WORK"
+rm -f "$WORK/SHA256SUMS" "$WORK/SHA256SUMS.sig" "$WORK/SHA256SUMS.sig.bin"
 if [ -n "${HARBOR_ARCHIVE:-}" ]; then
   say "Using local archive $HARBOR_ARCHIVE"
   [ -f "$HARBOR_ARCHIVE" ] || die "$HARBOR_ARCHIVE not found"
@@ -66,6 +94,7 @@ if [ -n "${HARBOR_ARCHIVE:-}" ]; then
   VERSION=$(echo "$ARCHIVE" | sed -E 's/^harbor-([0-9.]+)-linux-x64\.tar\.gz$/\1/')
   [ "$VERSION" != "$ARCHIVE" ] || die "archive name must look like harbor-X.Y.Z-linux-x64.tar.gz"
   cp -f "$HARBOR_ARCHIVE" "$WORK/$ARCHIVE"; cp -f "$(dirname "$HARBOR_ARCHIVE")/SHA256SUMS" "$WORK/SHA256SUMS"
+  if [ -f "$(dirname "$HARBOR_ARCHIVE")/SHA256SUMS.sig" ]; then cp -f "$(dirname "$HARBOR_ARCHIVE")/SHA256SUMS.sig" "$WORK/SHA256SUMS.sig"; fi
 else
   curl -fsS --max-time 15 -o /dev/null "https://api.github.com/repos/$REPO/releases" || die "cannot reach GitHub (api.github.com) or the repository is not public"
   say "Finding the newest Harbor release"
@@ -82,13 +111,34 @@ else
   cd "$WORK"
   curl -fSL --progress-bar -o "$ARCHIVE" "$BASE/$ARCHIVE"
   curl -fsSL -o SHA256SUMS "$BASE/SHA256SUMS"
+  SIG_HTTP=$(curl -sSL --max-time 30 -o SHA256SUMS.sig -w '%{http_code}' "$BASE/SHA256SUMS.sig" || echo 000)
+  case "$SIG_HTTP" in
+    200) ;;
+    404) rm -f SHA256SUMS.sig ;;
+    *)   rm -f SHA256SUMS.sig; die "could not download SHA256SUMS.sig of Harbor $VERSION (HTTP $SIG_HTTP); nothing was installed" ;;
+  esac
 fi
 cd "$WORK"
 say "Verifying $ARCHIVE"
+# The signature first: SHA256SUMS is only trusted once Harbor's release key vouches for its exact bytes.
+if [ -f SHA256SUMS.sig ]; then
+  verify_sig SHA256SUMS SHA256SUMS.sig "$WORK" || die "SHA256SUMS of Harbor $VERSION does not match its signature (SHA256SUMS.sig): the files were changed, or signed by a key Harbor does not trust. Nothing was installed."
+  SIGNED="signature OK"
+elif [ "${HARBOR_ALLOW_UNSIGNED:-0}" = "1" ] && { [ -n "${HARBOR_ARCHIVE:-}" ] || { [ -n "${HARBOR_VERSION:-}" ] && version_lt "$VERSION" "$FIRST_SIGNED"; }; }; then
+  warn "##############################################################################"
+  warn "HARBOR_ALLOW_UNSIGNED=1: Harbor $VERSION has NO signature (SHA256SUMS.sig)."
+  warn "Nothing proves this archive is an official Harbor release. Installing it anyway."
+  warn "##############################################################################"
+  SIGNED="UNSIGNED (HARBOR_ALLOW_UNSIGNED=1)"
+elif version_lt "$VERSION" "$FIRST_SIGNED"; then
+  die "Harbor $VERSION is older than $FIRST_SIGNED, the first signed release. To install it anyway, on purpose: HARBOR_VERSION=$VERSION HARBOR_ALLOW_UNSIGNED=1"
+else
+  die "Harbor $VERSION has no SHA256SUMS.sig; refusing an unsigned release. Nothing was installed."
+fi
 grep " $ARCHIVE\$" SHA256SUMS | sha256sum -c - >/dev/null || die "checksum mismatch for $ARCHIVE"
 rm -rf "harbor-${VERSION}-linux-x64"
 tar -xzf "$ARCHIVE"
-echo "    checksum OK, Harbor $VERSION"
+echo "    $SIGNED, checksum OK, Harbor $VERSION"
 
 # LAN mode: on when there is a private-network address (home/office); a cloud server would expose everything
 HAS_PRIVATE=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | grep -Ec '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)' || true)

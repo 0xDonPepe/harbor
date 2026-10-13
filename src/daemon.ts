@@ -31,6 +31,7 @@ import { PackageStore } from './packages/store.js';
 import { CatalogUpdateService } from './system/catalog-updates.js';
 import { LogBuffer } from './system/logs.js';
 import { TerminalService } from './system/terminal.js';
+import type { ReleaseKey } from './release-keys.js';
 import { FakeReleaseFeed, FakeUnitStarter, GitHubReleaseFeed, SelfUpdateService, SystemctlStarter, type ReleaseFeed, type UnitStarter } from './system/selfupdate.js';
 import { SetupService } from './auth/setup.js';
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
@@ -76,6 +77,8 @@ export interface DaemonOverrides {
   crypto?: CryptoProvider;
   backupEngine?: BackupEngine;
   backupTickMs?: number;
+  // decision 168: the keys a downloaded catalog.json.sig must verify with (tests: throwaway keys)
+  releaseKeys?: readonly ReleaseKey[];
 }
 
 export interface Daemon {
@@ -145,7 +148,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     const version = productVersion();
     // The official catalog (decision 158): the bundled seed until a newer bundle is downloaded;
     // the store asks for the active folder on every read, so a swap needs no restart.
-    const catalogUpdates = new CatalogUpdateService({ seedDir: config.catalogDir, stateDir: config.stateDir, url: config.catalog.url, fetcher, clock, log });
+    const catalogUpdates = new CatalogUpdateService({ seedDir: config.catalogDir, stateDir: config.stateDir, url: config.catalog.url, fetcher, clock, log, ...(overrides.releaseKeys ? { keys: overrides.releaseKeys } : {}) });
     const packages = new PackageStore(() => catalogUpdates.activeDir(), config.localPackagesDir, registry, clock, { harborVersion: version });
     const feed = overrides.releaseFeed ?? (fakeMode ? demoReleaseFeed(version) : config.updates.repo ? new GitHubReleaseFeed(fetcher, config.updates.repo) : null);
     const unitStarter = overrides.unitStarter ?? (fakeMode ? new FakeUnitStarter() : new SystemctlStarter());
@@ -328,7 +331,7 @@ export function demoReleaseFeed(current: string): FakeReleaseFeed {
   const f = new FakeReleaseFeed();
   const [a, b, c] = current.split('.').map(Number);
   const next = `${a}.${b}.${(c ?? 0) + 1}`;
-  f.info = { version: next, tag: `v${next}`, publishedAt: '2026-09-15T12:00:00Z', notes: 'Demo release: what a newer Harbor would say here.', url: `https://github.com/carlosalaniz/harbor/releases/tag/v${next}`, archiveUrl: `https://github.com/carlosalaniz/harbor/releases/download/v${next}/harbor-${next}-linux-x64.tar.gz`, sumsUrl: `https://github.com/carlosalaniz/harbor/releases/download/v${next}/SHA256SUMS` };
+  f.info = { version: next, tag: `v${next}`, publishedAt: '2026-09-15T12:00:00Z', notes: 'Demo release: what a newer Harbor would say here.', url: `https://github.com/carlosalaniz/harbor/releases/tag/v${next}`, archiveUrl: `https://github.com/carlosalaniz/harbor/releases/download/v${next}/harbor-${next}-linux-x64.tar.gz`, sumsUrl: `https://github.com/carlosalaniz/harbor/releases/download/v${next}/SHA256SUMS`, sigUrl: `https://github.com/carlosalaniz/harbor/releases/download/v${next}/SHA256SUMS.sig` };
   return f;
 }
 

@@ -10,7 +10,8 @@ import { compareVersions } from '../packages/versions.js';
 
 // Harbor updating itself. The daemon (unprivileged) only checks GitHub Releases and asks systemd to start
 // a root oneshot (`harbor-self-update@<version>.service`, allowed by the polkit rule bootstrap installs);
-// that unit runs `harbor self-update apply`, which downloads the release itself, verifies SHA256SUMS,
+// that unit runs `harbor self-update apply`, which downloads the release itself, verifies SHA256SUMS.sig with the
+// pinned release keys and then SHA256SUMS (decision 168), never installs an older release,
 // extracts it and runs the new release's `bootstrap --yes` (the same in-place upgrade an operator would do).
 // Progress is written to <stateDir>/updates/status.json by the root step so it survives the daemon restart.
 
@@ -22,6 +23,7 @@ export interface ReleaseInfo {
   url: string | null; // release page
   archiveUrl: string | null;
   sumsUrl: string | null;
+  sigUrl: string | null; // SHA256SUMS.sig (decision 168): a release without it is never applied from the console
 }
 export interface ReleaseFeed {
   latest(): Promise<ReleaseInfo | null>;
@@ -47,7 +49,7 @@ export class GitHubReleaseFeed implements ReleaseFeed {
     if (!top) return null;
     const version = top.tag_name!.slice(1);
     const asset = (n: string) => top.assets?.find((a) => a.name === n)?.browser_download_url ?? null;
-    return { version, tag: top.tag_name!, publishedAt: top.published_at ?? null, notes: top.body?.trim() || null, url: top.html_url ?? null, archiveUrl: asset(archiveName(version)), sumsUrl: asset('SHA256SUMS') };
+    return { version, tag: top.tag_name!, publishedAt: top.published_at ?? null, notes: top.body?.trim() || null, url: top.html_url ?? null, archiveUrl: asset(archiveName(version)), sumsUrl: asset('SHA256SUMS'), sigUrl: asset('SHA256SUMS.sig') };
   }
 }
 
@@ -162,6 +164,11 @@ export class SelfUpdateService {
       throw new HarborError('BUSY', `an update to ${st.applying.version} is already running`);
     }
     if (!this.latestInfo.archiveUrl || !this.latestInfo.sumsUrl) throw new HarborError('INVALID_STATE', `release ${this.latestInfo.version} has no archive for this platform yet`, { nextAction: 'Try again later; the release assets may still be uploading.' });
+    // Decision 168: the root step verifies SHA256SUMS.sig with the pinned keys; a release without one is not
+    // started at all (the root step would refuse it, after a download).
+    if (!this.latestInfo.sigUrl) throw new HarborError('INVALID_STATE', `release ${this.latestInfo.version} is not signed (no SHA256SUMS.sig); Harbor only installs signed releases`, { nextAction: 'Try again later; the release assets may still be uploading. If it stays unsigned, do not install it.' });
+    // never a downgrade from the console (available already means newer; this keeps it so if that changes)
+    if (compareVersions(this.latestInfo.version, this.current) <= 0) throw new HarborError('INVALID_STATE', `Harbor ${this.latestInfo.version} is not newer than the running ${this.current}`);
     const version = this.latestInfo.version;
     this.writeApplying({ version, state: 'requested', message: `requested by ${actor}; downloading ${archiveName(version)}`, at: rfc3339(this.clock.now()) });
     this.log.warn(`self-update to ${version} requested by ${actor}`);

@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 // pnpm package — build the relocatable Ubuntu x86-64 release archive:
-//   release/harbor-<version>-linux-x64.tar.gz  (+ SHA256SUMS)
+//   release/harbor-<version>-linux-x64.tar.gz  (+ SHA256SUMS, + SHA256SUMS.sig when a signing key is given)
 // Contents: bin/ launchers, dist/ (compiled daemon+CLI+bootstrap), web/ (built UI), catalog/,
 // targets/, node/ (official Node.js linux-x64 runtime, checksum-verified), node_modules/ (production
 // deps, hoisted, with better-sqlite3's shipped linux-x64 prebuild), docs/, package.json, release.json.
 // No npm/pnpm/compilation happens on the destination host.
 // catalog/ is the offline seed (decision 158): the latest bundle published by carlosalaniz/harbor-apps,
-// downloaded over HTTPS (no signature), zip checked against its catalog.json, extracted (index.json + package
+// downloaded over HTTPS, catalog.json.sig checked when present (decision 168), zip checked against its catalog.json, extracted (index.json + package
 // dirs + catalog.json). "Latest" is resolved once to its tag c<serial>; both files come from
 // releases/download/c<serial> (scripts/catalog-fetch.mjs, shared with CI's official-catalog job).
 //   HARBOR_CATALOG_BUNDLE=<dir>      use catalog.zip/catalog.json from <dir> instead of downloading
 //                                    (recorded in release.json as official: false)
+// Signing (decision 168, docs/design/SIGNING.md): SHA256SUMS.sig = base64 Ed25519 signature over SHA256SUMS.
+//   HARBOR_SIGNING_KEY=<PEM text> or HARBOR_SIGNING_KEY_FILE=<path>   sign with that private key
+//   --require-signature   (CI) fail without a key, or with a key Harbor does not pin (src/release-keys.ts);
+//                         with HARBOR_REQUIRE_SIGNED_CATALOG=1 also fail when the seed catalog has no catalog.json.sig
+// A seed catalog that carries catalog.json.sig is always verified; a bad signature always fails the build.
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, lstatSync, unlinkSync, writeFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
@@ -26,6 +31,12 @@ const releaseDir = path.join(ROOT, 'release');
 const cacheDir = path.join(releaseDir, 'cache');
 const stage = path.join(releaseDir, 'stage', name);
 const skipBuild = process.argv.includes('--skip-build');
+const requireSignature = process.argv.includes('--require-signature');
+const requireSignedCatalog = requireSignature && process.env.HARBOR_REQUIRE_SIGNED_CATALOG === '1';
+if (requireSignature && !process.env.HARBOR_SIGNING_KEY?.trim() && !process.env.HARBOR_SIGNING_KEY_FILE?.trim()) {
+  console.error('--require-signature: set HARBOR_SIGNING_KEY (the PEM text, CI secret) or HARBOR_SIGNING_KEY_FILE; no release archive was built');
+  process.exit(1);
+}
 
 function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { stdio: 'inherit', cwd: ROOT, ...opts });
@@ -52,10 +63,27 @@ for (const f of ['dist/daemon.js', 'dist/cli/main.js', 'dist/packages/catalog-bu
 
 // 1b. App catalog seed: the harbor-apps bundle, checked before anything is staged. No silent empty catalog.
 const catalogLibs = await loadCatalogLibs();
-const { bundleLib, catalogLib } = catalogLibs;
+const { bundleLib, catalogLib, signLib, keys } = catalogLibs;
+
+// 1a. The signing key, checked before anything is downloaded: a key Harbor does not pin would publish a
+// release every box refuses.
+let signingKey = null;
+try {
+  signingKey = signLib.signingKeyFromEnv(process.env);
+  if (signingKey) {
+    const id = signLib.pinnedKeyIdFor(signingKey, keys);
+    if (id) console.log(`signing with pinned key ${id}`);
+    else if (requireSignature) throw new Error('the signing key is not one Harbor pins (src/release-keys.ts): boxes would refuse this release');
+    else console.warn('warning: the signing key is not one Harbor pins (src/release-keys.ts): boxes will refuse this archive');
+  }
+} catch (e) {
+  console.error(`${e.message}; no release archive was built`);
+  process.exit(1);
+}
+
 let fetched;
 try {
-  fetched = await fetchCatalogBundle(bundleLib);
+  fetched = await fetchCatalogBundle(bundleLib, process.env, { signLib, keys, required: requireSignedCatalog });
 } catch (e) {
   console.error(`${e.message}; no release archive was built`);
   process.exit(1);
@@ -139,7 +167,7 @@ writeFileSync(
       commit,
       node: { version: NODE_VERSION, tarball, sha256: actual, source: `https://nodejs.org/dist/${NODE_VERSION}/` },
       packages: Object.fromEntries(Object.entries(catalogIndex.packages).map(([id, e]) => [id, e.revision])),
-      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, official: fetched.official },
+      catalog: { serial: bundle.meta.serial, commit: bundle.meta.commit, createdAt: bundle.meta.createdAt, source: catalogSource, official: fetched.official, signedBy: fetched.signedBy },
       dependencies: pkg.dependencies,
     },
     null,
@@ -170,6 +198,19 @@ const tarArgs = gnu
 run('tar', tarArgs, { env: { ...process.env, COPYFILE_DISABLE: '1', GZIP: '-n' } });
 rmSync(listFile);
 const sum = sha256(archive);
-writeFileSync(path.join(releaseDir, 'SHA256SUMS'), `${sum}  ${path.basename(archive)}\n`);
+const sumsFile = path.join(releaseDir, 'SHA256SUMS');
+writeFileSync(sumsFile, `${sum}  ${path.basename(archive)}\n`);
+rmSync(sumsFile + signLib.SIG_SUFFIX, { force: true }); // never ship a signature of an earlier build
+let signedWith = null;
+if (signingKey) {
+  const { sigFile, keyId } = signLib.signFile(sumsFile, signingKey, keys);
+  if (!keyId && requireSignature) {
+    rmSync(sigFile, { force: true });
+    throw new Error('SHA256SUMS.sig does not verify with a pinned key');
+  }
+  signedWith = keyId ?? 'a key Harbor does not pin';
+} else {
+  console.warn('warning: SHA256SUMS is NOT signed (no HARBOR_SIGNING_KEY / HARBOR_SIGNING_KEY_FILE): boxes refuse to self-update to this archive; install it by hand with --allow-unsigned or HARBOR_ALLOW_UNSIGNED=1');
+}
 const size = (statSync(archive).size / 1024 / 1024).toFixed(1);
-console.log(`\n${archive} (${size} MiB)\nsha256 ${sum}\nnode ${NODE_VERSION} ${TARGET}; commit ${commit ?? 'n/a'}; app catalog serial ${bundle.meta.serial} (${catalogIds.length} packages)`);
+console.log(`\n${archive} (${size} MiB)\nsha256 ${sum}\n${signedWith ? `SHA256SUMS.sig signed with ${signedWith}` : 'SHA256SUMS unsigned'}\nnode ${NODE_VERSION} ${TARGET}; commit ${commit ?? 'n/a'}; app catalog serial ${bundle.meta.serial} (${catalogIds.length} packages, ${fetched.signedBy ? `signed by ${fetched.signedBy}` : 'unsigned'})`);

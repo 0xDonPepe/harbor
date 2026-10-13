@@ -53,7 +53,7 @@ const CONFIG_SCHEMA = {
       additionalProperties: false,
       properties: {
         url: { type: ['string', 'null'], minLength: 1, maxLength: 2048 },
-        // deprecated: catalog signing was removed before 0.28.0 shipped (decision 158); accepted and ignored
+        // deprecated: config keys were removed before 0.28.0 shipped (decision 158); since 0.32.0 the pinned release keys check the catalog (decision 168); accepted and ignored
         publicKeys: { type: 'array', maxItems: 8, items: { type: 'string', maxLength: 1024 } },
       },
     },
@@ -115,7 +115,7 @@ export function normalizeConfig(raw: unknown, baseDir: string): DaemonConfig {
     throw new HarborError('STATE_UNAVAILABLE', `invalid config: ${formatErrors(validate.errors).join('; ')}`);
   }
   const notices: string[] = [];
-  if ((raw.catalog as { publicKeys?: unknown } | undefined)?.publicKeys !== undefined) notices.push('config catalog.publicKeys is ignored: the app catalog is no longer signed (trust is HTTPS to the catalog server); remove the key');
+  if ((raw.catalog as { publicKeys?: unknown } | undefined)?.publicKeys !== undefined) notices.push('config catalog.publicKeys is ignored: the app catalog is checked with the release keys built into Harbor (decision 168), never with keys from the config; remove the key');
   const abs = (p: string) => (path.isAbsolute(p) ? p : path.resolve(baseDir, p));
   const cfg: DaemonConfig = {
     stateDir: abs(raw.stateDir),

@@ -3,22 +3,34 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { json as fakeJson } from '../../src/appearance/fetcher.js';
 import type { CatalogItemDto, CatalogStatusDto, InstanceSummary, NotificationsDto, OperationDto } from '../../src/contracts/api.js';
-import { buildBundle, bumpRevision, catalogFiles, type TestBundle } from '../unit/bundle-helpers.js';
+import { buildBundle, bumpRevision, catalogFiles, TEST_KEYS, TEST_SIGNER, type TestBundle } from '../unit/bundle-helpers.js';
+import { signDetached } from '../../src/signing.js';
 import { REPO_CATALOG, startHarness, type Harness } from './harness.js';
 
 // Decision 158: the daemon swaps in a newer catalog from the catalog repository's releases.
-// The "server" is the harness's fake fetcher. The config still lists a (deprecated, ignored) publicKeys
-// entry, like a hand-edited config from before signing was removed: the daemon starts and ignores it.
+// The "server" is the harness's fake fetcher, shaped like GitHub releases (decision 168: releases/latest
+// redirects to tag c<serial>, files come from releases/download/c<serial>/, catalog.json.sig signed by a
+// throwaway key the daemon is given instead of the pinned ones). The config still lists a (deprecated, ignored)
+// publicKeys entry, like a hand-edited config from before 0.28.0: the daemon starts and ignores it.
 
-const URL_BASE = 'https://catalog.example.test/releases/latest/download';
+const RELEASES = 'https://catalog.example.test/releases';
+const URL_BASE = `${RELEASES}/latest/download`;
+// the bundle releases/latest names; `sig: null` publishes it without catalog.json.sig
 let bundle: TestBundle | null = null;
+let sigOverride: Buffer | null | undefined;
 let h: Harness;
 
 beforeAll(async () => {
-  h = await startHarness({ config: { catalog: { url: URL_BASE, publicKeys: ['FIXTURE-IGNORED-KEY'] } } });
+  h = await startHarness({ config: { catalog: { url: URL_BASE, publicKeys: ['FIXTURE-IGNORED-KEY'] } }, overrides: { releaseKeys: TEST_KEYS } });
   const bin = (b: Buffer | string) => ({ status: 200, contentType: 'application/octet-stream', body: Buffer.from(b) });
-  h.fetcher.on(`${URL_BASE}/catalog.json`, () => (bundle ? bin(bundle.meta) : fakeJson({}, 404)));
-  h.fetcher.on(`${URL_BASE}/catalog.zip`, () => (bundle ? bin(bundle.zip) : fakeJson({}, 404)));
+  h.fetcher.on(`${RELEASES}/latest`, () => ({ status: 302, contentType: 'text/html', body: Buffer.from(''), location: bundle ? `${RELEASES}/tag/c${bundle.serial}` : RELEASES }));
+  h.fetcher.on(`${RELEASES}/download/`, (url) => {
+    if (!bundle || !url.includes(`/download/c${bundle.serial}/`)) return fakeJson({}, 404);
+    if (url.endsWith('/catalog.json')) return bin(bundle.meta);
+    if (url.endsWith('/catalog.zip')) return bin(bundle.zip);
+    if (url.endsWith('/catalog.json.sig')) return sigOverride === null ? fakeJson({}, 404) : bin(sigOverride ?? bundle.sig);
+    return fakeJson({}, 404);
+  });
 });
 afterAll(async () => h.close());
 
@@ -48,7 +60,7 @@ describe('official catalog updates (decision 158)', () => {
 
   it('a check with nothing published reports the error and keeps the seed', async () => {
     const s = await refresh();
-    expect(s).toMatchObject({ origin: 'bundled', serial: 0, error: 'the catalog server answered HTTP 404 for catalog.json' });
+    expect(s).toMatchObject({ origin: 'bundled', serial: 0, error: `could not resolve the latest catalog release from ${RELEASES}/latest (Location: "${RELEASES}")` });
     expect(s.checkedAt).not.toBeNull();
   });
 
@@ -97,10 +109,25 @@ describe('official catalog updates (decision 158)', () => {
     const good = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), { serial: 1_780_000_000 });
     const zip = Buffer.from(good.zip);
     zip[zip.length - 30] = zip[zip.length - 30]! ^ 0xff;
-    bundle = { meta: good.meta, zip };
+    bundle = { ...good, zip };
     expect(await refresh()).toMatchObject({ serial: 1_760_000_000, error: 'the app catalog archive does not match its catalog.json checksum' });
     expect((await catalogItem('excalidraw'))?.revision).toBe('2');
     expect(existsSync(path.join(h.stateDir, 'catalog', '1780000000'))).toBe(false);
+  });
+
+  it('decision 168: an unsigned or badly signed catalog is refused with a clear status and changes nothing', async () => {
+    bundle = buildBundle(bumpRevision(catalogFiles(REPO_CATALOG), 'excalidraw', '3'), { serial: 1_780_000_000 });
+    sigOverride = null;
+    const seen = h.fetcher.requests.length;
+    expect(await refresh()).toMatchObject({ serial: 1_760_000_000, origin: 'downloaded', error: 'refusing the app catalog c1780000000: its catalog.json is not signed (no catalog.json.sig); Harbor keeps the catalog it has' });
+    sigOverride = Buffer.from(signDetached(Buffer.from('another catalog.json'), TEST_SIGNER.privatePem));
+    const s = await refresh();
+    expect(s.error).toMatch(/^refusing the app catalog c1780000000: its catalog\.json does not match its catalog\.json\.sig/);
+    expect(await status()).toMatchObject({ serial: 1_760_000_000, error: s.error });
+    expect((await catalogItem('excalidraw'))?.revision).toBe('2');
+    expect(existsSync(path.join(h.stateDir, 'catalog', '1780000000'))).toBe(false);
+    expect(h.fetcher.requests.slice(seen).filter((r) => r.url.endsWith('/catalog.zip'))).toEqual([]);
+    sigOverride = undefined;
   });
 
   it('a plan the catalog moved past fails PLAN_STALE and leaves the app as it was (no needs_action)', async () => {

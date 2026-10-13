@@ -3,9 +3,10 @@ import path from 'node:path';
 import type { CatalogStatusDto } from '../contracts/api.js';
 import type { Fetcher } from '../appearance/fetcher.js';
 import type { Logger } from '../lifecycle/context.js';
-import { BUNDLE_FILES, MAX_BUNDLE_META_BYTES, openBundle, parseBundleMeta, type CatalogBundleMeta } from '../packages/catalog-bundle.js';
+import { BUNDLE_FILES, BUNDLE_SIG_FILE, catalogDownloadBase, catalogReleasesBase, catalogTagFromLocation, MAX_BUNDLE_META_BYTES, openBundle, parseBundleMeta, type CatalogBundleMeta } from '../packages/catalog-bundle.js';
 import { readCatalogIndex } from '../packages/catalog.js';
-import { HarborError } from '../errors.js';
+import { RELEASE_KEYS, type ReleaseKey } from '../release-keys.js';
+import { checkSignature, MAX_SIGNATURE_BYTES, signatureProblem } from '../signing.js';
 import { rfc3339, type Clock } from '../util.js';
 
 // The official app catalog, kept current without a Harbor release (decision 158). Two places can hold it:
@@ -13,16 +14,20 @@ import { rfc3339, type Clock } from '../util.js';
 //               build copies the bundle's catalog.json next to it; without it (dev, tests) the seed is serial 0.
 //   downloaded  <stateDir>/catalog/<serial>/ (same layout), the active one named by <stateDir>/catalog/current.json.
 // Whichever has the higher serial is the catalog; a missing or broken pointer or folder means the seed.
-// Trust is HTTPS to the catalog server (GitHub), like Harbor's self-update; catalog.json is an integrity
-// check, not a signature. A downloaded folder counts only while its stored catalog.json still parses and
-// names that folder's serial (= the pointer): a damaged folder falls back to the seed, and the next good
-// bundle is compared with the seed, not with the folder that broke.
-// A check downloads catalog.json first, and only fetches catalog.zip when its serial is newer than the
-// active one: an equal or older bundle (a rollback) never replaces it, and a serial more than a day ahead
-// of the clock is refused (it would block every newer bundle until then).
-// A check reads the two files one after another from …/latest; a release published in between mixes two
-// bundles (checksum mismatch), so such a check starts over once. The whole check has one deadline
-// (CHECK_DEADLINE_MS) below the CLI's 300 s wait for response headers.
+// Trust (decision 168): a downloaded catalog.json is used only after a pinned release key (src/release-keys.ts,
+// the key that signs Harbor's own releases) verifies catalog.json.sig over its exact bytes; catalog.json then
+// pins catalog.zip by sha256 and size. An unsigned or badly signed bundle is refused (a status error) and the
+// box keeps the catalog it has. The seed needs no signature: it is inside the signed Harbor release.
+// A downloaded folder counts only while its stored catalog.json still parses and names that folder's serial
+// (= the pointer): a damaged folder falls back to the seed, and the next good bundle is compared with the seed,
+// not with the folder that broke.
+// A check resolves the newest release once (`…/releases/latest` redirects to `…/tag/c<serial>`) and takes every
+// file from `…/releases/download/c<serial>/`, so a release landing mid-check can never mix two bundles, and the
+// serial in catalog.json must be the tag's. A tag not newer than the active catalog downloads nothing; an
+// equal or older bundle (a rollback) never replaces it, and a serial more than a day ahead of the clock is
+// refused (it would block every newer bundle until then). A catalog.url that is not a `…/releases/latest/download`
+// URL (a mirror) is read as is. The whole check has one deadline (CHECK_DEADLINE_MS) below the CLI's 300 s wait
+// for response headers.
 // Never touches Docker: installed apps see a new revision as an ordinary update.
 
 export const CATALOG_FIRST_CHECK_MS = 60_000;
@@ -42,6 +47,8 @@ export interface CatalogUpdateDeps {
   log: Logger;
   // milliseconds for the check deadline (never the wall clock, which an operator may change); tests fake it
   monotonicMs?: () => number;
+  // the keys a catalog.json.sig must verify with (default: the pinned release keys); tests pass throwaway ones
+  keys?: readonly ReleaseKey[];
 }
 
 interface ActiveCatalog {
@@ -55,12 +62,6 @@ class TooLarge extends Error {
   constructor(readonly file: string, maxBytes: number) {
     super(`${file} is larger than ${maxBytes} bytes`);
   }
-}
-
-// What a release published halfway through a check looks like: one bundle's catalog.json with the other's archive.
-function mixedBundle(e: unknown): boolean {
-  if (e instanceof TooLarge) return e.file === BUNDLE_FILES.zip;
-  return HarborError.is(e, 'INVALID_PACKAGE') && /does not match its catalog\.json checksum/.test(e.message);
 }
 
 function readMetaIn(dir: string): CatalogBundleMeta | null {
@@ -168,32 +169,47 @@ export class CatalogUpdateService {
     return this.deps.monotonicMs ? this.deps.monotonicMs() : performance.now();
   }
 
-  // One step of a check: its own timeout, cut to what is left of the check's deadline.
-  private async get(url: string, name: string, maxBytes: number, stepTimeoutMs: number, deadline: number): Promise<Buffer> {
+  // One step of a check: its own timeout, cut to what is left of the check's deadline. `missingOk`: a 404 is null.
+  private async get(url: string, name: string, maxBytes: number, stepTimeoutMs: number, deadline: number, opts: { missingOk?: boolean; redirect?: 'manual' } = {}): Promise<{ body: Buffer; status: number; location: string | null } | null> {
     const left = Math.floor(deadline - this.monotonic());
     if (left <= 0) throw new Error(`the app catalog check took longer than ${CHECK_DEADLINE_MS / 1000} s (stopped before ${name}); Harbor tries again at the next check`);
     let r;
     try {
-      r = await this.deps.fetcher.fetch(`${url}/${name}`, { maxBytes, timeoutMs: Math.min(stepTimeoutMs, left), headers: { accept: 'application/octet-stream' } });
+      r = await this.deps.fetcher.fetch(url, { maxBytes, timeoutMs: Math.min(stepTimeoutMs, left), headers: { accept: 'application/octet-stream' }, ...(opts.redirect ? { redirect: opts.redirect } : {}) });
     } catch (e) {
       if (e instanceof Error && /response too large/.test(e.message)) throw new TooLarge(name, maxBytes);
       throw new Error(`could not download ${name} from the catalog server (${e instanceof Error ? e.message : String(e)})`, { cause: e });
     }
-    if (r.status !== 200) throw new Error(`the catalog server answered HTTP ${r.status} for ${name}`);
+    if (r.status === 404 && opts.missingOk) return null;
+    const redirected = opts.redirect === 'manual' && r.status >= 300 && r.status <= 399;
+    if (r.status !== 200 && !redirected) throw new Error(`the catalog server answered HTTP ${r.status} for ${name}`);
     if (r.body.length > maxBytes) throw new TooLarge(name, maxBytes);
-    return r.body;
+    return { body: r.body, status: r.status, location: r.location ?? null };
+  }
+
+  private async file(base: string, name: string, maxBytes: number, stepTimeoutMs: number, deadline: number): Promise<Buffer> {
+    return (await this.get(`${base}/${name}`, name, maxBytes, stepTimeoutMs, deadline))!.body;
+  }
+
+  // Where this check reads its files from: `…/releases/download/c<serial>` for the newest release (one lookup of
+  // `…/releases/latest`), or the configured URL itself when it is not a GitHub-style latest URL (a mirror).
+  private async resolve(url: string, deadline: number): Promise<{ base: string; tag: number | null }> {
+    let releases: string;
+    try {
+      releases = catalogReleasesBase(url);
+    } catch {
+      return { base: url, tag: null };
+    }
+    const r = (await this.get(`${releases}/latest`, 'the newest catalog release', MAX_BUNDLE_META_BYTES, META_TIMEOUT_MS, deadline, { redirect: 'manual' }))!;
+    if (r.status === 200) throw new Error('the catalog server answered releases/latest without naming a release (HTTP 200, expected a redirect to its tag)');
+    const tag = catalogTagFromLocation(r.location, releases);
+    return { base: catalogDownloadBase(releases, tag), tag };
   }
 
   private async check(url: string): Promise<CatalogStatusDto> {
     const deadline = this.monotonic() + CHECK_DEADLINE_MS;
     try {
-      try {
-        await this.download(url, deadline);
-      } catch (e) {
-        if (!mixedBundle(e)) throw e;
-        this.deps.log.info(`app catalog check read two different releases (${(e as Error).message}); checking again`);
-        await this.download(url, deadline);
-      }
+      await this.download(url, deadline);
       this.error = null;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -204,20 +220,31 @@ export class CatalogUpdateService {
   }
 
   private async download(url: string, deadline: number): Promise<void> {
-    const metaBytes = await this.get(url, BUNDLE_FILES.meta, MAX_BUNDLE_META_BYTES, META_TIMEOUT_MS, deadline);
+    const { base, tag } = await this.resolve(url, deadline);
+    const before = this.active();
+    if (tag !== null && tag <= before.serial) {
+      this.deps.log.info('app catalog is up to date', { serial: before.serial, offered: tag });
+      return;
+    }
+    const metaBytes = await this.file(base, BUNDLE_FILES.meta, MAX_BUNDLE_META_BYTES, META_TIMEOUT_MS, deadline);
+    const sig = (await this.get(`${base}/${BUNDLE_SIG_FILE}`, BUNDLE_SIG_FILE, MAX_SIGNATURE_BYTES, META_TIMEOUT_MS, deadline, { missingOk: true }))?.body ?? null;
+    // decision 168: nothing in catalog.json is read before a pinned key vouches for its exact bytes
+    const keys = this.deps.keys ?? RELEASE_KEYS;
+    const verdict = checkSignature(metaBytes, sig, keys);
+    if (!verdict.ok) throw new Error(`refusing the app catalog${tag !== null ? ` c${tag}` : ''}: ${signatureProblem(`its ${BUNDLE_FILES.meta}`, BUNDLE_SIG_FILE, verdict.reason, keys)}; Harbor keeps the catalog it has`);
     const meta = parseBundleMeta(metaBytes);
+    if (tag !== null && meta.serial !== tag) throw new Error(`the catalog release c${tag} carries a ${BUNDLE_FILES.meta} with serial ${meta.serial}; Harbor keeps the catalog it has`);
     const now = this.deps.clock.now();
     if (meta.serial > Math.floor(now.getTime() / 1000) + MAX_FUTURE_S) {
       throw new Error(`the app catalog is dated in the future (${rfc3339(new Date(meta.serial * 1000))}, this machine says ${rfc3339(now)}); Harbor keeps the catalog it has`);
     }
-    const before = this.active();
     if (meta.serial <= before.serial) {
       this.deps.log.info('app catalog is up to date', { serial: before.serial, offered: meta.serial });
       return;
     }
     let partial: string | null = null;
     try {
-      const zip = await this.get(url, BUNDLE_FILES.zip, meta.zip.bytes, ZIP_TIMEOUT_MS, deadline);
+      const zip = await this.file(base, BUNDLE_FILES.zip, meta.zip.bytes, ZIP_TIMEOUT_MS, deadline);
       const { files } = openBundle({ meta: metaBytes, zip });
 
       // Stage next to the live folders, validate the way the store reads it, then swap in two renames.

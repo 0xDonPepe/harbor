@@ -27,7 +27,7 @@ describe('config: the official catalog (decision 158)', () => {
   it('a config that still lists publicKeys (signing was removed) loads; the keys are ignored with a notice', () => {
     const c = cfg({ url: 'https://example.test/releases/latest/download', publicKeys: ['FIXTURE-KEY-NOT-USED'] });
     expect(c.catalog).toEqual({ url: 'https://example.test/releases/latest/download' });
-    expect(c.notices).toEqual([expect.stringMatching(/catalog\.publicKeys is ignored: the app catalog is no longer signed/)]);
+    expect(c.notices).toEqual([expect.stringMatching(/catalog\.publicKeys is ignored: the app catalog is checked with the release keys built into Harbor/)]);
     expect(cfg({ publicKeys: [] }).catalog).toEqual({ url: OFFICIAL_CATALOG_URL });
   });
 });

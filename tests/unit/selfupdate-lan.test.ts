@@ -24,7 +24,7 @@ describe('self-update pieces', () => {
       { tag_name: 'v0.8.0', published_at: '2026-09-16T00:00:00Z', body: 'newer  ', html_url: 'https://github.com/o/r/releases/tag/v0.8.0', assets: [{ name: 'harbor-0.8.0-linux-x64.tar.gz', browser_download_url: 'https://github.com/o/r/releases/download/v0.8.0/harbor-0.8.0-linux-x64.tar.gz' }, { name: 'SHA256SUMS', browser_download_url: 'https://github.com/o/r/releases/download/v0.8.0/SHA256SUMS' }] },
     ]));
     const latest = await new GitHubReleaseFeed(f, 'o/r').latest();
-    expect(latest).toEqual({ version: '0.8.0', tag: 'v0.8.0', publishedAt: '2026-09-16T00:00:00Z', notes: 'newer', url: 'https://github.com/o/r/releases/tag/v0.8.0', archiveUrl: 'https://github.com/o/r/releases/download/v0.8.0/harbor-0.8.0-linux-x64.tar.gz', sumsUrl: 'https://github.com/o/r/releases/download/v0.8.0/SHA256SUMS' });
+    expect(latest).toEqual({ version: '0.8.0', tag: 'v0.8.0', publishedAt: '2026-09-16T00:00:00Z', notes: 'newer', url: 'https://github.com/o/r/releases/tag/v0.8.0', archiveUrl: 'https://github.com/o/r/releases/download/v0.8.0/harbor-0.8.0-linux-x64.tar.gz', sumsUrl: 'https://github.com/o/r/releases/download/v0.8.0/SHA256SUMS', sigUrl: null });
   });
   it('systemd: template unit for the root apply step, polkit grants only its start; LAN unit binds port 80 without root', () => {
     expect(selfUpdateUnit()).toContain('ExecStart=/opt/harbor/bin/harbor self-update apply --to %i');

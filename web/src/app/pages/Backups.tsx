@@ -31,20 +31,32 @@ export function AddPlaceDialog({ packages, initialType, existing, onClose, onDon
   const [values, setValues] = useState<Record<string, string>>(existing?.values ?? {});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  // Decision 169: an SFTP server Harbor has not seen before answers with its key fingerprint; the operator
+  // compares it with the server's own and trusts it explicitly (nothing is pinned on first contact).
+  const [unconfirmed, setUnconfirmed] = useState<{ fingerprint: string; message: string; nextAction: string } | null>(null);
+  const save = async (override: Record<string, string> = {}) => {
     if (!pkg) return;
     setBusy(true);
     setError(null);
+    setUnconfirmed(null);
     try {
-      const clean = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''));
+      const clean = Object.fromEntries(Object.entries({ ...values, ...override }).filter(([, v]) => v !== ''));
       if (existing) onDone({ target: await api.updateBackupTarget(existing.id, { name, values: clean }), recoveryKey: null });
       else onDone(await api.addBackupTarget(pkg.id, name || pkg.name, clean));
     } catch (err) {
-      setError(errText(err));
+      if (err instanceof ApiError && err.code === 'HOST_KEY_UNCONFIRMED' && err.details[0]) setUnconfirmed({ fingerprint: err.details[0], message: err.message, nextAction: err.nextAction });
+      else setError(errText(err));
     } finally {
       setBusy(false);
     }
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void save();
+  };
+  const trustKey = (fingerprint: string) => {
+    setValues({ ...values, hostKey: fingerprint });
+    void save({ hostKey: fingerprint });
   };
   return (
     <Dialog title={existing ? `Change ${existing.name}` : pkg ? `Back up to ${pkg.name}` : 'Add a place to back up to'} onClose={onClose}>
@@ -60,7 +72,7 @@ export function AddPlaceDialog({ packages, initialType, existing, onClose, onDon
           ))}
         </ul>
       ) : (
-        <form onSubmit={(e) => void submit(e)} className="stack">
+        <form onSubmit={submit} className="stack">
           <p className="muted small">{pkg.description}</p>
           <label>
             Name <input value={name} onChange={(e) => setName(e.target.value)} placeholder={pkg.name} maxLength={64} />
@@ -87,6 +99,22 @@ export function AddPlaceDialog({ packages, initialType, existing, onClose, onDon
             </label>
           ))}
           <p className="muted small">Harbor tests the place before it saves anything. Your data is encrypted on this machine first: the place only ever stores pieces it cannot read.</p>
+          {unconfirmed && (
+            <div className="notice small stack" role="alert">
+              <p>
+                <strong>Check the server key.</strong> {unconfirmed.message}.
+              </p>
+              <p>
+                <code className="path">{unconfirmed.fingerprint}</code>
+              </p>
+              <p className="muted">{unconfirmed.nextAction} Trust it only if the two match.</p>
+              <div className="row end">
+                <button type="button" className="btn primary" disabled={busy} onClick={() => trustKey(unconfirmed.fingerprint)}>
+                  Trust this key
+                </button>
+              </div>
+            </div>
+          )}
           {error && (
             <p className="error" role="alert">
               {error}

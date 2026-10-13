@@ -10,7 +10,7 @@
 // SIGINT (restic then writes no snapshot). Nothing here ever writes a secret to a persistent disk:
 // ssh keys and the app's state slice live in /run (tmpfs) for the length of one step.
 import { spawn } from 'node:child_process';
-import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
@@ -44,9 +44,12 @@ import {
   unlockArgs,
   pruneArgs,
   withLockWait,
+  confirmHostKey,
+  isHostKeyFingerprint,
   type BackupSummary,
   type RepoAccess,
 } from '../backups/restic.js';
+import { writeFileNoFollow } from './safe-write.js';
 import {
   BACKUP_ROOT_STATE,
   BACKUP_RUN_DIR,
@@ -74,8 +77,8 @@ function requireRoot(): void {
 
 function writeJson(file: string, doc: unknown, owner: { uid: number; gid: number }): void {
   try {
-    writeFileSync(file, JSON.stringify(doc), { mode: 0o640 });
-    chownSync(file, owner.uid, owner.gid);
+    // decision 169: the request folder is harbor-owned: open O_NOFOLLOW and fchown the fd, never the path
+    writeFileNoFollow(file, JSON.stringify(doc), { mode: 0o640, owner });
   } catch {
     /* the unit's exit code still carries the verdict */
   }
@@ -203,13 +206,16 @@ async function prepareAccess(req: BackupRequest, secrets: BackupSecrets, runDir:
   const t = req.target;
   const conf = rcloneConfFor(t.id);
   let hostKey: string | undefined;
-  if (t.transport === 'sftp' && !(t.config['hostKey'] ?? '').trim()) {
+  // Decision 169: no trust on first use. Without a key the step only reads the server's key and hands its
+  // fingerprint back (HOST_KEY_UNCONFIRMED); with a confirmed fingerprint it pins the matching key. A pasted
+  // key (what older places store) is used as it is.
+  const given = (t.config['hostKey'] ?? '').trim();
+  if (t.transport === 'sftp' && (!given || isHostKeyFingerprint(given))) {
     const port = t.config['port'] ? Number(t.config['port']) : 22;
     const r = await exec('/usr/bin/ssh-keyscan', ['-T', '10', '-p', String(port), t.config['host'] ?? ''], { timeoutMs: 30_000 });
-    hostKey = r.stdout.split('\n').filter((l) => l.trim() && !l.startsWith('#')).join('\n');
-    if (!hostKey) throw new HarborError('OPERATION_FAILED', `cannot read the server key of ${t.config['host']}:${port}`, { nextAction: 'Check the server name and port, and that SSH answers there.' });
+    hostKey = confirmHostKey(given, r.stdout, `${t.config['host']}:${port}`);
     t.config['hostKey'] = hostKey;
-    log(`pinned the server key of ${t.config['host']} (first contact)`);
+    log(`pinned the confirmed server key of ${t.config['host']}`);
   }
   if (t.transport === 'rclone' && (req.action === 'test' || req.action === 'init' || !existsSync(conf))) {
     // (Re)write the remote's config from the operator's answers; rclone adds its session to it later.
@@ -452,7 +458,7 @@ export async function applyBackupStep(spec: string, log: Log): Promise<void> {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const code = (e as { backupCode?: BackupStatus['code'] }).backupCode;
-    status({ state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), ...(code ? { code } : {}) });
+    status({ state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), ...(code ? { code } : {}), ...(e instanceof HarborError && e.details.length ? { details: e.details } : {}) });
     throw e;
   } finally {
     rmSync(runDir, { recursive: true, force: true });

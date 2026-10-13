@@ -136,3 +136,56 @@ describe('terminal over WebSocket', () => {
     expect(events).toEqual(['ready', 'exit']);
   });
 });
+
+// Decision 169: an open terminal closes when its session is revoked, not just when the shell exits.
+describe('terminal ends with its session', () => {
+  const login = async () => (await h.api.expect<{ token: string }>(201, 'POST', '/v1/sessions', { username: ADMIN.username, password: ADMIN.password }, { authorization: '' })).token;
+  const open = async (token: string) => {
+    const ws = new WebSocket(h.baseUrl.replace(/^http/, 'ws') + '/v1/terminal', { headers: { host: new URL(h.baseUrl).host } } as unknown as string[]);
+    const messages: { type: string; reason?: string }[] = [];
+    let ready: () => void = () => {};
+    const readyP = new Promise<void>((r) => (ready = r));
+    const closed = new Promise<number>((r) => ws.addEventListener('close', (e) => r(e.code)));
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'auth', token, cols: 80, rows: 24 })));
+    ws.addEventListener('message', (e) => {
+      if (typeof e.data !== 'string') return;
+      const m = JSON.parse(e.data) as { type: string; reason?: string };
+      messages.push(m);
+      if (m.type === 'ready') ready();
+    });
+    await readyP;
+    return { ws, messages, closed };
+  };
+  const within = <T,>(p: Promise<T>, ms = 5000) => Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error('terminal stayed open')), ms))]);
+
+  it('logout closes the terminal of that session at once', async () => {
+    const token = await login();
+    const t = await open(token);
+    await h.api.expect(204, 'DELETE', '/v1/sessions/current', undefined, { authorization: `Bearer ${token}` });
+    expect(await within(t.closed)).toBe(4401);
+    expect(t.messages.find((m) => m.type === 'exit')?.reason).toMatch(/session ended/);
+  });
+
+  it('"log out other sessions" closes their terminals and keeps the caller\'s own', async () => {
+    const other = await login();
+    const mine = await login();
+    const theirs = await open(other);
+    const own = await open(mine);
+    await h.api.expect(204, 'DELETE', '/v1/sessions/others', undefined, { authorization: `Bearer ${mine}` });
+    expect(await within(theirs.closed)).toBe(4401);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(own.ws.readyState).toBe(own.ws.OPEN);
+    own.ws.close();
+    await own.closed;
+  });
+
+  it('a password change closes the terminals of every other session', async () => {
+    const mine = await login();
+    const other = await login();
+    const t = await open(other);
+    const next = 'a-different-FIXTURE-password';
+    await h.api.expect(200, 'PUT', '/v1/account/password', { currentPassword: ADMIN.password, newPassword: next }, { authorization: `Bearer ${mine}` });
+    expect(await within(t.closed)).toBe(4401);
+    await h.api.expect(200, 'PUT', '/v1/account/password', { currentPassword: next, newPassword: ADMIN.password }, { authorization: `Bearer ${mine}` });
+  });
+});

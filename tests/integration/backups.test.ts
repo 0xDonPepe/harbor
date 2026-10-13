@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppBackupsDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, InstanceSummary, PlanDto } from '../../src/contracts/api.js';
-import { FakeBackupEngine } from '../../src/backups/engine.js';
+import { FAKE_SFTP_HOST_KEY, FakeBackupEngine } from '../../src/backups/engine.js';
+import { hostKeyFingerprint } from '../../src/backups/restic.js';
 import { startHarness, type Harness } from './harness.js';
 
 // Decisions 149–154 (0.26.0): app backups end to end on the fake engine — places, policy, warm passes,
@@ -65,6 +66,30 @@ describe('backup places (decision 152)', () => {
     expect(s3.target.values).toMatchObject({ secretAccessKey: '••••', accessKeyId: 'AKIA-FIXTURE', path: 'harbor' });
     expect(JSON.stringify(await h.api.expect(200, 'GET', '/v1/backups'))).not.toContain('secret-FIXTURE-value');
     await h.api.expect(200, 'POST', `/v1/backups/targets/${s3.target.id}/remove`, { deleteBackups: false });
+  });
+
+  it('an SFTP place is added only once its server key is confirmed (no trust on first use, decision 169)', async () => {
+    const values = { host: 'nas.example.test', user: 'backup', path: '/srv/backup/harbor', privateKey: '-----BEGIN OPENSSH PRIVATE KEY-----\nFIXTURE\n-----END OPENSSH PRIVATE KEY-----' };
+    const blob = FAKE_SFTP_HOST_KEY.split(' ')[1]!;
+    const fp = hostKeyFingerprint(blob);
+    const names = async () => (await h.api.expect<BackupsOverviewDto>(200, 'GET', '/v1/backups')).targets.map((t) => t.name);
+    // no key given: the fingerprint comes back to be confirmed, nothing is stored or pinned
+    const e = await h.api.expectError(409, 'HOST_KEY_UNCONFIRMED', 'POST', '/v1/backups/targets', { packageId: 'sftp', name: 'NAS', values });
+    expect(e.error.details).toEqual([fp]);
+    expect(e.error.message).toContain(`${fp} (ED25519)`);
+    expect(await names()).not.toContain('NAS');
+    // a fingerprint the server does not show is refused
+    const wrong = await h.api.expectError(409, 'HOST_KEY_UNCONFIRMED', 'POST', '/v1/backups/targets', { packageId: 'sftp', name: 'NAS', values: { ...values, hostKey: `SHA256:${'A'.repeat(43)}` } });
+    expect(wrong.error.message).toMatch(/different server key/);
+    expect(await names()).not.toContain('NAS');
+    // "Trust this key": the same request with the confirmed fingerprint pins the key itself
+    const ok = await h.api.expect<{ target: BackupTargetDto }>(200, 'POST', '/v1/backups/targets', { packageId: 'sftp', name: 'NAS', values: { ...values, hostKey: fp } });
+    expect(ok.target.values['hostKey']).toBe(`ssh-ed25519 ${blob}`);
+    expect((await h.api.expect<BackupTargetDto>(200, 'POST', `/v1/backups/targets/${ok.target.id}/test`, {})).values['hostKey']).toBe(`ssh-ed25519 ${blob}`);
+    // a pasted key (what places added before 0.32 store) works unchanged
+    const pasted = await h.api.expect<{ target: BackupTargetDto }>(200, 'POST', '/v1/backups/targets', { packageId: 'sftp', name: 'NAS 2', values: { ...values, path: '/srv/backup/other', hostKey: `nas.example.test ssh-ed25519 ${blob}` } });
+    expect(pasted.target.values['hostKey']).toBe(`nas.example.test ssh-ed25519 ${blob}`);
+    for (const id of [ok.target.id, pasted.target.id]) await h.api.expect(200, 'POST', `/v1/backups/targets/${id}/remove`, { deleteBackups: false });
   });
 
   it('only encrypted apps can be backed up', async () => {

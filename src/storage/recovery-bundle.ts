@@ -19,7 +19,8 @@
 // fresh state dir, adopt drive apps with their passphrases, start. Managed
 // Docker volumes are NOT in the bundle (they live on the engine); the guide
 // says so out loud.
-import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'node:crypto';
+import { createCipheriv, randomBytes, scrypt } from 'node:crypto';
+import { gcmDecipher, gcmShapeOk } from '../gcm.js';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
@@ -153,10 +154,13 @@ export async function openRecoveryBundle(bundle: Buffer, passphrase: string): Pr
   if (env.format !== RECOVERY_BUNDLE_VERSION || typeof env.salt !== 'string' || typeof env.nonce !== 'string' || typeof env.tag !== 'string') {
     throw new HarborError('INVALID_PACKAGE', 'recovery file uses an unsupported format', { nextAction: 'Update Harbor to a version that understands this file, then try again.' });
   }
+  const nonce = Buffer.from(env.nonce, 'hex');
+  const tag = Buffer.from(env.tag, 'hex');
+  // decision 169: only the 12-byte nonce and 16-byte tag export writes are ever decrypted
+  if (!/^[0-9a-f]*$/i.test(env.nonce) || !/^[0-9a-f]*$/i.test(env.tag) || !gcmShapeOk(nonce, tag)) throw new HarborError('INVALID_PACKAGE', 'recovery file header is corrupt');
   const kek = await scryptAsync(passphrase, Buffer.from(env.salt, 'hex'));
   try {
-    const decipher = createDecipheriv('aes-256-gcm', kek, Buffer.from(env.nonce, 'hex'));
-    decipher.setAuthTag(Buffer.from(env.tag, 'hex'));
+    const decipher = gcmDecipher(kek, nonce, tag);
     let inner: Buffer;
     try {
       inner = Buffer.concat([decipher.update(sealed), decipher.final()]);

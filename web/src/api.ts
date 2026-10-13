@@ -9,6 +9,7 @@ export class ApiError extends Error {
     message: string,
     readonly nextAction: string,
     readonly operationId?: string,
+    readonly details: string[] = [],
   ) {
     super(message);
   }
@@ -76,7 +77,7 @@ async function call<T>(method: string, url: string, body?: unknown, headers: Rec
   if (!res.ok) {
     const e = (parsed as ApiErrorBody | null)?.error;
     if (res.status === 401) token = null;
-    throw new ApiError(res.status, e?.code ?? 'HTTP_ERROR', e?.message ?? `HTTP ${res.status}`, e?.nextAction ?? '', e?.operationId);
+    throw new ApiError(res.status, e?.code ?? 'HTTP_ERROR', e?.message ?? `HTTP ${res.status}`, e?.nextAction ?? '', e?.operationId, Array.isArray(e?.details) ? e.details : []);
   }
   return parsed as T;
 }

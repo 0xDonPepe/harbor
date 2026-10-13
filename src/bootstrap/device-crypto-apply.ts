@@ -4,13 +4,14 @@
 // filesystem-readiness helper the app sealing step runs (encrypt feature,
 // /etc/fscrypt.conf, per-mount metadata). Progress goes to
 // <stateDir>/devices/<name>/crypto-status.json so the console can poll it.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
 import { loadConfig } from '../config.js';
 import { listDevices } from '../system/host-storage.js';
 import { prepareFilesystemForSealing } from './app-crypto-apply.js';
+import { writeStatusFile } from './safe-write.js';
 
 export type DeviceCryptoState = 'requested' | 'working' | 'ready' | 'failed';
 export interface DeviceCryptoStatus {
@@ -28,8 +29,8 @@ export function deviceCryptoStatusFile(stateDir: string, name: string): string {
 function writeStatus(stateDir: string, name: string, state: DeviceCryptoState, message: string, mountpoint: string | null): void {
   const file = deviceCryptoStatusFile(stateDir, name);
   try {
-    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, JSON.stringify({ device: name, state, message, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
+    // decision 169: devices/ is harbor-owned; no symlink is followed on the way to the file
+    writeStatusFile(stateDir, file, JSON.stringify({ device: name, state, message, mountpoint, at: new Date().toISOString() }), { mode: 0o600 });
   } catch {
     /* status is best effort */
   }

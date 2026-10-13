@@ -504,6 +504,8 @@ export class ApplicationService {
   }
   setNotificationChannels(channels: NotificationChannelDto[]): { channels: NotificationChannelDto[] } {
     if (channels.length > 5) throw new HarborError('INVALID_REQUEST', 'at most 5 notification channels');
+    // decision 169: a line break in an address would inject SMTP commands
+    for (const c of channels) if (c.kind === 'email' && (/[\r\n\0]/.test(c.from ?? '') || /[\r\n\0]/.test(c.to ?? ''))) throw new HarborError('INVALID_REQUEST', 'the from and to addresses must be one line each');
     // A redacted secret in the payload means "keep the stored one" — decision 165: only while it still goes to the
     // same place. A session that repoints a channel must type the secret again, or "Test" would hand it to the new host.
     const stored = this.ctx.notifier.channels();

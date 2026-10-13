@@ -5,6 +5,7 @@ import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
 import { archiveName } from '../system/selfupdate.js';
 import { exec, execOk } from './exec.js';
+import { writeStatusFile } from './safe-write.js';
 
 // The root half of a self-update (run by harbor-self-update@<version>.service). It trusts nothing the
 // unprivileged daemon wrote: it downloads the archive and SHA256SUMS from the GitHub release itself,
@@ -24,8 +25,8 @@ type State = 'requested' | 'downloading' | 'installing' | 'succeeded' | 'failed'
 function writeStatus(version: string, state: State, message: string): void {
   const file = path.join(PRODUCT.paths.var, 'updates', 'status.json');
   try {
-    mkdirSync(path.dirname(file), { recursive: true, mode: 0o755 });
-    writeFileSync(file, JSON.stringify({ version, state, message, at: new Date().toISOString() }), { mode: 0o644 });
+    // decision 169: /var/lib/harbor is harbor-owned; no symlink is followed on the way to the file
+    writeStatusFile(PRODUCT.paths.var, file, JSON.stringify({ version, state, message, at: new Date().toISOString() }), { mode: 0o644, dirMode: 0o755 });
   } catch {
     /* status is best effort */
   }

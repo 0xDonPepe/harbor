@@ -64,8 +64,8 @@ export function SetupWizard({ status, onDone }: { status: SetupStatusDto; onDone
           >
             <h2 id="setup-h">Welcome. This is your own cloud.</h2>
             <p className="muted">
-              Harbor {status.version} is running on <strong>{status.hostname}</strong>
-              {status.lan.enabled && status.lan.url ? (
+              Harbor {status.version ?? ''} is running on <strong>{status.hostname ?? 'this machine'}</strong>
+              {status.lan?.enabled && status.lan.url ? (
                 <>
                   {' '}
                   and answers on your network at <code>{status.lan.url}</code>
@@ -75,7 +75,7 @@ export function SetupWizard({ status, onDone }: { status: SetupStatusDto; onDone
             </p>
             <label>
               Name
-              <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder={`${status.hostname}`} maxLength={40} aria-label="Device name" autoFocus />
+              <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} placeholder={status.hostname ?? ''} maxLength={40} aria-label="Device name" autoFocus />
             </label>
             <div className="row end">
               <button className="btn primary" type="submit">
@@ -159,7 +159,7 @@ export function SetupWizard({ status, onDone }: { status: SetupStatusDto; onDone
                 </li>
               ))}
             </ul>
-            {status.tailscale.installed && !status.tailscale.loggedIn && <p className="muted small">Want to reach this Harbor from anywhere? Settings → Remote access connects it to your Tailscale network in two clicks.</p>}
+            {status.tailscale?.installed && !status.tailscale.loggedIn && <p className="muted small">Want to reach this Harbor from anywhere? Settings → Remote access connects it to your Tailscale network in two clicks.</p>}
             <div className="row end">
               <button className="btn primary" onClick={onDone} aria-label="Open Harbor">
                 Open Harbor

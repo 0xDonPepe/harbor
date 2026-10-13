@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
@@ -10,6 +10,7 @@ import { gatherHostFacts } from './host.js';
 import { rfc3339, systemClock } from '../util.js';
 import { exec } from './exec.js';
 import { setupCockpit, setupPortainer } from './tools.js';
+import { writeStatusFile } from './safe-write.js';
 
 // The root half of a one-click platform-tool install from the console
 // (run by harbor-tools-install@<tool>.service). Reuses the bootstrap recipes
@@ -31,8 +32,8 @@ export function toolInstallStatusFile(stateDir: string, tool: string): string {
 function writeStatus(stateDir: string, tool: string, state: ToolInstallState, message: string): void {
   const file = toolInstallStatusFile(stateDir, tool);
   try {
-    mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, JSON.stringify({ tool, state, message, at: new Date().toISOString() }), { mode: 0o600 });
+    // decision 169: platform/ is harbor-owned; no symlink is followed on the way to the file
+    writeStatusFile(stateDir, file, JSON.stringify({ tool, state, message, at: new Date().toISOString() }), { mode: 0o600 });
   } catch {
     /* status is best effort */
   }

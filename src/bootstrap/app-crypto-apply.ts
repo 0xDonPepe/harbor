@@ -15,7 +15,7 @@
 // + per-mount metadata via `fscrypt setup`. Bootstrap calls the same helper
 // for the Harbor data folder so the first local install seals without a
 // detour.
-import { chmodSync, chownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
+import { chmodSync, lchownSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { HarborError } from '../errors.js';
@@ -23,6 +23,7 @@ import { PRODUCT } from '../naming.js';
 import { loadConfig } from '../config.js';
 import { exec, execOk } from './exec.js';
 import { describeAppHome } from '../storage/app-home.js';
+import { writeStatusFile } from './safe-write.js';
 import {
   appCryptoFiles,
   findmntArgs,
@@ -331,7 +332,7 @@ async function migrateDir(home: string, dir: string, protectorName: string, mast
     mkdirSync(dir, { mode: dst.mode & 0o7777 });
     // Restore Harbor's own ownership on the dir it created (root made the new
     // one); this never touches operator folders or file contents.
-    chownSync(dir, dst.uid, dst.gid);
+    lchownSync(dir, dst.uid, dst.gid); // decision 169: never through a swapped-in link
     await encryptEmptyDir(dir, protectorName, masterKeyHex, log);
   } catch (e) {
     rollback(`could not seal a fresh folder (${e instanceof Error ? e.message : String(e)})`);
@@ -383,14 +384,14 @@ async function importVolumes(instanceId: string, home: string, dir: string, impo
     for (const p of plan) {
       rmSync(p.to, { recursive: true, force: true });
       mkdirSync(p.to, { mode: 0o700 });
-      chownSync(p.to, owner.uid, owner.gid);
+      lchownSync(p.to, owner.uid, owner.gid);
     }
   };
   try {
     for (const p of plan) {
       if (!existsSync(p.to)) {
         mkdirSync(p.to, { mode: 0o700 });
-        chownSync(p.to, owner.uid, owner.gid);
+        lchownSync(p.to, owner.uid, owner.gid);
       }
       log(`copying ${p.from} -> ${p.to}: ${p.before.entries} entries, ${p.before.bytes} bytes`);
       await execOk('/usr/bin/cp', ['-a', '-T', p.from, p.to], { timeoutMs: 24 * 60 * 60_000 });
@@ -439,10 +440,10 @@ async function transferHome(instanceId: string, home: string, target: string, lo
 
 // ---------------------------------------------------------------- entry point
 
-function writeStatus(file: string, status: AppCryptoStatus): void {
+function writeStatus(stateDir: string, file: string, status: AppCryptoStatus): void {
   try {
-    // 0644 in the daemon-owned crypto/ dir: root writes, harbor reads and unlinks.
-    writeFileSync(file, JSON.stringify(status), { mode: 0o644 });
+    // 0644 in the daemon-owned crypto/ dir: root writes, harbor reads and unlinks. Decision 169: never through a link.
+    writeStatusFile(stateDir, file, JSON.stringify(status), { mode: 0o644 });
   } catch {
     /* the unit's exit code still carries the verdict */
   }
@@ -488,12 +489,12 @@ export async function applyAppCrypto(spec: string, log: Log): Promise<void> {
     checkHome(request.home, instanceId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    writeStatus(files.status, { action, state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), at: now() });
+    writeStatus(config.stateDir, files.status, { action, state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), at: now() });
     throw e;
   }
   const home = request.home;
   const dir = sealedDir(home);
-  writeStatus(files.status, { action, state: 'working', message: `${action} ${dir}`, at: now() });
+  writeStatus(config.stateDir, files.status, { action, state: 'working', message: `${action} ${dir}`, at: now() });
   try {
     let st: FscryptDirStatus | null = null;
     switch (action) {
@@ -509,7 +510,7 @@ export async function applyAppCrypto(spec: string, log: Log): Promise<void> {
         if (!existsSync(dir)) {
           const hs = statSync(home);
           mkdirSync(dir, { mode: 0o700 });
-          chownSync(dir, hs.uid, hs.gid);
+          lchownSync(dir, hs.uid, hs.gid);
         }
         await encryptEmptyDir(dir, request.protectorName, key, log);
         st = await dirStatus(dir);
@@ -522,7 +523,7 @@ export async function applyAppCrypto(spec: string, log: Log): Promise<void> {
         if (!existsSync(dir)) {
           const hs = statSync(home);
           mkdirSync(dir, { mode: 0o700 });
-          chownSync(dir, hs.uid, hs.gid);
+          lchownSync(dir, hs.uid, hs.gid);
         }
         await migrateDir(home, dir, request.protectorName, key, log);
         st = await dirStatus(dir);
@@ -562,10 +563,10 @@ export async function applyAppCrypto(spec: string, log: Log): Promise<void> {
         break;
       }
     }
-    writeStatus(files.status, { action, state: 'ok', message: `${action} ok`, ...(st ? { encrypted: st.encrypted, unlocked: st.unlocked && !st.partiallyLocked } : {}), at: now() });
+    writeStatus(config.stateDir, files.status, { action, state: 'ok', message: `${action} ok`, ...(st ? { encrypted: st.encrypted, unlocked: st.unlocked && !st.partiallyLocked } : {}), at: now() });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    writeStatus(files.status, { action, state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), at: now() });
+    writeStatus(config.stateDir, files.status, { action, state: 'failed', message: msg, ...(e instanceof HarborError && e.nextAction ? { nextAction: e.nextAction } : {}), at: now() });
     throw e;
   }
 }

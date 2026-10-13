@@ -20,7 +20,8 @@
 // nonce per encryption. Passphrase wrapping uses the same scrypt profile as
 // operator passwords (src/auth/password.ts). This module is pure storage + node
 // crypto: no Docker, no DB, no network.
-import { createCipheriv, createDecipheriv, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { createCipheriv, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { gcmOpen, gcmShapeOk } from '../gcm.js';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { HarborError } from '../errors.js';
@@ -99,6 +100,14 @@ function scryptAsync(password: string, salt: Buffer): Promise<Buffer> {
 
 function hex(b: Buffer): string {
   return b.toString('hex');
+}
+
+// Decision 169: a nonce or tag of another length than Harbor writes (12 / 16 bytes) is a damaged or forged
+// manifest, never something to try decrypting.
+function malformedGcm(what: string): HarborError {
+  return new HarborError('INVALID_PACKAGE', `app home manifest has a malformed ${what}`, {
+    nextAction: 'This folder is not a Harbor app home Harbor can read. Adopt the drive it came from, or restore the folder from backup.',
+  });
 }
 
 function unhex(s: string, what: string): Buffer {
@@ -226,11 +235,12 @@ async function wrapMasterKey(masterKey: Buffer, passphrase: string): Promise<App
 }
 
 async function unwrapMasterKey(envelope: AppHomeScryptEnvelope, passphrase: string): Promise<Buffer> {
+  const nonce = unhex(envelope.nonce, 'encryption.nonce');
+  const tag = unhex(envelope.tag, 'encryption.tag');
+  if (!gcmShapeOk(nonce, tag)) throw malformedGcm('encryption.nonce or encryption.tag');
   const kek = await scryptAsync(passphrase, unhex(envelope.salt, 'encryption.salt'));
   try {
-    const decipher = createDecipheriv('aes-256-gcm', kek, unhex(envelope.nonce, 'encryption.nonce'));
-    decipher.setAuthTag(unhex(envelope.tag, 'encryption.tag'));
-    return Buffer.concat([decipher.update(unhex(envelope.wrappedKey, 'encryption.wrappedKey')), decipher.final()]);
+    return gcmOpen(kek, nonce, tag, unhex(envelope.wrappedKey, 'encryption.wrappedKey'));
   } catch {
     throw new HarborError('INVALID_REQUEST', 'wrong passphrase for this app', {
       nextAction: 'Enter the encryption passphrase shown when the app was installed (or its recovery key).',
@@ -513,9 +523,7 @@ export function openPayload(masterKey: Buffer, sealed: Buffer): Buffer {
   const tag = sealed.subarray(sealed.length - 16);
   const ciphertext = sealed.subarray(GCM_NONCE_BYTES, sealed.length - 16);
   try {
-    const decipher = createDecipheriv('aes-256-gcm', masterKey, nonce);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return gcmOpen(masterKey, nonce, tag, ciphertext);
   } catch {
     throw new HarborError('DATA_MISSING', 'encrypted app data failed authentication', {
       nextAction: 'The app folder is damaged or belongs to a different app. Restore it from backup.',
@@ -613,10 +621,15 @@ export function unwrapMasterKeyForMachine(wrapped: MachineWrappedKey, machineKey
   if (wrapped.algorithm !== 'aes-256-gcm') throw new HarborError('INVALID_PACKAGE', 'machine-wrapped app key uses an unsupported algorithm', {
     nextAction: 'Update Harbor to a version that understands this wrapping, then try again.',
   });
+  const nonce = unhex(wrapped.nonce, 'machine key nonce');
+  const tag = unhex(wrapped.tag, 'machine key tag');
+  if (!gcmShapeOk(nonce, tag)) {
+    throw new HarborError('DATA_MISSING', 'stored app key has a malformed nonce or tag', {
+      nextAction: 'The stored key for this app is damaged. Unlock with the encryption passphrase instead.',
+    });
+  }
   try {
-    const decipher = createDecipheriv('aes-256-gcm', machineKey, unhex(wrapped.nonce, 'machine key nonce'));
-    decipher.setAuthTag(unhex(wrapped.tag, 'machine key tag'));
-    return Buffer.concat([decipher.update(unhex(wrapped.wrappedKey, 'machine key')), decipher.final()]);
+    return gcmOpen(machineKey, nonce, tag, unhex(wrapped.wrappedKey, 'machine key'));
   } catch {
     throw new HarborError('DATA_MISSING', 'stored app key failed authentication', {
       nextAction: 'The stored key for this app is damaged or belongs to a different installation. Unlock with the encryption passphrase instead.',

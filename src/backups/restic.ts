@@ -2,6 +2,7 @@
 // PURE: no I/O, no spawn. The root step (src/bootstrap/backup-apply.ts) runs what this builds;
 // tests pin the exact argv/env. Secrets only ever go into `env` or private files, never argv
 // (argv is world-readable through /proc/<pid>/cmdline).
+import { createHash } from 'node:crypto';
 import { HarborError } from '../errors.js';
 import type { BackupTransport } from '../contracts/backup-target.schema.js';
 
@@ -146,6 +147,75 @@ export function knownHostsFor(host: string, port: number, hostKey: string): stri
     lines.push(`${name} ${parts[at]} ${parts[at + 1]}`);
   }
   return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+// Decision 169: no trust on first use. A server key is pinned only once the operator confirmed it, by pasting
+// the key itself or by confirming its SHA256 fingerprint (the form `ssh-keygen -lf` prints) that Harbor shows.
+export const HOST_KEY_FINGERPRINT_RE = /^SHA256:[A-Za-z0-9+/]{43}$/;
+export interface ScannedHostKey {
+  type: string; // ssh-ed25519, ecdsa-sha2-nistp256, ssh-rsa, …
+  fingerprint: string; // SHA256:…
+  line: string; // "type base64", what knownHostsFor() accepts
+}
+export function isHostKeyFingerprint(s: string): boolean {
+  return HOST_KEY_FINGERPRINT_RE.test(s.trim().replace(/=+$/, ''));
+}
+export function hostKeyFingerprint(base64Blob: string): string {
+  return `SHA256:${createHash('sha256').update(Buffer.from(base64Blob, 'base64')).digest('base64').replace(/=+$/, '')}`;
+}
+const KEY_ORDER = ['ssh-ed25519', 'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521', 'ssh-rsa'];
+// What ssh-keyscan printed, one entry per key, strongest first (ed25519, then ECDSA, then RSA).
+export function parseScannedHostKeys(text: string): ScannedHostKey[] {
+  const out: ScannedHostKey[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const l = raw.trim();
+    if (!l || l.startsWith('#')) continue;
+    const parts = l.split(/\s+/);
+    const at = parts.findIndex((p) => /^(ssh-|ecdsa-|sk-)/.test(p));
+    const blob = at >= 0 ? parts[at + 1] : undefined;
+    if (!blob || !/^[A-Za-z0-9+/]+=*$/.test(blob)) continue;
+    if (out.some((k) => k.line === `${parts[at]} ${blob}`)) continue;
+    out.push({ type: parts[at]!, fingerprint: hostKeyFingerprint(blob), line: `${parts[at]} ${blob}` });
+  }
+  const rank = (t: string) => (KEY_ORDER.includes(t) ? KEY_ORDER.indexOf(t) : KEY_ORDER.length);
+  return out.sort((a, b) => rank(a.type) - rank(b.type));
+}
+export function hostKeyLabel(type: string): string {
+  return type === 'ssh-ed25519' ? 'ED25519' : type.startsWith('ecdsa-') ? 'ECDSA' : type === 'ssh-rsa' ? 'RSA' : type;
+}
+
+/**
+ * The key lines to pin, given what the operator typed into Server key (empty, or a SHA256 fingerprint) and what
+ * the server showed. Empty: nothing is pinned, the error carries the fingerprints for the operator to confirm.
+ * A fingerprint: the matching key is pinned, or the error says the server shows another one. The error is
+ * HOST_KEY_UNCONFIRMED with `details` = the fingerprints the server showed, strongest first.
+ */
+export function confirmHostKey(given: string, scannedText: string, where: string): string {
+  const keys = parseScannedHostKeys(scannedText);
+  if (!keys.length) throw new HarborError('OPERATION_FAILED', `cannot read the server key of ${where}`, { nextAction: 'Check the server name and port, and that SSH answers there.' });
+  const want = given.trim().replace(/=+$/, '');
+  const shown = `${keys[0]!.fingerprint} (${hostKeyLabel(keys[0]!.type)})`;
+  const details = keys.map((k) => k.fingerprint);
+  if (!want) {
+    throw Object.assign(
+      new HarborError('HOST_KEY_UNCONFIRMED', `Harbor has not talked to ${where} before. Its server key is ${shown}`, {
+        nextAction: 'Check that the server shows the same fingerprint (on the server: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub), then trust it.',
+        details,
+      }),
+      { backupCode: 'host-key-unconfirmed' as const },
+    );
+  }
+  const match = keys.filter((k) => k.fingerprint === want);
+  if (!match.length) {
+    throw Object.assign(
+      new HarborError('HOST_KEY_UNCONFIRMED', `${where} shows a different server key than the one you confirmed: it shows ${shown}`, {
+        nextAction: 'The server may have been reinstalled, or someone is in between. Check the key on the server itself before you trust the new one.',
+        details,
+      }),
+      { backupCode: 'host-key-unconfirmed' as const },
+    );
+  }
+  return match.map((k) => k.line).join('\n');
 }
 
 // rclone.conf for one target (written by the root step; rclone adds its session tokens to it later).

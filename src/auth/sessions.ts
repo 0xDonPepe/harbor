@@ -45,6 +45,8 @@ class FailureWindow {
 export class SessionService {
   private readonly perClient = new Map<string, FailureWindow>();
   private readonly global = new FailureWindow(20, 10 * 60_000);
+  // Decision 169: connections that authenticated once (the web terminal) re-check their session when any is revoked.
+  private readonly revokeListeners = new Set<() => void>();
 
   constructor(
     private readonly repo: Repo,
@@ -159,16 +161,40 @@ export class SessionService {
     return { actor: s.actor, expiresAt: s.expiresAt };
   }
 
+  /** Is the session behind this token still usable? Same rules as authenticate(), without the activity stamp. */
+  isValid(token: string): boolean {
+    const s = this.repo.session(hashToken(token));
+    return !!s && !s.revokedAt && new Date(s.expiresAt).getTime() > this.clock.now().getTime();
+  }
+
+  /** Called after any session is revoked (logout, log out others, password change). Returns the unsubscribe. */
+  onRevoke(listener: () => void): () => void {
+    this.revokeListeners.add(listener);
+    return () => this.revokeListeners.delete(listener);
+  }
+  private announceRevoke(): void {
+    for (const l of [...this.revokeListeners]) {
+      try {
+        l();
+      } catch {
+        /* a listener never fails the revocation */
+      }
+    }
+  }
+
   sessions(currentToken: string): { createdAt: string; expiresAt: string; lastSeenAt: string | null; kind: 'session' | 'remember'; current: boolean }[] {
     return this.repo.listSessions(hashToken(currentToken));
   }
 
   logout(token: string): void {
     this.repo.revokeSession(hashToken(token));
+    this.announceRevoke();
   }
 
   revokeOthers(token: string): number {
-    return this.repo.revokeOtherSessions(hashToken(token));
+    const n = this.repo.revokeOtherSessions(hashToken(token));
+    this.announceRevoke();
+    return n;
   }
 
   // Password change by the logged-in administrator: current password required, policy applied,
@@ -286,6 +312,8 @@ export class SessionService {
     } finally {
       if (live) zeroMachineKey(live);
     }
-    return { revokedSessions: this.repo.revokeOtherSessions(hashToken(token)) };
+    const revokedSessions = this.repo.revokeOtherSessions(hashToken(token));
+    this.announceRevoke();
+    return { revokedSessions };
   }
 }

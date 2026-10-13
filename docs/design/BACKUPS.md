@@ -60,8 +60,10 @@ fields:
   rest` the field ids are fixed by the transport; for `rclone` each field names its rclone option
   (`rclone: password`) and the package names the backend (`rclone: { backend: protondrive }`).
 - v1 ships **Another disk** (`local`: a folder under `/mnt`, `/media` or `/srv/harbor/backups`, never
-  inside a `harbor-apps` tree), **S3-compatible** (`s3`), **SFTP** (`sftp`: Harbor's own key, the server
-  key pinned at the first test), **Proton Drive** (`rclone`, beta: rclone's Proton backend is
+  inside a `harbor-apps` tree), **S3-compatible** (`s3`), **SFTP** (`sftp`: Harbor's own key; the server
+  key is pinned only once the operator confirmed its SHA256 fingerprint, decision 169: an add/test without one
+  answers `HOST_KEY_UNCONFIRMED` with the fingerprints in `details`, and the console's *Trust this key* or the
+  CLI's `--host-key` resubmits with the fingerprint; the root step re-scans and pins the matching key), **Proton Drive** (`rclone`, beta: rclone's Proton backend is
   unofficial; the 2FA code is needed once, rclone keeps the session in root-only state).
 - **Install** = Settings → Backups → Add a place → fill the form → *Test connection* (Harbor reads the
   repository: empty / ours / another Harbor's). Several installs of the same package are fine

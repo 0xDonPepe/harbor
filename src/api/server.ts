@@ -15,7 +15,8 @@ import type { DeviceMountService } from '../system/device-mount.js';
 import type { AppearanceService } from '../appearance/service.js';
 import type { PowerControl } from '../system/power.js';
 import type { TerminalService, TerminalSession } from '../system/terminal.js';
-import type { SetupRequest, TerminalClientMessage } from '../contracts/api.js';
+import { watchSession } from '../auth/session-watch.js';
+import type { SetupRequest, SetupStatusDto, TerminalClientMessage } from '../contracts/api.js';
 import type { SetupService } from '../auth/setup.js';
 import type { BackupService } from '../backups/service.js';
 import type { BackupAppPolicyDto, BackupPolicyDto } from '../contracts/api.js';
@@ -196,10 +197,13 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   app.get('/healthz', { schema: { description: 'Daemon liveness only.', security: [], response: { 200: { type: 'object', properties: { status: { const: 'ok' } } } } } }, async () => ({ status: 'ok' }));
 
   // --- first-run setup (open while no administrator exists; guarded by the installer's setup code)
-  app.get('/v1/setup', { schema: { description: 'Whether this Harbor still needs its first administrator, plus what the setup wizard shows.', security: [] } }, async () => {
-    const sys = service.system();
+  app.get('/v1/setup', { schema: { description: 'Whether this Harbor still needs its first administrator, plus what the setup wizard shows. Once an administrator exists: only `needed: false` and the https hosts the console on plain http probes (decision 169).', security: [] } }, async (): Promise<SetupStatusDto> => {
     const hosts = service.httpsHosts();
-    return { needed: setup.needed(), hostname: osHostname(), deviceName: sys.deviceName, lan: sys.lan, tailscale: await tailscaleFacts(), version: sys.version, https: { enabled: hosts.length > 0, hosts } };
+    const https = { enabled: hosts.length > 0, hosts };
+    // Decision 169: this route needs no token, so after setup it says no more than the login page needs.
+    if (!setup.needed()) return { needed: false, https };
+    const sys = service.system();
+    return { needed: true, hostname: osHostname(), deviceName: sys.deviceName, lan: sys.lan, tailscale: await tailscaleFacts(), version: sys.version, https };
   });
   // Decision 164: a 1x1 image the console on plain http loads from https://<host>/ — it only loads when the
   // browser trusts Harbor's certificate, and then the console moves to https on its own.
@@ -309,8 +313,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
                   url: { type: 'string', maxLength: 1024 },
                   secret: { type: 'string', maxLength: 512 },
                   smtp: { type: 'object', properties: { host: { type: 'string', maxLength: 253 }, port: { type: 'integer', minimum: 1, maximum: 65535 }, secure: { type: 'boolean' }, user: { type: 'string', maxLength: 256 }, pass: { type: 'string', maxLength: 512 } }, required: ['host', 'port', 'secure'] },
-                  from: { type: 'string', maxLength: 256 },
-                  to: { type: 'string', maxLength: 256 },
+                  from: { type: 'string', maxLength: 256, pattern: '^[^\\r\\n]*$' },
+                  to: { type: 'string', maxLength: 256, pattern: '^[^\\r\\n]*$' },
                   minSeverity: { type: 'string', enum: ['info', 'warning', 'error'] },
                 },
               },
@@ -512,6 +516,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   // --- terminal (WebSocket). Auth by the first message, never by URL. Same-origin/Host guards above apply to the upgrade.
   app.get('/v1/terminal', { websocket: true, schema: { hide: true } }, (socket, req) => {
     let session: TerminalSession | null = null;
+    let watch: { stop: () => void } | null = null;
     const authTimer = setTimeout(() => {
       if (!session) socket.close(4401, 'no auth');
     }, 10_000);
@@ -526,6 +531,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
           const m = JSON.parse(bytes.toString('utf8')) as TerminalClientMessage;
           if (m.type !== 'auth') throw new HarborError('UNAUTHENTICATED', 'first message must authenticate');
           const who = sessions.authenticate(m.token);
+          const token = m.token;
           const s = terminals.start(
             { cols: Number(m.cols) || 80, rows: Number(m.rows) || 24 },
             (chunk) => {
@@ -537,6 +543,18 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
             },
           );
           session = s;
+          // Decision 169: the terminal ends with its session (logout, log out others, password change, expiry).
+          watch = watchSession({
+            valid: () => sessions.isValid(token),
+            expiresAt: who.expiresAt,
+            subscribe: (cb) => sessions.onRevoke(cb),
+            onEnd: () => {
+              log.info('terminal closed: its session ended', { actor: who.actor });
+              sendJson({ type: 'exit', code: null, reason: 'your session ended (logged out, or the password changed). Log in again to open a terminal.' });
+              socket.close(4401, 'session ended'); // before the shell's own exit handler closes with 1000
+              s.close('session ended');
+            },
+          });
           log.info('terminal session started', { actor: who.actor, ip: req.ip });
           sendJson({ type: 'ready' });
         } catch (e) {
@@ -559,6 +577,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     });
     socket.on('close', () => {
       clearTimeout(authTimer);
+      watch?.stop();
       session?.close('connection closed');
     });
     socket.on('error', () => session?.close('connection error'));

@@ -641,13 +641,16 @@ export const CATALOG_STATUS_SCHEMA = {
 } as const;
 
 // ---- first-run setup (no administrator yet)
+// GET /v1/setup is open (no token). Decision 169: once an administrator exists it answers only `needed: false`
+// and `https` (the login page and the http->https move need nothing else); the other fields are only sent while
+// setup is still needed, so they are optional.
 export interface SetupStatusDto {
   needed: boolean;
-  hostname: string;
-  deviceName: string | null;
-  lan: { enabled: boolean; url: string | null };
-  tailscale: { installed: boolean; loggedIn: boolean };
-  version: string;
+  hostname?: string;
+  deviceName?: string | null;
+  lan?: { enabled: boolean; url: string | null };
+  tailscale?: { installed: boolean; loggedIn: boolean };
+  version?: string;
   // decision 164: the console on plain http probes these https hosts and moves there when the browser trusts the certificate
   https: { enabled: boolean; hosts: string[] };
 }

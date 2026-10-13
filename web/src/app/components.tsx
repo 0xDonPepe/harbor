@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { appUrlFrom, type EndpointUrls } from './app-url';
 import type { CatalogItemDto, FolderListingDto, HostStorageDto, InstanceSummary, OperationDto } from '../../../src/contracts/api';
 import { api } from '../api';
 import { fmtBytes, fmtTime, monogram, plainStatus } from './format';
@@ -532,8 +533,7 @@ export function FolderPicker({ title, hint, initial, onPick, onClose }: { title:
 }
 
 // The address to open an app at, from where this page was opened: the tailnet/public address when it is
-// primary, else the secure LAN address (when LAN HTTPS is on) with the host the browser used
-// (mDNS name or IP), else the plain LAN address, else loopback.
+// primary, else the LAN address with the scheme and host the browser used for the console (app-url.ts).
 export function openUrl(inst: InstanceSummary, endpoint = inst.endpoints.find((e) => e.id === inst.primaryEndpoint) ?? inst.endpoints[0]): string | null {
   if (!endpoint || inst.apiOnly) return null; // decision 141: an API has addresses, not a page to open
   return endpointUrlHere(endpoint);
@@ -541,33 +541,7 @@ export function openUrl(inst: InstanceSummary, endpoint = inst.endpoints.find((e
 
 // The same choice for one endpoint (also used by the install review, decision 157, before an instance exists).
 export function endpointUrlHere(endpoint: InstanceSummary['endpoints'][number]): string {
-  const primary = endpoint.urls[endpoint.primary as keyof typeof endpoint.urls];
-  if (primary && endpoint.primary !== 'loopback') return primary;
-  const here = location.hostname;
-  if (here !== 'localhost' && here !== '127.0.0.1' && here !== '[::1]') {
-    // Secure first: when the operator trusted the CA, every app opens with no warning too.
-    for (const key of ['lanSecure', 'lan'] as const) {
-      const raw = endpoint.urls[key];
-      if (!raw) continue;
-      try {
-        const u = new URL(raw);
-        u.hostname = here;
-        return u.toString();
-      } catch {
-        return raw;
-      }
-    }
-  } else if (endpoint.urls.lanSecure && (location.protocol === 'https:' || here === 'localhost' || here === '127.0.0.1')) {
-    // Loopback console over HTTPS (or dev preview): still prefer the secure app address.
-    try {
-      const u = new URL(endpoint.urls.lanSecure);
-      if (here !== 'localhost' && here !== '127.0.0.1' && here !== '[::1]') u.hostname = here;
-      return u.toString();
-    } catch {
-      return endpoint.urls.lanSecure;
-    }
-  }
-  return endpoint.urls.loopback;
+  return appUrlFrom(endpoint.urls as EndpointUrls, endpoint.primary, location);
 }
 
 // A 12-word card shown exactly once: at install (the app's own words), at

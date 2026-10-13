@@ -115,9 +115,14 @@ export class Observer {
       }
       this.notifyUpdatesAndDisk();
       this.notifyDevices();
-      this.notifyMissingFolders(runningByInstance);
-      this.autoStartRecovered(runningByInstance);
-      this.autoStartUnlocked(runningByInstance);
+      // Found live (droplet acceptance, 2026-10-13): with Docker unreachable nothing was observed, so every app
+      // looked "not running" and the guards started them all; each start failed on the dead socket. The guards
+      // only act on a tick that could actually see the containers.
+      if (ping.available) {
+        this.notifyMissingFolders(runningByInstance);
+        this.autoStartRecovered(runningByInstance);
+        this.autoStartUnlocked(runningByInstance);
+      }
       await this.reconcileLanHttps();
       if (Date.now() - this.lastSourceCheck >= this.sourceCheckMs) {
         this.lastSourceCheck = Date.now();

@@ -174,7 +174,7 @@ export class OperationRunner {
         repo.updateInstance(inst.id, {
           activeOperationId: null,
           lastOperationId: op.id,
-          installState: rolledBack ? 'installed' : stale && op.kind !== 'install' ? inst.installState : installStateAfterFailure(op.kind, repo.resources(inst.id).some((r) => r.kind === 'container'), inst.installState),
+          installState: rolledBack ? 'installed' : stale && op.kind !== 'install' ? inst.installState : installStateAfterFailure(op.kind, repo.resources(inst.id).some((r) => r.kind === 'container'), inst.installState, code),
           readiness: rolledBack ? 'healthy' : stale ? inst.readiness : 'unknown',
         });
         if (dropInstall) repo.purgeInstance(inst.id, `${inst.name}~stale~${inst.id.slice(0, 8)}`);
@@ -2187,8 +2187,11 @@ function shownOnce(pkg: LoadedPackage, values: Record<string, string>): { id: st
   return (pkg.manifest.secrets ?? []).filter((s) => s.showOnce && s.source !== 'operator' && values[s.id] !== undefined).map((s) => ({ id: s.id, label: s.showOnce!, value: values[s.id]! }));
 }
 
-function installStateAfterFailure(kind: OperationRow['kind'], hasContainers: boolean, current: InstanceRow['installState']): InstanceRow['installState'] {
+function installStateAfterFailure(kind: OperationRow['kind'], hasContainers: boolean, current: InstanceRow['installState'], code?: ErrorCode): InstanceRow['installState'] {
   if (kind === 'install') return 'failed';
+  // Docker was unreachable: a start/stop/restart changed nothing, so the app keeps its state (found live: a
+  // running app went needs_action for good because a start ran while Docker restarted).
+  if (code === 'DOCKER_UNAVAILABLE' && (kind === 'start' || kind === 'stop' || kind === 'restart')) return current;
   if (kind === 'reinstall') return hasContainers ? 'failed' : 'retained';
   if (kind === 'expose' || kind === 'unexpose' || kind === 'reconfigure') return current;
   return 'needs_action';

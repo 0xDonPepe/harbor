@@ -347,8 +347,11 @@ describe('daemon restart and Docker unavailability', () => {
     const op = await h.api.waitOperation(sub.operationId);
     expect(op.state).toBe('failed');
     expect(op.error?.code).toBe('DOCKER_UNAVAILABLE');
+    // a stop that could not reach Docker changed nothing: the app is not "needs action" (found on the droplet)
+    expect((await byName('excalidraw')).installState).toBe('installed');
     h.fake.behaviour.engineDown = false;
     await new Promise((r) => setTimeout(r, 1200));
     expect((await byName('excalidraw')).runtime).toBe('running');
+    expect((await byName('excalidraw')).readiness).toBe('healthy');
   });
 });

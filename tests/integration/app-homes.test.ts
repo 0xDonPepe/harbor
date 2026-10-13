@@ -154,6 +154,30 @@ describe('install to an encrypted app home', () => {
     expect(kernelUnlocked(got.home!.path)).toBe(true);
   });
 
+  it('Docker going away never makes the guards start running sealed apps (found on the droplet, 2026-10-13)', async () => {
+    const guardStarts = () => {
+      const db = new Database(path.join(h.stateDir, 'harbor.db'), { readonly: true });
+      try {
+        return (db.prepare("SELECT COUNT(*) AS n FROM operations WHERE actor IN ('lock-guard', 'drive-guard')").get() as { n: number }).n;
+      } finally {
+        db.close();
+      }
+    };
+    const before = (await h.api.instances()).find((i) => i.name === 'defaultkey')!;
+    expect(before.runtime).toBe('running');
+    const startsBefore = guardStarts();
+    h.fake.behaviour.engineDown = true;
+    try {
+      await new Promise((r) => setTimeout(r, 1500)); // several observer ticks with Docker unreachable
+    } finally {
+      h.fake.behaviour.engineDown = false;
+    }
+    await until(async () => (await h.api.instances()).find((i) => i.name === 'defaultkey')!.readiness === 'healthy', 'healthy again');
+    const after = (await h.api.instances()).find((i) => i.name === 'defaultkey')!;
+    expect(after.installState).toBe('installed');
+    expect(guardStarts()).toBe(startsBefore); // no guard start was planned while Docker was away
+  });
+
   it('the plan names the encrypted home and warns about the drive and the passphrase', async () => {
     plan = await h.api.plan({ kind: 'install', packageId: 'excalidraw', location: { dir: path.join(drive, 'harbor-apps', 'excalidraw'), passphrase: PASS } });
     expect(plan.location).toMatchObject({ dir: path.join(drive, 'harbor-apps', 'excalidraw'), encrypted: true, defaultKey: false });

@@ -375,6 +375,10 @@ function proxyHandler(targetPort: number, securePort: number, relay: Relay) {
     delete headers['connection'];
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]> }, (down) => {
       const out = { ...down.headers };
+      // Every app shares the machine's name here (harbor.local:<port>), and HSTS pins a whole host, every port:
+      // one app's Strict-Transport-Security (Trilium sends a year with includeSubDomains) would turn every plain
+      // http:// app address on this machine into a TLS error in that browser. Only the relay knows the host is shared.
+      delete out['strict-transport-security'];
       const cookies = rewrittenSetCookies(down.headers['set-cookie'], pol, relay, untagged);
       if (cookies) out['set-cookie'] = cookies;
       res.writeHead(down.statusCode ?? 502, out);

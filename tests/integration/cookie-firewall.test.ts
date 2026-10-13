@@ -53,7 +53,7 @@ interface Seen {
 function fakeApp(seen: Seen[], setCookies: Record<string, string[]>): Server {
   const app = createServer((req, res) => {
     seen.push({ method: req.method ?? '', url: req.url ?? '', cookie: req.headers.cookie });
-    res.writeHead(200, { 'content-type': 'text/plain', ...(setCookies[req.url ?? ''] ? { 'set-cookie': setCookies[req.url ?? '']! } : {}) });
+    res.writeHead(200, { 'content-type': 'text/plain', 'strict-transport-security': 'max-age=31536000; includeSubDomains', ...(setCookies[req.url ?? ''] ? { 'set-cookie': setCookies[req.url ?? '']! } : {}) });
     req.resume();
     req.on('end', () => res.end('ok'));
   });
@@ -182,6 +182,8 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
     expect(stored).toContain('theme');
     expect(jar.cookies.get(`hb_${tagA}__sid`)).toMatch(/^alpha-session\./);
     expect((login.headers['set-cookie'] ?? []).find((c) => c.startsWith('hb_'))).toMatch(/; Secure$/);
+    // the app's HSTS never reaches the browser: harbor.local is shared by every app's plain http:// address
+    expect(login.headers['strict-transport-security']).toBeUndefined();
     await call(portA, { path: '/me', jar });
     expect(names(seenA.at(-1)!.cookie)).toEqual(['sid=alpha-session', 'theme=dark']);
     await call(portB, { path: '/login', jar });

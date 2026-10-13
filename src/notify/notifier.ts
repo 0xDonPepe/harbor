@@ -110,7 +110,7 @@ export class Notifier {
   private async send(ch: Channel, msg: { severity: Severity; title: string; body: string }): Promise<{ ok: boolean; error: string | null }> {
     try {
       if (ch.kind === 'ntfy') {
-        const headers: Record<string, string> = { title: msg.title, priority: msg.severity === 'error' ? 'high' : msg.severity === 'warning' ? 'default' : 'low', tags: 'anchor' };
+        const headers: Record<string, string> = { title: ntfyHeaderValue(msg.title), priority: msg.severity === 'error' ? 'high' : msg.severity === 'warning' ? 'default' : 'low', tags: 'anchor' };
         if (ch.token) headers['authorization'] = `Bearer ${ch.token}`;
         const r = await this.transport.post(`${ch.server.replace(/\/$/, '')}/${encodeURIComponent(ch.topic)}`, headers, msg.body);
         return { ok: r.ok, error: r.error ?? (r.ok ? null : `HTTP ${r.status}`) };
@@ -158,4 +158,11 @@ export class FakeTransport implements NotifyTransport {
     this.emails.push({ to: channel.to, subject, text });
     return { ok: true, error: null };
   }
+}
+
+// HTTP header values are bytes: Node refuses anything above U+00FF ("Cannot convert argument to a ByteString"), so a
+// title with an emoji or a drive called "Фото" was never delivered. ntfy decodes RFC 2047 encoded words in every
+// header (docs/publish.md, server/util.go maybeDecodeHeader); plain ASCII stays readable as it is.
+export function ntfyHeaderValue(value: string): string {
+  return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 }

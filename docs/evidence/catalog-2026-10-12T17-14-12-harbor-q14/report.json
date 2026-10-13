@@ -1,0 +1,572 @@
+{
+  "runId": "catalog-2026-10-12T17-14-12-harbor-q14",
+  "target": "digitalocean droplet 608459121",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "autobrr": "passed",
+    "bitwatch": "passed",
+    "emby": "blocked",
+    "influxdb": "passed",
+    "jackett": "blocked",
+    "networkingtoolbox": "blocked",
+    "pingvin-share": "passed",
+    "super-productivity": "passed",
+    "wikijs": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:42.522Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "31dd4f42-cc96-4f43-a16d-a3e28255d1d8",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "autobrr",
+      "title": "Install, readiness, browser check and remove of autobrr",
+      "status": "pass",
+      "at": "2026-10-12T17:16:12.404Z",
+      "details": {
+        "name": "autobrr-q1714",
+        "instanceId": "ff43a48e-a63a-4c1f-9226-fa3fb4a38da7",
+        "url": "http://localhost:18080/",
+        "title": "autobrr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_ff43a48ea63a4c1f9226fa3fb4a38da7-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_ff43a48ea63a4c1f9226fa3fb4a38da7_data/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_ff43a48ea63a4c1f9226fa3fb4a38da7-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ff43a48ea63a4c1f9226fa3fb4a38da7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/autobrr/autobrr-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_ff43a48ea63a4c1f9226fa3fb4a38da7_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 27,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        ]
+      },
+      "notes": [
+        "healthy after 27s; page title \"autobrr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "bitwatch",
+      "title": "Install, readiness, browser check and remove of bitwatch",
+      "status": "pass",
+      "at": "2026-10-12T17:17:05.510Z",
+      "details": {
+        "name": "bitwatch-q1714",
+        "instanceId": "c6d08063-64f3-4b6e-87ce-f8bfc35af4dc",
+        "url": "http://localhost:18081/",
+        "title": "Bitwatch",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c6d0806364f34b6e87cef8bfc35af4dc-web-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c6d0806364f34b6e87cef8bfc35af4dc_data/_data->/app/server/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_c6d0806364f34b6e87cef8bfc35af4dc-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c6d0806364f34b6e87cef8bfc35af4dc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bitwatch/bitwatch-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_c6d0806364f34b6e87cef8bfc35af4dc_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": [
+          "WebSocket connection to 'ws://localhost:3117/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:3117/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 53s; page title \"Bitwatch\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "emby",
+      "title": "Install, readiness, browser check and remove of emby",
+      "status": "pass",
+      "at": "2026-10-12T17:18:03.215Z",
+      "details": {
+        "name": "emby-q1714",
+        "instanceId": "8b54d0da-a3a8-4918-8073-31d1680b6b7f",
+        "url": "http://localhost:18082/",
+        "title": "2374fb252539",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_8b54d0daa3a84918807331d1680b6b7f-server-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_8b54d0daa3a84918807331d1680b6b7f_config/_data->/config volume:/var/lib/docker/volumes/hb_8b54d0daa3a84918807331d1680b6b7f_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_8b54d0daa3a84918807331d1680b6b7f-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8b54d0daa3a84918807331d1680b6b7f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/emby/emby-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_8b54d0daa3a84918807331d1680b6b7f_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_8b54d0daa3a84918807331d1680b6b7f_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 58,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 58s; page title \"2374fb252539\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "emby (external storage)",
+      "title": "Install, readiness, browser check and remove of emby (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:18:05.958Z",
+      "details": {
+        "error": "harbor install emby --name emby-q1714x --storage downloads=/mnt/harbor-test-storage/emby-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"emby does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install emby --name emby-q1714x --storage downloads=/mnt/harbor-test-storage/emby-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"emby does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "influxdb",
+      "title": "Install, readiness, browser check and remove of influxdb",
+      "status": "pass",
+      "at": "2026-10-12T17:18:47.988Z",
+      "details": {
+        "name": "influxdb-q1714",
+        "instanceId": "0d3690f0-cb3f-4d7a-98cc-76f760645443",
+        "url": "http://localhost:18083/",
+        "title": "Chronograf",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0d3690f0cb3f4d7a98cc76f760645443-chronograf-1 Up 13 seconds",
+          "hb_0d3690f0cb3f4d7a98cc76f760645443-influxdb-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0d3690f0cb3f4d7a98cc76f760645443_chronograf/_data->/var/lib/chronograf ",
+          "volume:/var/lib/docker/volumes/hb_0d3690f0cb3f4d7a98cc76f760645443_influxdb/_data->/var/lib/influxdb"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "chronograf",
+            "name": "hb_0d3690f0cb3f4d7a98cc76f760645443-chronograf-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "influxdb",
+            "name": "hb_0d3690f0cb3f4d7a98cc76f760645443-influxdb-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0d3690f0cb3f4d7a98cc76f760645443_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/influxdb/influxdb-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "chronograf",
+            "name": "hb_0d3690f0cb3f4d7a98cc76f760645443_chronograf",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "influxdb",
+            "name": "hb_0d3690f0cb3f4d7a98cc76f760645443_influxdb",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 40,
+        "consoleErrors": [
+          "TypeError: Cannot read properties of undefined (reading 'replace')\n    at Object.N (http://localhost:18083/ui.3662acc2.js:1:317018)\n    at http://localhost:18083/ui.3662acc2.js:19:158266\n    at Array."
+        ]
+      },
+      "notes": [
+        "healthy after 40s; page title \"Chronograf\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jackett",
+      "title": "Install, readiness, browser check and remove of jackett",
+      "status": "pass",
+      "at": "2026-10-12T17:19:30.725Z",
+      "details": {
+        "name": "jackett-q1714",
+        "instanceId": "4d9b756a-f195-4d08-94f0-ac2ae7e6d824",
+        "url": "http://localhost:18084/",
+        "title": "Jackett",
+        "healthStatus": 301,
+        "probeHistory": [
+          301
+        ],
+        "containers": [
+          "hb_4d9b756af1954d0894f0ac2ae7e6d824-server-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_4d9b756af1954d0894f0ac2ae7e6d824_data/_data->/config volume:/var/lib/docker/volumes/hb_4d9b756af1954d0894f0ac2ae7e6d824_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_4d9b756af1954d0894f0ac2ae7e6d824-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4d9b756af1954d0894f0ac2ae7e6d824_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/jackett/jackett-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_4d9b756af1954d0894f0ac2ae7e6d824_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_4d9b756af1954d0894f0ac2ae7e6d824_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Jackett\"; health 301",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jackett (external storage)",
+      "title": "Install, readiness, browser check and remove of jackett (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:19:33.124Z",
+      "details": {
+        "error": "harbor install jackett --name jackett-q1714x --storage downloads=/mnt/harbor-test-storage/jackett-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"jackett does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install jackett --name jackett-q1714x --storage downloads=/mnt/harbor-test-storage/jackett-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"jackett does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "networkingtoolbox",
+      "title": "Install, readiness, browser check and remove of networkingtoolbox",
+      "status": "fail",
+      "at": "2026-10-12T17:21:30.586Z",
+      "details": {
+        "error": "harbor install networkingtoolbox --name networkingtoolbox-q1714 --yes exited 1:     {\n      \"cursor\": \"105\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created encrypted app home /srv/harbor/harbor-apps/networkingtoolbox/networkingtoolbox-q1714 (this machine unlocks it silently) (kernel-sealed)\"\n    },\n    {\n      \"cursor\": \"106\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"107\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"108\",\n      \"at\": \"2026-10-12T17:19:48Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"109\",\n      \"at\": \"2026-10-12T17:21:29Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"110\",\n      \"at\": \"2026-10-12T17:21:29Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): 0e217_default Created \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Creating \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Created \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Starting \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Started \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Waiting \\ncontainer hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install networkingtoolbox --name networkingtoolbox-q1714 --yes exited 1:     {\n      \"cursor\": \"105\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created encrypted app home /srv/harbor/harbor-apps/networkingtoolbox/networkingtoolbox-q1714 (this machine unlocks it silently) (kernel-sealed)\"\n    },\n    {\n      \"cursor\": \"106\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"107\",\n      \"at\": \"2026-10-12T17:19:39Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"108\",\n      \"at\": \"2026-10-12T17:19:48Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"109\",\n      \"at\": \"2026-10-12T17:21:29Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"110\",\n      \"at\": \"2026-10-12T17:21:29Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): 0e217_default Created \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Creating \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Created \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Starting \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Started \\n Container hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 Waiting \\ncontainer hb_5b230b277bdc43b8b33bc0565ce0e217-app-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "pingvin-share",
+      "title": "Install, readiness, browser check and remove of pingvin-share",
+      "status": "pass",
+      "at": "2026-10-12T17:22:59.795Z",
+      "details": {
+        "name": "pingvin-share-q1714",
+        "instanceId": "a1309b5b-2c36-4a6b-8d1e-9525382ec896",
+        "url": "http://localhost:18086/",
+        "title": "Home - Pingvin Share",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a1309b5b2c364a6b8d1e9525382ec896-web-1 Up 34 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a1309b5b2c364a6b8d1e9525382ec896_backend/_data->/opt/app/backend/data volume:/var/lib/docker/volumes/hb_a1309b5b2c364a6b8d1e9525382ec896_images/_data->/opt/app/frontend/public/img"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a1309b5b2c364a6b8d1e9525382ec896-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a1309b5b2c364a6b8d1e9525382ec896_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pingvin-share/pingvin-share-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backend",
+            "name": "hb_a1309b5b2c364a6b8d1e9525382ec896_backend",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_a1309b5b2c364a6b8d1e9525382ec896_images",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 82,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ]
+      },
+      "notes": [
+        "healthy after 82s; page title \"Home - Pingvin Share\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "super-productivity",
+      "title": "Install, readiness, browser check and remove of super-productivity",
+      "status": "pass",
+      "at": "2026-10-12T17:23:37.630Z",
+      "details": {
+        "name": "super-productivity-q1714",
+        "instanceId": "18cc1b94-bcb6-4f5e-be1d-7f4c1a724f46",
+        "url": "http://localhost:18087/",
+        "title": "Super Productivity",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_18cc1b94bcb64f5ebe1d7f4c1a724f46-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_18cc1b94bcb64f5ebe1d7f4c1a724f46-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_18cc1b94bcb64f5ebe1d7f4c1a724f46_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/super-productivity/super-productivity-q1714",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 38,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 38s; page title \"Super Productivity\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wikijs",
+      "title": "Install, readiness, browser check and remove of wikijs",
+      "status": "pass",
+      "at": "2026-10-12T17:24:33.358Z",
+      "details": {
+        "name": "wikijs-q1714",
+        "instanceId": "c82e041d-f380-45f7-aa85-8d34f5efdfb6",
+        "url": "http://localhost:18088/",
+        "title": "Wiki.js Setup",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c82e041df38045f7aa858d34f5efdfb6-server-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c82e041df38045f7aa858d34f5efdfb6_config/_data->/config volume:/var/lib/docker/volumes/hb_c82e041df38045f7aa858d34f5efdfb6_data/_data->/data volume:/var/lib/docker/volumes/hb_c82e041df38045f7aa858d34f5efdfb6_repo/_data->/app/wiki/data/repo"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_c82e041df38045f7aa858d34f5efdfb6-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c82e041df38045f7aa858d34f5efdfb6_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wikijs/wikijs-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_c82e041df38045f7aa858d34f5efdfb6_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_c82e041df38045f7aa858d34f5efdfb6_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "repo",
+            "name": "hb_c82e041df38045f7aa858d34f5efdfb6_repo",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 56,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 56s; page title \"Wiki.js Setup\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

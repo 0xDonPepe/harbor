@@ -1,0 +1,501 @@
+{
+  "runId": "catalog-2026-10-12T17-13-33-harbor-q05",
+  "target": "digitalocean droplet 608459032",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "akaunting": "passed",
+    "chatbot-ui": "passed",
+    "fossflow": "passed",
+    "langflow": "passed",
+    "libreoffice": "passed",
+    "overseerr": "passed",
+    "shopstr": "passed",
+    "torbrowser": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:00.678Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "572cf982-40a8-4327-90a1-66f5137bab7b",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "akaunting",
+      "title": "Install, readiness, browser check and remove of akaunting",
+      "status": "pass",
+      "at": "2026-10-12T17:17:00.150Z",
+      "details": {
+        "name": "akaunting-q1713",
+        "instanceId": "44384630-0444-447c-b40b-1a38972b304d",
+        "url": "http://localhost:18080/",
+        "title": "Login",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_443846300444447cb40b1a38972b304d-app-1 Up About a minute",
+          "hb_443846300444447cb40b1a38972b304d-db-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_443846300444447cb40b1a38972b304d_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_443846300444447cb40b1a38972b304d-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_443846300444447cb40b1a38972b304d-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_443846300444447cb40b1a38972b304d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/akaunting/akaunting-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_443846300444447cb40b1a38972b304d_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 116,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 116s; page title \"Login\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "chatbot-ui",
+      "title": "Install, readiness, browser check and remove of chatbot-ui",
+      "status": "pass",
+      "at": "2026-10-12T17:17:52.891Z",
+      "details": {
+        "name": "chatbot-ui-q1713",
+        "instanceId": "7d2d6aea-a176-4bfa-89fb-36986552c608",
+        "url": "http://localhost:18081/",
+        "title": "Chatbot UI",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7d2d6aeaa1764bfa89fb36986552c608-web-1 Up 20 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_7d2d6aeaa1764bfa89fb36986552c608-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7d2d6aeaa1764bfa89fb36986552c608_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/chatbot-ui/chatbot-ui-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"Chatbot UI\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "fossflow",
+      "title": "Install, readiness, browser check and remove of fossflow",
+      "status": "pass",
+      "at": "2026-10-12T17:18:46.379Z",
+      "details": {
+        "name": "fossflow-q1713",
+        "instanceId": "cb1f857d-9c33-48c5-908f-7a7a1059ea42",
+        "url": "http://localhost:18082/",
+        "title": "FossFLOW - Isometric Diagramming Tool",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cb1f857d9c3348c5908f7a7a1059ea42-web-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_cb1f857d9c3348c5908f7a7a1059ea42_diagrams/_data->/data/diagrams"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_cb1f857d9c3348c5908f7a7a1059ea42-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cb1f857d9c3348c5908f7a7a1059ea42_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/fossflow/fossflow-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "diagrams",
+            "name": "hb_cb1f857d9c3348c5908f7a7a1059ea42_diagrams",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"FossFLOW - Isometric Diagramming Tool\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "langflow",
+      "title": "Install, readiness, browser check and remove of langflow",
+      "status": "pass",
+      "at": "2026-10-12T17:21:26.380Z",
+      "details": {
+        "name": "langflow-q1713",
+        "instanceId": "e1de6625-114f-4c8d-9071-f945a22a2852",
+        "url": "http://localhost:18083/",
+        "title": "Langflow",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e1de6625114f4c8d9071f945a22a2852-db-1 Up About a minute",
+          "hb_e1de6625114f4c8d9071f945a22a2852-app-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e1de6625114f4c8d9071f945a22a2852_db/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_e1de6625114f4c8d9071f945a22a2852_app/_data->/app/langflow"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_e1de6625114f4c8d9071f945a22a2852-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_e1de6625114f4c8d9071f945a22a2852-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e1de6625114f4c8d9071f945a22a2852_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/langflow/langflow-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_e1de6625114f4c8d9071f945a22a2852_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_e1de6625114f4c8d9071f945a22a2852_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 160,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 160s; page title \"Langflow\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "libreoffice",
+      "title": "Install, readiness, browser check and remove of libreoffice",
+      "status": "pass",
+      "at": "2026-10-12T17:22:48.309Z",
+      "details": {
+        "name": "libreoffice-q1713",
+        "instanceId": "092d3000-0ad3-4c98-96d2-0c9903d58301",
+        "url": "http://localhost:18084/",
+        "title": "LibreOffice",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_092d30000ad34c9896d20c9903d58301-server-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_092d30000ad34c9896d20c9903d58301_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_092d30000ad34c9896d20c9903d58301-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_092d30000ad34c9896d20c9903d58301_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/libreoffice/libreoffice-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_092d30000ad34c9896d20c9903d58301_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 82,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 82s; page title \"LibreOffice\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "overseerr",
+      "title": "Install, readiness, browser check and remove of overseerr",
+      "status": "pass",
+      "at": "2026-10-12T17:23:50.565Z",
+      "details": {
+        "name": "overseerr-q1713",
+        "instanceId": "ad5a3e16-f810-4855-96a7-3301b1610d40",
+        "url": "http://localhost:18085/",
+        "title": "Setup - Overseerr",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_ad5a3e16f810485596a73301b1610d40-server-1 Up 22 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_ad5a3e16f810485596a73301b1610d40_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_ad5a3e16f810485596a73301b1610d40-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ad5a3e16f810485596a73301b1610d40_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/overseerr/overseerr-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_ad5a3e16f810485596a73301b1610d40_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 62,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 62s; page title \"Setup - Overseerr\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "shopstr",
+      "title": "Install, readiness, browser check and remove of shopstr",
+      "status": "pass",
+      "at": "2026-10-12T17:25:05.359Z",
+      "details": {
+        "name": "shopstr-q1713",
+        "instanceId": "4f700973-1985-4d89-958b-af7a0d5458aa",
+        "url": "http://localhost:18086/",
+        "title": "Shopstr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4f70097319854d89958baf7a0d5458aa-web-1 Up 19 seconds (healthy)"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_4f70097319854d89958baf7a0d5458aa-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4f70097319854d89958baf7a0d5458aa_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/shopstr/shopstr-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 75,
+        "consoleErrors": [
+          "WebSocket connection to 'wss://relay.damus.io/' failed: Error during WebSocket handshake: Unexpected response code: 503"
+        ]
+      },
+      "notes": [
+        "healthy after 75s; page title \"Shopstr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "torbrowser",
+      "title": "Install, readiness, browser check and remove of torbrowser",
+      "status": "pass",
+      "at": "2026-10-12T17:25:55.493Z",
+      "details": {
+        "name": "torbrowser-q1713",
+        "instanceId": "5c5a75a3-875d-4679-b1f4-1fcbc5578443",
+        "url": "http://localhost:18087/",
+        "title": "Tor Browser",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_5c5a75a3875d4679b1f41fcbc5578443-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5c5a75a3875d4679b1f41fcbc5578443_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_5c5a75a3875d4679b1f41fcbc5578443-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5c5a75a3875d4679b1f41fcbc5578443_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/torbrowser/torbrowser-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_5c5a75a3875d4679b1f41fcbc5578443_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 50,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 50s; page title \"Tor Browser\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

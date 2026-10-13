@@ -1,0 +1,171 @@
+{
+  "runId": "catalog-2026-10-12T17-07-51-harbor-q01",
+  "target": "digitalocean droplet 608457967",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "grafana": "passed",
+    "wordpress": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:09:05.083Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "4425b010-89ee-4fb3-af8a-a2bbb7e7b51f",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "grafana",
+      "title": "Install, readiness, browser check and remove of grafana",
+      "status": "pass",
+      "at": "2026-10-12T17:10:21.215Z",
+      "details": {
+        "name": "grafana-q1707",
+        "instanceId": "54f6dd5e-f026-4a6c-a519-53e4a5046bd9",
+        "url": "http://localhost:18080/",
+        "title": "Grafana",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_54f6dd5ef0264a6ca51953e4a5046bd9-web-1 Up 31 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_54f6dd5ef0264a6ca51953e4a5046bd9_data/_data->/var/lib/grafana"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_54f6dd5ef0264a6ca51953e4a5046bd9-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_54f6dd5ef0264a6ca51953e4a5046bd9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/grafana/grafana-q1707",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_54f6dd5ef0264a6ca51953e4a5046bd9_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 73,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 73s; page title \"Grafana\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wordpress",
+      "title": "Install, readiness, browser check and remove of wordpress",
+      "status": "pass",
+      "at": "2026-10-12T17:11:20.871Z",
+      "details": {
+        "name": "wordpress-q1707",
+        "instanceId": "b43ced7b-b736-4868-8874-8a407578568e",
+        "url": "http://localhost:18081/",
+        "title": "WordPress › Installation",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_b43ced7bb736486888748a407578568e-app-1 Up 23 seconds",
+          "hb_b43ced7bb736486888748a407578568e-db-1 Up 23 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b43ced7bb736486888748a407578568e_wordpress/_data->/var/www/html ",
+          "volume:/var/lib/docker/volumes/hb_b43ced7bb736486888748a407578568e_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_b43ced7bb736486888748a407578568e-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_b43ced7bb736486888748a407578568e-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b43ced7bb736486888748a407578568e_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wordpress/wordpress-q1707",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_b43ced7bb736486888748a407578568e_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "wordpress",
+            "name": "hb_b43ced7bb736486888748a407578568e_wordpress",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 60,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 60s; page title \"WordPress › Installation\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

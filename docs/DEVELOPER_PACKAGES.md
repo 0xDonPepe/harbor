@@ -506,11 +506,14 @@ or the workflow (or a manual run) runs four jobs:
    and `catalog.json` (zip sha256 + size, commit, serial, createdAt, package count), and uploads `dist/`,
 4. **publish** (the only job with write access; no checkout, no install; the token reaches only its `gh`
    steps) downloads that artifact, checks it belongs to this commit and serial, and runs
-   `gh release create c<serial>` with the two files (release notes from `summary.json`), marked latest.
+   signs `catalog.json` with the release key (secret `HARBOR_SIGNING_KEY`; the job fails without it) and runs
+   `gh release create c<serial>` with `catalog.zip`, `catalog.json` and `catalog.json.sig` (release notes
+   from `summary.json`), marked latest.
 
-There is no signature. A box trusts the catalog because it comes over HTTPS from this GitHub repository,
-the same trust as Harbor's own self-update (decision 158). `catalog.json` is an integrity check against
-a truncated or mixed download, not a trust anchor.
+Since Harbor 0.32.0 (decision 168) a box uses a downloaded catalog only when Harbor's release key (the key
+that also signs Harbor releases) signed its `catalog.json`; `catalog.json` then pins the zip by sha256 and
+size. An unsigned or badly signed catalog is refused and the box keeps the one it has. Key custody and
+rotation: `docs/design/SIGNING.md`. App authors do nothing: the catalog CI signs every release.
 
 The serial is the commit's committer time in unix seconds. Boxes only ever move to a higher serial, so:
 - a committer time more than 5 minutes in the future fails the bundle job,

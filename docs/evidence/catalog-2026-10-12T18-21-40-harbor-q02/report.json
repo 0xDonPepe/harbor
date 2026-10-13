@@ -1,0 +1,706 @@
+{
+  "runId": "catalog-2026-10-12T18-21-40-harbor-q02",
+  "target": "digitalocean droplet 608474524",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "bitwatch": "passed",
+    "enclosed": "passed",
+    "jotty": "passed",
+    "librephotos": "passed",
+    "notediscovery": "passed",
+    "pyload-ng": "passed",
+    "swingmusic": "passed",
+    "wingfit": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:20.075Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "a1e1cd86-d5f8-481f-8592-78367ba22818",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "bitwatch",
+      "title": "Install, readiness, browser check and remove of bitwatch",
+      "status": "pass",
+      "at": "2026-10-12T18:24:10.439Z",
+      "details": {
+        "name": "bitwatch-q1821",
+        "instanceId": "6a607ae3-93e5-4339-99fb-5e26e0aa2472",
+        "url": "http://localhost:18080/",
+        "title": "Bitwatch",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_6a607ae393e5433999fb5e26e0aa2472-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6a607ae393e5433999fb5e26e0aa2472_data/_data->/app/server/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6a607ae393e5433999fb5e26e0aa2472-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6a607ae393e5433999fb5e26e0aa2472_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bitwatch/bitwatch-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_6a607ae393e5433999fb5e26e0aa2472_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 48,
+        "consoleErrors": [
+          "WebSocket connection to 'ws://localhost:3117/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:3117/socket.io/?EIO=4&transport=websocket' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 48s; page title \"Bitwatch\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "enclosed",
+      "title": "Install, readiness, browser check and remove of enclosed",
+      "status": "pass",
+      "at": "2026-10-12T18:24:56.531Z",
+      "details": {
+        "name": "enclosed-q1821",
+        "instanceId": "3d0edc65-9867-49f5-a2d5-4d81ad9b8858",
+        "url": "http://localhost:18081/",
+        "title": "Enclosed - Send private and secure notes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_3d0edc65986749f5a2d54d81ad9b8858-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_3d0edc65986749f5a2d54d81ad9b8858_data/_data->/app/.data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_3d0edc65986749f5a2d54d81ad9b8858-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_3d0edc65986749f5a2d54d81ad9b8858_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/enclosed/enclosed-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_3d0edc65986749f5a2d54d81ad9b8858_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 46s; page title \"Enclosed - Send private and secure notes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jotty",
+      "title": "Install, readiness, browser check and remove of jotty",
+      "status": "pass",
+      "at": "2026-10-12T18:25:56.129Z",
+      "details": {
+        "name": "jotty-q1821",
+        "instanceId": "f5582d29-caf0-4fb1-925a-4ea8759faccd",
+        "url": "http://localhost:18082/",
+        "title": "jotty·page",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_f5582d29caf04fb1925a4ea8759faccd-web-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_f5582d29caf04fb1925a4ea8759faccd_config/_data->/app/config volume:/var/lib/docker/volumes/hb_f5582d29caf04fb1925a4ea8759faccd_app/_data->/app/data volume:/var/lib/docker/volumes/hb_f5582d29caf04fb1925a4ea8759faccd_cache/_data->/app/.next/cache"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_f5582d29caf04fb1925a4ea8759faccd-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_f5582d29caf04fb1925a4ea8759faccd_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/jotty/jotty-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_f5582d29caf04fb1925a4ea8759faccd_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "cache",
+            "name": "hb_f5582d29caf04fb1925a4ea8759faccd_cache",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_f5582d29caf04fb1925a4ea8759faccd_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 60,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 60s; page title \"jotty·page\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "librephotos",
+      "title": "Install, readiness, browser check and remove of librephotos",
+      "status": "pass",
+      "at": "2026-10-12T18:28:28.225Z",
+      "details": {
+        "name": "librephotos-q1821",
+        "instanceId": "9ec90056-ea83-4248-ac2e-97d066c76158",
+        "url": "http://localhost:18083/",
+        "title": "LibrePhotos",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_9ec90056ea834248ac2e97d066c76158-proxy-1 Up 14 seconds",
+          "hb_9ec90056ea834248ac2e97d066c76158-backend-1 Up 14 seconds",
+          "hb_9ec90056ea834248ac2e97d066c76158-db-1 Up 20 seconds (healthy)",
+          "hb_9ec90056ea834248ac2e97d066c76158-frontend-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_photos/_data->/data volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_protected-media/_data->/protected_media ",
+          "volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_photos/_data->/data volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_logs/_data->/logs volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_protected-media/_data->/protected_media volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_cache/_data->/root/.cache ",
+          "volume:/var/lib/docker/volumes/hb_9ec90056ea834248ac2e97d066c76158_db/_data->/var/lib/postgresql/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "backend",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158-backend-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "frontend",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158-frontend-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "proxy",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158-proxy-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/librephotos/librephotos-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "cache",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_cache",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logs",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_logs",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "photos",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_photos",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "protected-media",
+            "name": "hb_9ec90056ea834248ac2e97d066c76158_protected-media",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 152,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+          "Fetch error: Error: API error: 502 Bad Gateway\n    at zv.request (http://localhost:18083/assets/index-B4ZM_r-7.js:89:794890)\n    at async queryFn (http://localhost:18083/assets/index-B4ZM_r-7.js:89:10",
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+          "Fetch error: Error: API error: 502 Bad Gateway\n    at zv.request (http://localhost:18083/assets/index-B4ZM_r-7.js:89:794890)\n    at async queryFn (http://localhost:18083/assets/index-B4ZM_r-7.js:89:10",
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+          "Fetch error: Error: API error: 502 Bad Gateway\n    at zv.request (http://localhost:18083/assets/index-B4ZM_r-7.js:89:794890)",
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+          "Fetch error: Error: API error: 502 Bad Gateway\n    at zv.request (http://localhost:18083/assets/index-B4ZM_r-7.js:89:794890)\n    at async queryFn (http://localhost:18083/assets/index-B4ZM_r-7.js:89:10",
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)",
+          "Fetch error: Error: API error: 502 Bad Gateway\n    at zv.request (http://localhost:18083/assets/index-B4ZM_r-7.js:89:794890)\n    at async queryFn (http://localhost:18083/assets/index-B4ZM_r-7.js:89:10"
+        ]
+      },
+      "notes": [
+        "healthy after 152s; page title \"LibrePhotos\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "notediscovery",
+      "title": "Install, readiness, browser check and remove of notediscovery",
+      "status": "pass",
+      "at": "2026-10-12T18:29:03.924Z",
+      "details": {
+        "name": "notediscovery-q1821",
+        "instanceId": "66634692-1969-4357-b4fd-436c33d7eae9",
+        "url": "http://localhost:18084/",
+        "title": "NoteDiscovery",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_6663469219694357b4fd436c33d7eae9-web-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6663469219694357b4fd436c33d7eae9_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6663469219694357b4fd436c33d7eae9-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6663469219694357b4fd436c33d7eae9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/notediscovery/notediscovery-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_6663469219694357b4fd436c33d7eae9_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 36,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 36s; page title \"NoteDiscovery\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pyload-ng",
+      "title": "Install, readiness, browser check and remove of pyload-ng",
+      "status": "pass",
+      "at": "2026-10-12T18:29:47.996Z",
+      "details": {
+        "name": "pyload-ng-q1821",
+        "instanceId": "f7b35e60-3e92-430b-9d6b-e108aa20e7a7",
+        "url": "http://localhost:18085/",
+        "title": "Login - pyLoad",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_f7b35e603e92430b9d6be108aa20e7a7-web-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_f7b35e603e92430b9d6be108aa20e7a7_config/_data->/config volume:/var/lib/docker/volumes/hb_f7b35e603e92430b9d6be108aa20e7a7_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_f7b35e603e92430b9d6be108aa20e7a7-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_f7b35e603e92430b9d6be108aa20e7a7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pyload-ng/pyload-ng-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_f7b35e603e92430b9d6be108aa20e7a7_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_f7b35e603e92430b9d6be108aa20e7a7_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 44,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 44s; page title \"Login - pyLoad\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pyload-ng (external storage)",
+      "title": "Install, readiness, browser check and remove of pyload-ng (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:30:20.002Z",
+      "details": {
+        "name": "pyload-ng-q1821x",
+        "instanceId": "b836aca8-df35-4f50-92f6-52087d24c78f",
+        "url": "http://localhost:18086/",
+        "title": "Login - pyLoad",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_b836aca8df354f5092f652087d24c78f-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b836aca8df354f5092f652087d24c78f_config/_data->/config bind:/mnt/harbor-test-storage/pyload-ng-downloads-q1821->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/pyload-ng-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_b836aca8df354f5092f652087d24c78f-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b836aca8df354f5092f652087d24c78f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pyload-ng/pyload-ng-q1821x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_b836aca8df354f5092f652087d24c78f_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 30,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 30s; page title \"Login - pyLoad\"; health 302",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/pyload-ng-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "swingmusic",
+      "title": "Install, readiness, browser check and remove of swingmusic",
+      "status": "pass",
+      "at": "2026-10-12T18:31:13.480Z",
+      "details": {
+        "name": "swingmusic-q1821",
+        "instanceId": "17a68714-b814-4011-8d24-f7c00d17b44a",
+        "url": "http://localhost:18087/",
+        "title": "Swing Music",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_17a68714b81440118d24f7c00d17b44a-app-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_17a68714b81440118d24f7c00d17b44a_config/_data->/config volume:/var/lib/docker/volumes/hb_17a68714b81440118d24f7c00d17b44a_downloads/_data->/downloads volume:/var/lib/docker/volumes/hb_17a68714b81440118d24f7c00d17b44a_music/_data->/music"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_17a68714b81440118d24f7c00d17b44a-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_17a68714b81440118d24f7c00d17b44a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/swingmusic/swingmusic-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_17a68714b81440118d24f7c00d17b44a_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_17a68714b81440118d24f7c00d17b44a_downloads",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "music",
+            "name": "hb_17a68714b81440118d24f7c00d17b44a_music",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"Swing Music\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "swingmusic (external storage)",
+      "title": "Install, readiness, browser check and remove of swingmusic (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:31:43.960Z",
+      "details": {
+        "name": "swingmusic-q1821x",
+        "instanceId": "ed93511c-2479-4f8a-82ed-2e99b5ae722a",
+        "url": "http://localhost:18088/",
+        "title": "Swing Music",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_ed93511c24794f8a82ed2e99b5ae722a-app-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_ed93511c24794f8a82ed2e99b5ae722a_config/_data->/config bind:/mnt/harbor-test-storage/swingmusic-downloads-q1821->/downloads volume:/var/lib/docker/volumes/hb_ed93511c24794f8a82ed2e99b5ae722a_music/_data->/music"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/swingmusic-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_ed93511c24794f8a82ed2e99b5ae722a-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ed93511c24794f8a82ed2e99b5ae722a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/swingmusic/swingmusic-q1821x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_ed93511c24794f8a82ed2e99b5ae722a_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "music",
+            "name": "hb_ed93511c24794f8a82ed2e99b5ae722a_music",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 30,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 30s; page title \"Swing Music\"; health 200",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/swingmusic-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wingfit",
+      "title": "Install, readiness, browser check and remove of wingfit",
+      "status": "pass",
+      "at": "2026-10-12T18:32:21.635Z",
+      "details": {
+        "name": "wingfit-q1821",
+        "instanceId": "b21c9784-d82b-47aa-9769-f3db717702cc",
+        "url": "http://localhost:18089/",
+        "title": "Wingfit - Authentication",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b21c9784d82b47aa9769f3db717702cc-app-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b21c9784d82b47aa9769f3db717702cc_data/_data->/app/storage"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_b21c9784d82b47aa9769f3db717702cc-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b21c9784d82b47aa9769f3db717702cc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wingfit/wingfit-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_b21c9784d82b47aa9769f3db717702cc_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"Wingfit - Authentication\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

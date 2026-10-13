@@ -1,0 +1,522 @@
+{
+  "runId": "catalog-2026-10-12T18-21-35-harbor-q08",
+  "target": "digitalocean droplet 608474579",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "booklore": "passed",
+    "chatpad-ai": "passed",
+    "gitea-mirror": "passed",
+    "librespeed": "passed",
+    "nostrudel": "passed",
+    "palmr": "passed",
+    "slink": "passed",
+    "transmute": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:04.079Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "8c77d4cb-6ccf-468d-877c-4e01c8f4566e",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "booklore",
+      "title": "Install, readiness, browser check and remove of booklore",
+      "status": "pass",
+      "at": "2026-10-12T18:24:35.497Z",
+      "details": {
+        "name": "booklore-q1821",
+        "instanceId": "2bb67631-0f66-432d-a839-83ba3e51dc2c",
+        "url": "http://localhost:18080/",
+        "title": "BookLore",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2bb676310f66432da83983ba3e51dc2c-web-1 Up 51 seconds",
+          "hb_2bb676310f66432da83983ba3e51dc2c-db-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2bb676310f66432da83983ba3e51dc2c_bookdrop/_data->/bookdrop volume:/var/lib/docker/volumes/hb_2bb676310f66432da83983ba3e51dc2c_books/_data->/books volume:/var/lib/docker/volumes/hb_2bb676310f66432da83983ba3e51dc2c_app/_data->/app/data ",
+          "volume:/var/lib/docker/volumes/hb_2bb676310f66432da83983ba3e51dc2c_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/booklore/booklore-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "bookdrop",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c_bookdrop",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "books",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c_books",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_2bb676310f66432da83983ba3e51dc2c_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 89,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 ()",
+          "ERROR Vn"
+        ]
+      },
+      "notes": [
+        "healthy after 89s; page title \"BookLore\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "chatpad-ai",
+      "title": "Install, readiness, browser check and remove of chatpad-ai",
+      "status": "pass",
+      "at": "2026-10-12T18:24:58.175Z",
+      "details": {
+        "name": "chatpad-ai-q1821",
+        "instanceId": "d7931786-35c0-4fe8-88ff-025ea63303f8",
+        "url": "http://localhost:18081/",
+        "title": "Chatpad AI",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_d793178635c04fe888ff025ea63303f8-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_d793178635c04fe888ff025ea63303f8-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d793178635c04fe888ff025ea63303f8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/chatpad-ai/chatpad-ai-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 23,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 23s; page title \"Chatpad AI\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "gitea-mirror",
+      "title": "Install, readiness, browser check and remove of gitea-mirror",
+      "status": "pass",
+      "at": "2026-10-12T18:25:44.656Z",
+      "details": {
+        "name": "gitea-mirror-q1821",
+        "instanceId": "778e53e8-e450-43a6-8faf-f795573ebbad",
+        "url": "http://localhost:18082/",
+        "title": "Setup Admin Account - Gitea Mirror",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_778e53e8e45043a68faff795573ebbad-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_778e53e8e45043a68faff795573ebbad_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_778e53e8e45043a68faff795573ebbad-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_778e53e8e45043a68faff795573ebbad_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/gitea-mirror/gitea-mirror-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_778e53e8e45043a68faff795573ebbad_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 46s; page title \"Setup Admin Account - Gitea Mirror\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "librespeed",
+      "title": "Install, readiness, browser check and remove of librespeed",
+      "status": "pass",
+      "at": "2026-10-12T18:26:21.163Z",
+      "details": {
+        "name": "librespeed-q1821",
+        "instanceId": "231173da-44de-4081-bdd8-9db737c2b907",
+        "url": "http://localhost:18083/",
+        "title": "LibreSpeed",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_231173da44de4081bdd89db737c2b907-server-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_231173da44de4081bdd89db737c2b907_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_231173da44de4081bdd89db737c2b907-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_231173da44de4081bdd89db737c2b907_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/librespeed/librespeed-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_231173da44de4081bdd89db737c2b907_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"LibreSpeed\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "nostrudel",
+      "title": "Install, readiness, browser check and remove of nostrudel",
+      "status": "pass",
+      "at": "2026-10-12T18:27:02.214Z",
+      "details": {
+        "name": "nostrudel-q1821",
+        "instanceId": "1a691e47-1098-4df7-b47c-d45650dc7884",
+        "url": "http://localhost:18084/",
+        "title": "noStrudel",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_1a691e4710984df7b47cd45650dc7884-web-1 Up 12 seconds",
+          "hb_1a691e4710984df7b47cd45650dc7884-cors-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "cors",
+            "name": "hb_1a691e4710984df7b47cd45650dc7884-cors-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_1a691e4710984df7b47cd45650dc7884-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1a691e4710984df7b47cd45650dc7884_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/nostrudel/nostrudel-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 41,
+        "consoleErrors": [
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "Failed to load resource: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 41s; page title \"noStrudel\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "palmr",
+      "title": "Install, readiness, browser check and remove of palmr",
+      "status": "pass",
+      "at": "2026-10-12T18:28:12.159Z",
+      "details": {
+        "name": "palmr-q1821",
+        "instanceId": "bdffb658-8c1a-477b-9145-992bda10f099",
+        "url": "http://localhost:18085/",
+        "title": "Palmr.",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_bdffb6588c1a477b9145992bda10f099-server-1 Up 26 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_bdffb6588c1a477b9145992bda10f099_data/_data->/app/server"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_bdffb6588c1a477b9145992bda10f099-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_bdffb6588c1a477b9145992bda10f099_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/palmr/palmr-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_bdffb6588c1a477b9145992bda10f099_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 70,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 70s; page title \"Palmr.\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "slink",
+      "title": "Install, readiness, browser check and remove of slink",
+      "status": "pass",
+      "at": "2026-10-12T18:29:03.882Z",
+      "details": {
+        "name": "slink-q1821",
+        "instanceId": "d383f1ae-d47f-4502-96c0-7342eb3b383e",
+        "url": "http://localhost:18086/",
+        "title": "Explore Gallery | Slink",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_d383f1aed47f450296c07342eb3b383e-web-1 Up 21 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/a3ed6720cc24054f7b56a9ac4c32b4d9ced0ad6c2c92f231f28fdbcd7b2a3711/_data->/data volume:/var/lib/docker/volumes/hb_d383f1aed47f450296c07342eb3b383e_images/_data->/app/slink/images volume:/var/lib/docker/volumes/hb_d383f1aed47f450296c07342eb3b383e_var/_data->/app/var/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_d383f1aed47f450296c07342eb3b383e-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d383f1aed47f450296c07342eb3b383e_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/slink/slink-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_d383f1aed47f450296c07342eb3b383e_images",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "var",
+            "name": "hb_d383f1aed47f450296c07342eb3b383e_var",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 52,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 52s; page title \"Explore Gallery | Slink\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "transmute",
+      "title": "Install, readiness, browser check and remove of transmute",
+      "status": "pass",
+      "at": "2026-10-12T18:31:04.729Z",
+      "details": {
+        "name": "transmute-q1821",
+        "instanceId": "509881d4-c5b2-4d62-9477-d46da91b32f1",
+        "url": "http://localhost:18087/",
+        "title": "Transmute - Sign In",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_509881d4c5b24d629477d46da91b32f1-web-1 Up 26 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_509881d4c5b24d629477d46da91b32f1_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_509881d4c5b24d629477d46da91b32f1-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_509881d4c5b24d629477d46da91b32f1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/transmute/transmute-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_509881d4c5b24d629477d46da91b32f1_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 121,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 121s; page title \"Transmute - Sign In\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

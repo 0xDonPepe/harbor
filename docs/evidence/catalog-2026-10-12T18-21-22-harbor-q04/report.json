@@ -1,0 +1,612 @@
+{
+  "runId": "catalog-2026-10-12T18-21-22-harbor-q04",
+  "target": "digitalocean droplet 608474546",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "bazarr": "passed",
+    "budibase": "passed",
+    "docmost": "passed",
+    "fizzy": "passed",
+    "kokoro": "blocked",
+    "ollama": "passed",
+    "rotki": "passed",
+    "telegrapho": "passed",
+    "yuvomi": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:22:42.925Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "f666fae1-edd9-46c8-b2cf-439f83be55b9",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "bazarr",
+      "title": "Install, readiness, browser check and remove of bazarr",
+      "status": "pass",
+      "at": "2026-10-12T18:23:49.765Z",
+      "details": {
+        "name": "bazarr-q1821",
+        "instanceId": "d06a9816-8afc-46b2-ba2b-5865ee975029",
+        "url": "http://localhost:18080/",
+        "title": "General - Bazarr (Settings)",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_d06a98168afc46b2ba2b5865ee975029-server-1 Up 34 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_d06a98168afc46b2ba2b5865ee975029_config/_data->/config volume:/var/lib/docker/volumes/hb_d06a98168afc46b2ba2b5865ee975029_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_d06a98168afc46b2ba2b5865ee975029-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d06a98168afc46b2ba2b5865ee975029_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bazarr/bazarr-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_d06a98168afc46b2ba2b5865ee975029_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_d06a98168afc46b2ba2b5865ee975029_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 64,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 64s; page title \"General - Bazarr (Settings)\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "bazarr (external storage)",
+      "title": "Install, readiness, browser check and remove of bazarr (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:24:36.838Z",
+      "details": {
+        "name": "bazarr-q1821x",
+        "instanceId": "7ed4dcdb-922f-4176-a6f3-8912fcabbd7d",
+        "url": "http://localhost:18081/",
+        "title": "General - Bazarr (Settings)",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7ed4dcdb922f4176a6f38912fcabbd7d-server-1 Up 35 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_7ed4dcdb922f4176a6f38912fcabbd7d_config/_data->/config bind:/mnt/harbor-test-storage/bazarr-downloads-q1821->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/bazarr-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_7ed4dcdb922f4176a6f38912fcabbd7d-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7ed4dcdb922f4176a6f38912fcabbd7d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bazarr/bazarr-q1821x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_7ed4dcdb922f4176a6f38912fcabbd7d_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 46s; page title \"General - Bazarr (Settings)\"; health 200",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/bazarr-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "budibase",
+      "title": "Install, readiness, browser check and remove of budibase",
+      "status": "pass",
+      "at": "2026-10-12T18:27:49.370Z",
+      "details": {
+        "name": "budibase-q1821",
+        "instanceId": "b858bf5b-c822-4deb-b98c-976c4c42e360",
+        "url": "http://localhost:18082/",
+        "title": "Budibase",
+        "healthStatus": 301,
+        "probeHistory": [
+          301
+        ],
+        "containers": [
+          "hb_b858bf5bc8224debb98c976c4c42e360-budibase-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b858bf5bc8224debb98c976c4c42e360_budibase/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "budibase",
+            "name": "hb_b858bf5bc8224debb98c976c4c42e360-budibase-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b858bf5bc8224debb98c976c4c42e360_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/budibase/budibase-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "budibase",
+            "name": "hb_b858bf5bc8224debb98c976c4c42e360_budibase",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 191,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ]
+      },
+      "notes": [
+        "healthy after 191s; page title \"Budibase\"; health 301",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "docmost",
+      "title": "Install, readiness, browser check and remove of docmost",
+      "status": "pass",
+      "at": "2026-10-12T18:30:13.204Z",
+      "details": {
+        "name": "docmost-q1821",
+        "instanceId": "86949f75-345b-4ce3-a04c-20967ef98ecf",
+        "url": "http://localhost:18083/",
+        "title": "Setup Workspace - Docmost",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_86949f75345b4ce3a04c20967ef98ecf-web-1 Up 22 seconds",
+          "hb_86949f75345b4ce3a04c20967ef98ecf-db-1 Up 22 seconds",
+          "hb_86949f75345b4ce3a04c20967ef98ecf-redis-1 Up 22 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_86949f75345b4ce3a04c20967ef98ecf_docmost-data/_data->/app/data/storage ",
+          "volume:/var/lib/docker/volumes/hb_86949f75345b4ce3a04c20967ef98ecf_db-data/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_86949f75345b4ce3a04c20967ef98ecf_redis-data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "redis",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf-redis-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/docmost/docmost-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db-data",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf_db-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "docmost-data",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf_docmost-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redis-data",
+            "name": "hb_86949f75345b4ce3a04c20967ef98ecf_redis-data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 144,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        ]
+      },
+      "notes": [
+        "healthy after 144s; page title \"Setup Workspace - Docmost\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "fizzy",
+      "title": "Install, readiness, browser check and remove of fizzy",
+      "status": "pass",
+      "at": "2026-10-12T18:30:58.311Z",
+      "details": {
+        "name": "fizzy-q1821",
+        "instanceId": "5b302758-541d-407a-b537-5816f3fde687",
+        "url": "http://localhost:18084/",
+        "title": "Enter your email | Fizzy",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_5b302758541d407ab5375816f3fde687-server-1 Up 21 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5b302758541d407ab5375816f3fde687_app/_data->/rails/storage"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_5b302758541d407ab5375816f3fde687-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5b302758541d407ab5375816f3fde687_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/fizzy/fizzy-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_5b302758541d407ab5375816f3fde687_app",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 45,
+        "consoleErrors": [
+          "Passkey conditional mediation failed NotSupportedError: Resident credentials or empty 'allowCredentials' lists are not supported at this time."
+        ]
+      },
+      "notes": [
+        "healthy after 45s; page title \"Enter your email | Fizzy\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "kokoro",
+      "title": "Install, readiness, browser check and remove of kokoro",
+      "status": "fail",
+      "at": "2026-10-12T18:37:11.881Z",
+      "details": {
+        "error": "harbor install kokoro --name kokoro-q1821 --yes exited 1:        \"at\": \"2026-10-12T18:34:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 404\"\n    },\n    {\n      \"cursor\": \"129\",\n      \"at\": \"2026-10-12T18:34:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 404\"\n    },\n    {\n      \"cursor\": \"130\",\n      \"at\": \"2026-10-12T18:35:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 404\"\n    },\n    {\n      \"cursor\": \"131\",\n      \"at\": \"2026-10-12T18:35:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 404\"\n    },\n    {\n      \"cursor\": \"132\",\n      \"at\": \"2026-10-12T18:35:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 404\"\n    },\n    {\n      \"cursor\": \"133\",\n      \"at\": \"2026-10-12T18:36:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 404\"\n    },\n    {\n      \"cursor\": \"134\",\n      \"at\": \"2026-10-12T18:36:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 404\"\n    },\n    {\n      \"cursor\": \"135\",\n      \"at\": \"2026-10-12T18:36:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 404\"\n    },\n    {\n      \"cursor\": \"136\",\n      \"at\": \"2026-10-12T18:37:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 150: 404\"\n    },\n    {\n      \"cursor\": \"137\",\n      \"at\": \"2026-10-12T18:37:11Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 404); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install kokoro --name kokoro-q1821 --yes exited 1:        \"at\": \"2026-10-12T18:34:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 404\"\n    },\n    {\n      \"cursor\": \"129\",\n      \"at\": \"2026-10-12T18:34:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 404\"\n    },\n    {\n      \"cursor\": \"130\",\n      \"at\": \"2026-10-12T18:35:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 404\"\n    },\n    {\n      \"cursor\": \"131\",\n      \"at\": \"2026-10-12T18:35:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 404\"\n    },\n    {\n      \"cursor\": \"132\",\n      \"at\": \"2026-10-12T18:35:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 404\"\n    },\n    {\n      \"cursor\": \"133\",\n      \"at\": \"2026-10-12T18:36:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 404\"\n    },\n    {\n      \"cursor\": \"134\",\n      \"at\": \"2026-10-12T18:36:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 404\"\n    },\n    {\n      \"cursor\": \"135\",\n      \"at\": \"2026-10-12T18:36:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 404\"\n    },\n    {\n      \"cursor\": \"136\",\n      \"at\": \"2026-10-12T18:37:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 150: 404\"\n    },\n    {\n      \"cursor\": \"137\",\n      \"at\": \"2026-10-12T18:37:11Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 404); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "ollama",
+      "title": "Install, readiness, browser check and remove of ollama",
+      "status": "pass",
+      "at": "2026-10-12T18:39:46.953Z",
+      "details": {
+        "name": "ollama-q1821",
+        "instanceId": "891aaf0c-9467-46d9-87ca-1c03d2dff403",
+        "url": "http://localhost:18086/",
+        "title": "",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_891aaf0c946746d987ca1c03d2dff403-ollama-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_891aaf0c946746d987ca1c03d2dff403_data/_data->/root/.ollama"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "ollama",
+            "name": "hb_891aaf0c946746d987ca1c03d2dff403-ollama-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_891aaf0c946746d987ca1c03d2dff403_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/ollama/ollama-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_891aaf0c946746d987ca1c03d2dff403_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 146,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 146s; page title \"\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "rotki",
+      "title": "Install, readiness, browser check and remove of rotki",
+      "status": "pass",
+      "at": "2026-10-12T18:40:32.882Z",
+      "details": {
+        "name": "rotki-q1821",
+        "instanceId": "3aa6e791-942e-4802-b42f-04a35fa1e57f",
+        "url": "http://localhost:18087/",
+        "title": "rotki",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_3aa6e791942e4802b42f04a35fa1e57f-web-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/f0cdde21ed0c28ea9ec9c994c2dd4e7fb2788f063e7a805df03417075c288cf9/_data->/config volume:/var/lib/docker/volumes/hb_3aa6e791942e4802b42f04a35fa1e57f_data/_data->/data volume:/var/lib/docker/volumes/hb_3aa6e791942e4802b42f04a35fa1e57f_logs/_data->/logs"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_3aa6e791942e4802b42f04a35fa1e57f-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_3aa6e791942e4802b42f04a35fa1e57f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/rotki/rotki-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_3aa6e791942e4802b42f04a35fa1e57f_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logs",
+            "name": "hb_3aa6e791942e4802b42f04a35fa1e57f_logs",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 46s; page title \"rotki\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "telegrapho",
+      "title": "Install, readiness, browser check and remove of telegrapho",
+      "status": "pass",
+      "at": "2026-10-12T18:41:13.015Z",
+      "details": {
+        "name": "telegrapho-q1821",
+        "instanceId": "afb076ba-ffd2-4a2d-ac5b-3777a4f18cd8",
+        "url": "http://localhost:18088/",
+        "title": "Telegrapho",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_afb076baffd24a2dac5b3777a4f18cd8-app-1 Up 11 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_afb076baffd24a2dac5b3777a4f18cd8-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_afb076baffd24a2dac5b3777a4f18cd8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/telegrapho/telegrapho-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 40,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 40s; page title \"Telegrapho\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "yuvomi",
+      "title": "Install, readiness, browser check and remove of yuvomi",
+      "status": "pass",
+      "at": "2026-10-12T18:42:07.115Z",
+      "details": {
+        "name": "yuvomi-q1821",
+        "instanceId": "a1ae8a4f-a35f-4096-88ba-8ea5d5e63080",
+        "url": "http://localhost:18089/",
+        "title": "Yuvomi",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a1ae8a4fa35f409688ba8ea5d5e63080-web-1 Up 19 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a1ae8a4fa35f409688ba8ea5d5e63080_backups/_data->/backups volume:/var/lib/docker/volumes/hb_a1ae8a4fa35f409688ba8ea5d5e63080_app/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a1ae8a4fa35f409688ba8ea5d5e63080-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a1ae8a4fa35f409688ba8ea5d5e63080_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/yuvomi/yuvomi-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_a1ae8a4fa35f409688ba8ea5d5e63080_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backups",
+            "name": "hb_a1ae8a4fa35f409688ba8ea5d5e63080_backups",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 54,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 54s; page title \"Yuvomi\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

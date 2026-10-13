@@ -1,0 +1,568 @@
+{
+  "runId": "catalog-2026-10-12T18-21-31-harbor-q05",
+  "target": "digitalocean droplet 608474551",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "akaunting": "passed",
+    "cashu-me": "passed",
+    "flatnotes": "passed",
+    "langflow": "passed",
+    "leafwiki": "passed",
+    "omnitools": "passed",
+    "satoshi-dashboard": "passed",
+    "thinkdashboard": "passed",
+    "zen": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:22:48.584Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "091b1a97-3431-413a-aaa8-61f3d6a7b59c",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "akaunting",
+      "title": "Install, readiness, browser check and remove of akaunting",
+      "status": "pass",
+      "at": "2026-10-12T18:24:24.681Z",
+      "details": {
+        "name": "akaunting-q1821",
+        "instanceId": "2a2d710e-c493-4951-9e21-bcfb8452010b",
+        "url": "http://localhost:18080/",
+        "title": "Login",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_2a2d710ec49349519e21bcfb8452010b-app-1 Up 54 seconds",
+          "hb_2a2d710ec49349519e21bcfb8452010b-db-1 Up 55 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2a2d710ec49349519e21bcfb8452010b_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_2a2d710ec49349519e21bcfb8452010b-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_2a2d710ec49349519e21bcfb8452010b-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2a2d710ec49349519e21bcfb8452010b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/akaunting/akaunting-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_2a2d710ec49349519e21bcfb8452010b_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 93,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 93s; page title \"Login\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "cashu-me",
+      "title": "Install, readiness, browser check and remove of cashu-me",
+      "status": "pass",
+      "at": "2026-10-12T18:24:51.223Z",
+      "details": {
+        "name": "cashu-me-q1821",
+        "instanceId": "4c5b5b2b-39ce-4071-99d9-c93a84665e9d",
+        "url": "http://localhost:18081/",
+        "title": "Cashu.me",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4c5b5b2b39ce407199d9c93a84665e9d-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_4c5b5b2b39ce407199d9c93a84665e9d-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4c5b5b2b39ce407199d9c93a84665e9d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/cashu-me/cashu-me-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 27,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 27s; page title \"Cashu.me\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "flatnotes",
+      "title": "Install, readiness, browser check and remove of flatnotes",
+      "status": "pass",
+      "at": "2026-10-12T18:25:27.951Z",
+      "details": {
+        "name": "flatnotes-q1821",
+        "instanceId": "26414d9c-561c-445b-af69-b5430458d2f6",
+        "url": "http://localhost:18082/",
+        "title": "flatnotes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_26414d9c561c445baf69b5430458d2f6-server-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_26414d9c561c445baf69b5430458d2f6_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_26414d9c561c445baf69b5430458d2f6-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_26414d9c561c445baf69b5430458d2f6_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/flatnotes/flatnotes-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_26414d9c561c445baf69b5430458d2f6_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 37s; page title \"flatnotes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "langflow",
+      "title": "Install, readiness, browser check and remove of langflow",
+      "status": "pass",
+      "at": "2026-10-12T18:27:41.201Z",
+      "details": {
+        "name": "langflow-q1821",
+        "instanceId": "0b22e08a-f621-411d-9986-436aef06aee8",
+        "url": "http://localhost:18083/",
+        "title": "Langflow",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0b22e08af621411d9986436aef06aee8-db-1 Up About a minute",
+          "hb_0b22e08af621411d9986436aef06aee8-app-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0b22e08af621411d9986436aef06aee8_db/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_0b22e08af621411d9986436aef06aee8_app/_data->/app/langflow"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_0b22e08af621411d9986436aef06aee8-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_0b22e08af621411d9986436aef06aee8-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0b22e08af621411d9986436aef06aee8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/langflow/langflow-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_0b22e08af621411d9986436aef06aee8_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_0b22e08af621411d9986436aef06aee8_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 133,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 133s; page title \"Langflow\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "leafwiki",
+      "title": "Install, readiness, browser check and remove of leafwiki",
+      "status": "pass",
+      "at": "2026-10-12T18:28:03.470Z",
+      "details": {
+        "name": "leafwiki-q1821",
+        "instanceId": "6828328a-6cbd-4c57-adcc-8e5f1851b4ec",
+        "url": "http://localhost:18084/",
+        "title": "Login - LeafWiki",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_6828328a6cbd4c57adcc8e5f1851b4ec-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6828328a6cbd4c57adcc8e5f1851b4ec_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6828328a6cbd4c57adcc8e5f1851b4ec-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6828328a6cbd4c57adcc8e5f1851b4ec_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/leafwiki/leafwiki-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_6828328a6cbd4c57adcc8e5f1851b4ec_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 22,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)"
+        ]
+      },
+      "notes": [
+        "healthy after 22s; page title \"Login - LeafWiki\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "omnitools",
+      "title": "Install, readiness, browser check and remove of omnitools",
+      "status": "pass",
+      "at": "2026-10-12T18:28:30.630Z",
+      "details": {
+        "name": "omnitools-q1821",
+        "instanceId": "63cc0dc7-4bbd-488a-9af8-ebd5afb9b4e3",
+        "url": "http://localhost:18085/",
+        "title": "OmniTools",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_63cc0dc74bbd488a9af8ebd5afb9b4e3-app-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_63cc0dc74bbd488a9af8ebd5afb9b4e3-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_63cc0dc74bbd488a9af8ebd5afb9b4e3_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/omnitools/omnitools-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 27,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 27s; page title \"OmniTools\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "satoshi-dashboard",
+      "title": "Install, readiness, browser check and remove of satoshi-dashboard",
+      "status": "pass",
+      "at": "2026-10-12T18:29:12.375Z",
+      "details": {
+        "name": "satoshi-dashboard-q1821",
+        "instanceId": "34dfa5ea-2a28-4633-9fc8-4c9baf7e3795",
+        "url": "http://localhost:18086/",
+        "title": "Bitcoin Dashboard - Live BTC Price, Market Cap & Network Stats",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_34dfa5ea2a2846339fc84c9baf7e3795-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_34dfa5ea2a2846339fc84c9baf7e3795_data/_data->/app/server/.runtime-cache"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_34dfa5ea2a2846339fc84c9baf7e3795-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_34dfa5ea2a2846339fc84c9baf7e3795_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/satoshi-dashboard/satoshi-dashboard-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_34dfa5ea2a2846339fc84c9baf7e3795_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 42,
+        "consoleErrors": [
+          "Refused to execute script from 'http://localhost:18086/_vercel/insights/script.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled.",
+          "Refused to execute script from 'http://localhost:18086/_vercel/speed-insights/script.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled.",
+          "Failed to load resource: the server responded with a status of 502 (Bad Gateway)"
+        ]
+      },
+      "notes": [
+        "healthy after 42s; page title \"Bitcoin Dashboard - Live BTC Price, Market Cap & Network Stats\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "thinkdashboard",
+      "title": "Install, readiness, browser check and remove of thinkdashboard",
+      "status": "pass",
+      "at": "2026-10-12T18:29:35.387Z",
+      "details": {
+        "name": "thinkdashboard-q1821",
+        "instanceId": "5340d56b-d4e4-49e8-b1a1-e52552b3bd7b",
+        "url": "http://localhost:18087/",
+        "title": "Dashboard",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_5340d56bd4e449e8b1a1e52552b3bd7b-server-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5340d56bd4e449e8b1a1e52552b3bd7b_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_5340d56bd4e449e8b1a1e52552b3bd7b-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5340d56bd4e449e8b1a1e52552b3bd7b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/thinkdashboard/thinkdashboard-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_5340d56bd4e449e8b1a1e52552b3bd7b_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 23,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 23s; page title \"Dashboard\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "zen",
+      "title": "Install, readiness, browser check and remove of zen",
+      "status": "pass",
+      "at": "2026-10-12T18:29:57.359Z",
+      "details": {
+        "name": "zen-q1821",
+        "instanceId": "bf08f160-f9be-4cb1-897b-b8c1a4e0ce60",
+        "url": "http://localhost:18088/",
+        "title": "Zen",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_bf08f160f9be4cb1897bb8c1a4e0ce60-app-1 Up 10 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_bf08f160f9be4cb1897bb8c1a4e0ce60_app/_data->/data volume:/var/lib/docker/volumes/hb_bf08f160f9be4cb1897bb8c1a4e0ce60_images/_data->/images"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_bf08f160f9be4cb1897bb8c1a4e0ce60-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_bf08f160f9be4cb1897bb8c1a4e0ce60_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/zen/zen-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_bf08f160f9be4cb1897bb8c1a4e0ce60_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_bf08f160f9be4cb1897bb8c1a4e0ce60_images",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 22,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "API error: {code: NO_USERS, message: No users found}"
+        ]
+      },
+      "notes": [
+        "healthy after 22s; page title \"Zen\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

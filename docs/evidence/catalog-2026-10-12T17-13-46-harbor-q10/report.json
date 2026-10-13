@@ -1,0 +1,511 @@
+{
+  "runId": "catalog-2026-10-12T17-13-46-harbor-q10",
+  "target": "digitalocean droplet 608459078",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "dropgate-server": "passed",
+    "etherpad": "passed",
+    "hermes-agent": "passed",
+    "morphos": "passed",
+    "pearcircle-seeder": "passed",
+    "skybro": "passed",
+    "sqlitebrowser": "passed",
+    "vert": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:16.238Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "e88173b8-28d9-4d43-9586-c2e30170a859",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "dropgate-server",
+      "title": "Install, readiness, browser check and remove of dropgate-server",
+      "status": "pass",
+      "at": "2026-10-12T17:16:00.216Z",
+      "details": {
+        "name": "dropgate-server-q1713",
+        "instanceId": "0abcd861-1ba7-4066-b665-3a3e7e7f604d",
+        "url": "http://localhost:18080/",
+        "title": "Dropgate Server",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0abcd8611ba74066b6653a3e7e7f604d-web-1 Up 17 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0abcd8611ba74066b6653a3e7e7f604d_uploads/_data->/usr/src/app/uploads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_0abcd8611ba74066b6653a3e7e7f604d-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0abcd8611ba74066b6653a3e7e7f604d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/dropgate-server/dropgate-server-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "uploads",
+            "name": "hb_0abcd8611ba74066b6653a3e7e7f604d_uploads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 41,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 41s; page title \"Dropgate Server\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "etherpad",
+      "title": "Install, readiness, browser check and remove of etherpad",
+      "status": "pass",
+      "at": "2026-10-12T17:17:21.206Z",
+      "details": {
+        "name": "etherpad-q1713",
+        "instanceId": "e88cd675-911a-4ab6-9e5c-5de06014e595",
+        "url": "http://localhost:18081/",
+        "title": "Etherpad",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e88cd675911a4ab69e5c5de06014e595-app-1 Up 23 seconds (healthy)",
+          "hb_e88cd675911a4ab69e5c5de06014e595-postgres-1 Up 31 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e88cd675911a4ab69e5c5de06014e595_etherpad-var/_data->/opt/etherpad-lite/var volume:/var/lib/docker/volumes/hb_e88cd675911a4ab69e5c5de06014e595_plugins/_data->/opt/etherpad-lite/src/plugin_packages ",
+          "volume:/var/lib/docker/volumes/45e3abba114b127defd18009f5e1f36411ca00424944fefa9545f1d04204e092/_data->/var/lib/postgresql/data volume:/var/lib/docker/volumes/hb_e88cd675911a4ab69e5c5de06014e595_postgres-data/_data->/var/lib/postgresql/data/pgdata"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "postgres",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595-postgres-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/etherpad/etherpad-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "etherpad-var",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595_etherpad-var",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "plugins",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595_plugins",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "postgres-data",
+            "name": "hb_e88cd675911a4ab69e5c5de06014e595_postgres-data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 81,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 81s; page title \"Etherpad\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "hermes-agent",
+      "title": "Install, readiness, browser check and remove of hermes-agent",
+      "status": "pass",
+      "at": "2026-10-12T17:19:12.223Z",
+      "details": {
+        "name": "hermes-agent-q1713",
+        "instanceId": "4dd1bdb6-e275-4904-a79b-f50bdf814965",
+        "url": "http://localhost:18082/",
+        "title": "Hermes Agent - Dashboard",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4dd1bdb6e2754904a79bf50bdf814965-web-1 Up 25 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_4dd1bdb6e2754904a79bf50bdf814965_hermes/_data->/opt/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_4dd1bdb6e2754904a79bf50bdf814965-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4dd1bdb6e2754904a79bf50bdf814965_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/hermes-agent/hermes-agent-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "hermes",
+            "name": "hb_4dd1bdb6e2754904a79bf50bdf814965_hermes",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 111,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 111s; page title \"Hermes Agent - Dashboard\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "morphos",
+      "title": "Install, readiness, browser check and remove of morphos",
+      "status": "pass",
+      "at": "2026-10-12T17:20:27.939Z",
+      "details": {
+        "name": "morphos-q1713",
+        "instanceId": "bc01ba7f-09ce-40c4-8bcc-ed93fa4c3dad",
+        "url": "http://localhost:18083/",
+        "title": "Upload your file",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_bc01ba7f09ce40c48bcced93fa4c3dad-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_bc01ba7f09ce40c48bcced93fa4c3dad-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_bc01ba7f09ce40c48bcced93fa4c3dad_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/morphos/morphos-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 76,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 76s; page title \"Upload your file\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pearcircle-seeder",
+      "title": "Install, readiness, browser check and remove of pearcircle-seeder",
+      "status": "pass",
+      "at": "2026-10-12T17:20:56.948Z",
+      "details": {
+        "name": "pearcircle-seeder-q1713",
+        "instanceId": "5aff790d-e0e2-4055-9315-5db38dd0f990",
+        "url": "http://localhost:18084/",
+        "title": "PearCircle Seeder",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_5aff790de0e2405593155db38dd0f990-app-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5aff790de0e2405593155db38dd0f990_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_5aff790de0e2405593155db38dd0f990-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5aff790de0e2405593155db38dd0f990_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pearcircle-seeder/pearcircle-seeder-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_5aff790de0e2405593155db38dd0f990_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"PearCircle Seeder\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "skybro",
+      "title": "Install, readiness, browser check and remove of skybro",
+      "status": "pass",
+      "at": "2026-10-12T17:24:00.777Z",
+      "details": {
+        "name": "skybro-q1713",
+        "instanceId": "3445dd87-bdbc-48bb-b31f-cfd6f8d836fb",
+        "url": "http://localhost:18085/",
+        "title": "SkyBro",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_3445dd87bdbc48bbb31fcfd6f8d836fb-web-1 Up 2 minutes (healthy)",
+          "hb_3445dd87bdbc48bbb31fcfd6f8d836fb-tracker-1 Up 2 minutes (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_3445dd87bdbc48bbb31fcfd6f8d836fb_data/_data->/data ",
+          "volume:/var/lib/docker/volumes/hb_3445dd87bdbc48bbb31fcfd6f8d836fb_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "tracker",
+            "name": "hb_3445dd87bdbc48bbb31fcfd6f8d836fb-tracker-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_3445dd87bdbc48bbb31fcfd6f8d836fb-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_3445dd87bdbc48bbb31fcfd6f8d836fb_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/skybro/skybro-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_3445dd87bdbc48bbb31fcfd6f8d836fb_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 184,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 184s; page title \"SkyBro\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "sqlitebrowser",
+      "title": "Install, readiness, browser check and remove of sqlitebrowser",
+      "status": "pass",
+      "at": "2026-10-12T17:24:55.035Z",
+      "details": {
+        "name": "sqlitebrowser-q1713",
+        "instanceId": "645e3907-18c4-4514-965d-be19666620df",
+        "url": "http://localhost:18086/",
+        "title": "SQLiteBrowser",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_645e390718c44514965dbe19666620df-app-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_645e390718c44514965dbe19666620df_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_645e390718c44514965dbe19666620df-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_645e390718c44514965dbe19666620df_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/sqlitebrowser/sqlitebrowser-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_645e390718c44514965dbe19666620df_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 54,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Refused to execute script from 'http://localhost:18086/public/js/pcm-player.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled."
+        ]
+      },
+      "notes": [
+        "healthy after 54s; page title \"SQLiteBrowser\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "vert",
+      "title": "Install, readiness, browser check and remove of vert",
+      "status": "pass",
+      "at": "2026-10-12T17:25:26.812Z",
+      "details": {
+        "name": "vert-q1713",
+        "instanceId": "cddfae4f-e2bf-4e19-9dce-f54aa00e19c9",
+        "url": "http://localhost:18087/",
+        "title": "VERT.sh",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cddfae4fe2bf4e199dcef54aa00e19c9-web-1 Up 18 seconds (healthy)"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_cddfae4fe2bf4e199dcef54aa00e19c9-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cddfae4fe2bf4e199dcef54aa00e19c9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/vert/vert-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 ()",
+          "Failed to load resource: the server responded with a status of 404 ()",
+          "Failed to load resource: the server responded with a status of 404 ()",
+          "Failed to load resource: the server responded with a status of 404 ()"
+        ]
+      },
+      "notes": [
+        "healthy after 32s; page title \"VERT.sh\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "runId": "catalog-2026-10-12T19-46-24-harbor-q01",
+  "target": "digitalocean droplet 608493914",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "wireguard": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T19:47:43.427Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "2a038e0f-e84d-4155-864f-609edd40ae9e",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791834263,
+          "commit": "3be48ab0598c8b10c46d58a702afc383dbcd00f1",
+          "createdAt": "2026-10-12T19:44:23.000Z",
+          "origin": "bundled",
+          "packages": 139,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791834263, updates off)"
+      ]
+    },
+    {
+      "id": "wireguard",
+      "title": "Install, readiness, browser check and remove of wireguard",
+      "status": "pass",
+      "at": "2026-10-12T19:49:16.528Z",
+      "details": {
+        "name": "wireguard-q1946",
+        "instanceId": "090fd5f4-e9b5-4c6d-a575-071a789be13d",
+        "url": "http://localhost:18080/",
+        "title": "WireGuard",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_090fd5f4e9b54c6da575071a789be13d-app-1 Up About a minute (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_090fd5f4e9b54c6da575071a789be13d_config/_data->/etc/wireguard"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_090fd5f4e9b54c6da575071a789be13d-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_090fd5f4e9b54c6da575071a789be13d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wireguard/wireguard-q1946",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_090fd5f4e9b54c6da575071a789be13d_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 90,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 90s; page title \"WireGuard\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

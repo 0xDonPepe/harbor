@@ -140,6 +140,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+# decision 168: inside this unit the CLI refuses --allow-downgrade / --allow-unsigned
+Environment=HARBOR_SELF_UPDATE_UNIT=1
 ExecStart=${PRODUCT.paths.opt}/bin/harbor self-update apply --to %i
 TimeoutStartSec=1800
 `;

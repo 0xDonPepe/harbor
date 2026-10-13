@@ -1,0 +1,513 @@
+{
+  "runId": "catalog-2026-10-12T17-13-40-harbor-q08",
+  "target": "digitalocean droplet 608459058",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "booklore": "passed",
+    "databag": "passed",
+    "gupt": "passed",
+    "lubelogger": "passed",
+    "nostrudel": "passed",
+    "passky-client": "passed",
+    "snort": "passed",
+    "trip": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:09.082Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "ea7721c7-62f9-4ddb-882d-a1f85e796c5d",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "booklore",
+      "title": "Install, readiness, browser check and remove of booklore",
+      "status": "pass",
+      "at": "2026-10-12T17:16:25.698Z",
+      "details": {
+        "name": "booklore-q1713",
+        "instanceId": "4c41572c-41a8-4d12-b37e-92b430e5572c",
+        "url": "http://localhost:18080/",
+        "title": "BookLore",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4c41572c41a84d12b37e92b430e5572c-web-1 Up 51 seconds",
+          "hb_4c41572c41a84d12b37e92b430e5572c-db-1 Up 51 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_4c41572c41a84d12b37e92b430e5572c_bookdrop/_data->/bookdrop volume:/var/lib/docker/volumes/hb_4c41572c41a84d12b37e92b430e5572c_books/_data->/books volume:/var/lib/docker/volumes/hb_4c41572c41a84d12b37e92b430e5572c_app/_data->/app/data ",
+          "volume:/var/lib/docker/volumes/hb_4c41572c41a84d12b37e92b430e5572c_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/booklore/booklore-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "bookdrop",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c_bookdrop",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "books",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c_books",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_4c41572c41a84d12b37e92b430e5572c_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 74,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 ()",
+          "ERROR Vn"
+        ]
+      },
+      "notes": [
+        "healthy after 74s; page title \"BookLore\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "databag",
+      "title": "Install, readiness, browser check and remove of databag",
+      "status": "pass",
+      "at": "2026-10-12T17:17:19.157Z",
+      "details": {
+        "name": "databag-q1713",
+        "instanceId": "27b631bc-64d3-431c-897a-9d681153932f",
+        "url": "http://localhost:18081/",
+        "title": "Databag",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_27b631bc64d3431c897a9d681153932f-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_27b631bc64d3431c897a9d681153932f_databag/_data->/var/lib/databag"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_27b631bc64d3431c897a9d681153932f-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_27b631bc64d3431c897a9d681153932f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/databag/databag-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "databag",
+            "name": "hb_27b631bc64d3431c897a9d681153932f_databag",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"Databag\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "gupt",
+      "title": "Install, readiness, browser check and remove of gupt",
+      "status": "pass",
+      "at": "2026-10-12T17:17:44.130Z",
+      "details": {
+        "name": "gupt-q1713",
+        "instanceId": "7510a3de-504e-487d-ae84-302e80f99e12",
+        "url": "http://localhost:18082/",
+        "title": "GUPT — Anonymous Privacy Suite",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7510a3de504e487dae84302e80f99e12-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_7510a3de504e487dae84302e80f99e12-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7510a3de504e487dae84302e80f99e12_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/gupt/gupt-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 25,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 25s; page title \"GUPT — Anonymous Privacy Suite\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "lubelogger",
+      "title": "Install, readiness, browser check and remove of lubelogger",
+      "status": "pass",
+      "at": "2026-10-12T17:18:12.824Z",
+      "details": {
+        "name": "lubelogger-q1713",
+        "instanceId": "4d7657dc-9d83-4beb-994f-c6131391e54c",
+        "url": "http://localhost:18083/",
+        "title": "Garage - LubeLogger",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4d7657dc9d834beb994fc6131391e54c-app-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_4d7657dc9d834beb994fc6131391e54c_app/_data->/App/data volume:/var/lib/docker/volumes/hb_4d7657dc9d834beb994fc6131391e54c_keys/_data->/root/.aspnet/DataProtection-Keys"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_4d7657dc9d834beb994fc6131391e54c-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4d7657dc9d834beb994fc6131391e54c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/lubelogger/lubelogger-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_4d7657dc9d834beb994fc6131391e54c_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "keys",
+            "name": "hb_4d7657dc9d834beb994fc6131391e54c_keys",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Garage - LubeLogger\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "nostrudel",
+      "title": "Install, readiness, browser check and remove of nostrudel",
+      "status": "pass",
+      "at": "2026-10-12T17:18:55.034Z",
+      "details": {
+        "name": "nostrudel-q1713",
+        "instanceId": "b6c9f7cf-cf13-4066-b6f8-f18b447dd3fd",
+        "url": "http://localhost:18084/",
+        "title": "noStrudel",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b6c9f7cfcf134066b6f8f18b447dd3fd-web-1 Up 12 seconds",
+          "hb_b6c9f7cfcf134066b6f8f18b447dd3fd-cors-1 Up 13 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "cors",
+            "name": "hb_b6c9f7cfcf134066b6f8f18b447dd3fd-cors-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_b6c9f7cfcf134066b6f8f18b447dd3fd-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b6c9f7cfcf134066b6f8f18b447dd3fd_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/nostrudel/nostrudel-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 42,
+        "consoleErrors": [
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "Failed to load resource: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED",
+          "WebSocket connection to 'ws://localhost:4869/' failed: Error in connection establishment: net::ERR_SOCKS_CONNECTION_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 42s; page title \"noStrudel\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "passky-client",
+      "title": "Install, readiness, browser check and remove of passky-client",
+      "status": "pass",
+      "at": "2026-10-12T17:19:24.188Z",
+      "details": {
+        "name": "passky-client-q1713",
+        "instanceId": "23b2c6e3-2241-470a-8377-5b529a7f7a05",
+        "url": "http://localhost:18085/",
+        "title": "Passky",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_23b2c6e32241470a83775b529a7f7a05-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_23b2c6e32241470a83775b529a7f7a05-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_23b2c6e32241470a83775b529a7f7a05_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/passky-client/passky-client-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Passky\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "snort",
+      "title": "Install, readiness, browser check and remove of snort",
+      "status": "pass",
+      "at": "2026-10-12T17:19:53.624Z",
+      "details": {
+        "name": "snort-q1713",
+        "instanceId": "34a4a89e-106b-4295-b334-4d2f1a8d3897",
+        "url": "http://localhost:18086/",
+        "title": "Snort - Nostr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_34a4a89e106b4295b3344d2f1a8d3897-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_34a4a89e106b4295b3344d2f1a8d3897-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_34a4a89e106b4295b3344d2f1a8d3897_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/snort/snort-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": [
+          "Access to fetch at 'https://pa.v0l.io/api/event' from origin 'http://localhost:18086' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Contr",
+          "Failed to load resource: net::ERR_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 29s; page title \"Snort - Nostr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "trip",
+      "title": "Install, readiness, browser check and remove of trip",
+      "status": "pass",
+      "at": "2026-10-12T17:20:30.344Z",
+      "details": {
+        "name": "trip-q1713",
+        "instanceId": "b160a762-89c8-4376-b0f8-98b642e90ab0",
+        "url": "http://localhost:18087/",
+        "title": "TRIP - Authentication",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b160a76289c84376b0f898b642e90ab0-app-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b160a76289c84376b0f898b642e90ab0_app/_data->/app/storage"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_b160a76289c84376b0f898b642e90ab0-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b160a76289c84376b0f898b642e90ab0_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/trip/trip-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_b160a76289c84376b0f898b642e90ab0_app",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"TRIP - Authentication\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

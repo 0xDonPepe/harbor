@@ -1,0 +1,537 @@
+{
+  "runId": "catalog-2026-10-12T17-13-14-harbor-q01",
+  "target": "digitalocean droplet 608458983",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "ersatztv-legacy": "blocked",
+    "kiwix": "blocked",
+    "nutstash-wallet": "passed",
+    "paperless": "blocked",
+    "remmina": "passed",
+    "tautulli": "passed",
+    "wizarr": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:14:31.403Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "3dae1890-1bd8-42d7-9507-2ba73ffa9ac2",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "ersatztv-legacy",
+      "title": "Install, readiness, browser check and remove of ersatztv-legacy",
+      "status": "pass",
+      "at": "2026-10-12T17:15:44.040Z",
+      "details": {
+        "name": "ersatztv-legacy-q1713",
+        "instanceId": "38ca0432-da97-482d-bcb8-b0e8c6a2e9f9",
+        "url": "http://localhost:18080/",
+        "title": "ErsatzTV Legacy",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_38ca0432da97482dbcb8b0e8c6a2e9f9-web-1 Up 19 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_38ca0432da97482dbcb8b0e8c6a2e9f9_config/_data->/config volume:/var/lib/docker/volumes/hb_38ca0432da97482dbcb8b0e8c6a2e9f9_downloads/_data->/media volume:/var/lib/docker/volumes/hb_38ca0432da97482dbcb8b0e8c6a2e9f9_transcode/_data->/transcode"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_38ca0432da97482dbcb8b0e8c6a2e9f9-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_38ca0432da97482dbcb8b0e8c6a2e9f9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/ersatztv-legacy/ersatztv-legacy-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_38ca0432da97482dbcb8b0e8c6a2e9f9_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_38ca0432da97482dbcb8b0e8c6a2e9f9_downloads",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "transcode",
+            "name": "hb_38ca0432da97482dbcb8b0e8c6a2e9f9_transcode",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 70,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 70s; page title \"ErsatzTV Legacy\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "ersatztv-legacy (external storage)",
+      "title": "Install, readiness, browser check and remove of ersatztv-legacy (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:15:46.201Z",
+      "details": {
+        "error": "harbor install ersatztv-legacy --name ersatztv-legacy-q1713x --storage downloads=/mnt/harbor-test-storage/ersatztv-legacy-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"ersatztv-legacy does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install ersatztv-legacy --name ersatztv-legacy-q1713x --storage downloads=/mnt/harbor-test-storage/ersatztv-legacy-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"ersatztv-legacy does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "kiwix",
+      "title": "Install, readiness, browser check and remove of kiwix",
+      "status": "pass",
+      "at": "2026-10-12T17:16:12.365Z",
+      "details": {
+        "name": "kiwix-q1713",
+        "instanceId": "d84bf907-4427-4290-b61c-81b469d37758",
+        "url": "http://localhost:18081/",
+        "title": "Welcome to Kiwix Server",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_d84bf90744274290b61c81b469d37758-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_d84bf90744274290b61c81b469d37758_downloads/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_d84bf90744274290b61c81b469d37758-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d84bf90744274290b61c81b469d37758_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/kiwix/kiwix-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_d84bf90744274290b61c81b469d37758_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 24,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 24s; page title \"Welcome to Kiwix Server\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "kiwix (external storage)",
+      "title": "Install, readiness, browser check and remove of kiwix (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:16:14.772Z",
+      "details": {
+        "error": "harbor install kiwix --name kiwix-q1713x --storage downloads=/mnt/harbor-test-storage/kiwix-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"kiwix does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install kiwix --name kiwix-q1713x --storage downloads=/mnt/harbor-test-storage/kiwix-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"kiwix does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "nutstash-wallet",
+      "title": "Install, readiness, browser check and remove of nutstash-wallet",
+      "status": "pass",
+      "at": "2026-10-12T17:16:59.044Z",
+      "details": {
+        "name": "nutstash-wallet-q1713",
+        "instanceId": "677cea8e-6569-4ca9-bfba-dfb5d9c558a1",
+        "url": "http://localhost:18082/",
+        "title": "",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_677cea8e65694ca9bfbadfb5d9c558a1-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_677cea8e65694ca9bfbadfb5d9c558a1-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_677cea8e65694ca9bfbadfb5d9c558a1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/nutstash-wallet/nutstash-wallet-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "paperless",
+      "title": "Install, readiness, browser check and remove of paperless",
+      "status": "pass",
+      "at": "2026-10-12T17:20:10.074Z",
+      "details": {
+        "name": "paperless-q1713",
+        "instanceId": "9c037625-1c4b-4e66-b880-10ceac090148",
+        "url": "http://localhost:18083/",
+        "title": "Paperless-ngx sign in",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_9c0376251c4b4e66b88010ceac090148-webserver-1 Up About a minute (healthy)",
+          "hb_9c0376251c4b4e66b88010ceac090148-db-1 Up About a minute",
+          "hb_9c0376251c4b4e66b88010ceac090148-broker-1 Up About a minute",
+          "hb_9c0376251c4b4e66b88010ceac090148-gotenberg-1 Up About a minute",
+          "hb_9c0376251c4b4e66b88010ceac090148-tika-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_paperless-consume/_data->/usr/src/paperless/consume volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_data/_data->/usr/src/paperless/data volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_paperless-export/_data->/usr/src/paperless/export volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_media/_data->/usr/src/paperless/media ",
+          "volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_pgdata/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_9c0376251c4b4e66b88010ceac090148_redisdata/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "broker",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148-broker-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "gotenberg",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148-gotenberg-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "tika",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148-tika-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "webserver",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148-webserver-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/paperless/paperless-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "media",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_media",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "paperless-consume",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_paperless-consume",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "paperless-export",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_paperless-export",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "pgdata",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_pgdata",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redisdata",
+            "name": "hb_9c0376251c4b4e66b88010ceac090148_redisdata",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 191,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 191s; page title \"Paperless-ngx sign in\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "paperless (external storage)",
+      "title": "Install, readiness, browser check and remove of paperless (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:20:13.322Z",
+      "details": {
+        "error": "harbor install paperless --name paperless-q1713x --storage paperless-export=/mnt/harbor-test-storage/paperless-paperless-export-q1713 --storage paperless-consume=/mnt/harbor-test-storage/paperless-paperless-consume-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"paperless does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install paperless --name paperless-q1713x --storage paperless-export=/mnt/harbor-test-storage/paperless-paperless-export-q1713 --storage paperless-consume=/mnt/harbor-test-storage/paperless-paperless-consume-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"paperless does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "remmina",
+      "title": "Install, readiness, browser check and remove of remmina",
+      "status": "pass",
+      "at": "2026-10-12T17:21:48.691Z",
+      "details": {
+        "name": "remmina-q1713",
+        "instanceId": "36ad079f-07b5-4435-89cf-bf44c1a07b5f",
+        "url": "http://localhost:18084/",
+        "title": "Remmina",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_36ad079f07b5443589cfbf44c1a07b5f-server-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_36ad079f07b5443589cfbf44c1a07b5f_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_36ad079f07b5443589cfbf44c1a07b5f-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_36ad079f07b5443589cfbf44c1a07b5f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/remmina/remmina-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_36ad079f07b5443589cfbf44c1a07b5f_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 93,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Refused to execute script from 'http://localhost:18084/public/js/pcm-player.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled."
+        ]
+      },
+      "notes": [
+        "healthy after 93s; page title \"Remmina\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "tautulli",
+      "title": "Install, readiness, browser check and remove of tautulli",
+      "status": "pass",
+      "at": "2026-10-12T17:22:25.493Z",
+      "details": {
+        "name": "tautulli-q1713",
+        "instanceId": "0ab9af54-c46d-4680-80b6-e2c3bc2ce38a",
+        "url": "http://localhost:18085/",
+        "title": "Tautulli - Welcome |",
+        "healthStatus": 303,
+        "probeHistory": [
+          303
+        ],
+        "containers": [
+          "hb_0ab9af54c46d468080b6e2c3bc2ce38a-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0ab9af54c46d468080b6e2c3bc2ce38a_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_0ab9af54c46d468080b6e2c3bc2ce38a-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0ab9af54c46d468080b6e2c3bc2ce38a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/tautulli/tautulli-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_0ab9af54c46d468080b6e2c3bc2ce38a_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"Tautulli - Welcome |\"; health 303",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wizarr",
+      "title": "Install, readiness, browser check and remove of wizarr",
+      "status": "pass",
+      "at": "2026-10-12T17:23:23.249Z",
+      "details": {
+        "name": "wizarr-q1713",
+        "instanceId": "ca894976-2184-4f5e-b09a-6f34cfe1b742",
+        "url": "http://localhost:18086/",
+        "title": "Setup Wizarr - None",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_ca89497621844f5eb09a6f34cfe1b742-app-1 Up 24 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_ca89497621844f5eb09a6f34cfe1b742_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_ca89497621844f5eb09a6f34cfe1b742-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ca89497621844f5eb09a6f34cfe1b742_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wizarr/wizarr-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_ca89497621844f5eb09a6f34cfe1b742_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 58,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 58s; page title \"Setup Wizarr - None\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

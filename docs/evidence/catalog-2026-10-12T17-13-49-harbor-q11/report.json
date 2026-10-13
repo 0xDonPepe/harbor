@@ -1,0 +1,458 @@
+{
+  "runId": "catalog-2026-10-12T17-13-49-harbor-q11",
+  "target": "digitalocean droplet 608459084",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "dumbpad": "passed",
+    "flaresolverr": "passed",
+    "homarr": "passed",
+    "mqttx-web": "passed",
+    "perplexica": "passed",
+    "stash": "passed",
+    "termix": "blocked",
+    "wallos": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:11.498Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "3b30f572-d1c6-42a6-8b4f-15262bce09eb",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "dumbpad",
+      "title": "Install, readiness, browser check and remove of dumbpad",
+      "status": "pass",
+      "at": "2026-10-12T17:15:47.329Z",
+      "details": {
+        "name": "dumbpad-q1713",
+        "instanceId": "1e35a1c3-44a9-43fc-97ab-2119f4210857",
+        "url": "http://localhost:18080/",
+        "title": "DumbPad - Simple Notes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_1e35a1c344a943fc97ab2119f4210857-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_1e35a1c344a943fc97ab2119f4210857_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_1e35a1c344a943fc97ab2119f4210857-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1e35a1c344a943fc97ab2119f4210857_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/dumbpad/dumbpad-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_1e35a1c344a943fc97ab2119f4210857_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 33,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 33s; page title \"DumbPad - Simple Notes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "flaresolverr",
+      "title": "Install, readiness, browser check and remove of flaresolverr",
+      "status": "pass",
+      "at": "2026-10-12T17:16:37.098Z",
+      "details": {
+        "name": "flaresolverr-q1713",
+        "instanceId": "8b66dd13-9199-4c9c-866c-63399a676c25",
+        "url": "http://localhost:18081/",
+        "title": "FlareSolverr Status",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_8b66dd1391994c9c866c63399a676c25-server-1 Up 23 seconds",
+          "hb_8b66dd1391994c9c866c63399a676c25-web-1 Up 23 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/5988bcb5ed8fd9edd479fd5e18b3437036c1169634e1ee40a4e33535280998a1/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_8b66dd1391994c9c866c63399a676c25-server-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8b66dd1391994c9c866c63399a676c25-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8b66dd1391994c9c866c63399a676c25_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/flaresolverr/flaresolverr-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 50,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 50s; page title \"FlareSolverr Status\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "homarr",
+      "title": "Install, readiness, browser check and remove of homarr",
+      "status": "pass",
+      "at": "2026-10-12T17:17:28.351Z",
+      "details": {
+        "name": "homarr-q1713",
+        "instanceId": "8861c519-77cb-45cd-ba60-605c7f9c8464",
+        "url": "http://localhost:18082/",
+        "title": "Homarr",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_8861c51977cb45cdba60605c7f9c8464-web-1 Up 32 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_8861c51977cb45cdba60605c7f9c8464_data/_data->/appdata"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8861c51977cb45cdba60605c7f9c8464-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8861c51977cb45cdba60605c7f9c8464_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/homarr/homarr-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_8861c51977cb45cdba60605c7f9c8464_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"Homarr\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "mqttx-web",
+      "title": "Install, readiness, browser check and remove of mqttx-web",
+      "status": "pass",
+      "at": "2026-10-12T17:18:00.500Z",
+      "details": {
+        "name": "mqttx-web-q1713",
+        "instanceId": "fecd305e-b9b0-40ba-b9eb-243df7f9879c",
+        "url": "http://localhost:18083/",
+        "title": "Easy-to-Use Online MQTT Client | Try Now",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_fecd305eb9b040bab9eb243df7f9879c-app-1 Up 15 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_fecd305eb9b040bab9eb243df7f9879c-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_fecd305eb9b040bab9eb243df7f9879c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/mqttx-web/mqttx-web-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 32s; page title \"Easy-to-Use Online MQTT Client | Try Now\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "perplexica",
+      "title": "Install, readiness, browser check and remove of perplexica",
+      "status": "pass",
+      "at": "2026-10-12T17:21:45.136Z",
+      "details": {
+        "name": "perplexica-q1713",
+        "instanceId": "01d3a765-bec5-4309-b547-b212a642561b",
+        "url": "http://localhost:18084/",
+        "title": "Chat - Vane",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_01d3a765bec54309b547b212a642561b-web-1 Up 24 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_01d3a765bec54309b547b212a642561b_app-data/_data->/home/perplexica/data volume:/var/lib/docker/volumes/hb_01d3a765bec54309b547b212a642561b_uploads/_data->/home/perplexica/uploads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_01d3a765bec54309b547b212a642561b-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_01d3a765bec54309b547b212a642561b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/perplexica/perplexica-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app-data",
+            "name": "hb_01d3a765bec54309b547b212a642561b_app-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "uploads",
+            "name": "hb_01d3a765bec54309b547b212a642561b_uploads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 225,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 225s; page title \"Chat - Vane\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "stash",
+      "title": "Install, readiness, browser check and remove of stash",
+      "status": "pass",
+      "at": "2026-10-12T17:23:49.134Z",
+      "details": {
+        "name": "stash-q1713",
+        "instanceId": "df90ee02-4e44-4930-8995-0f55db44c084",
+        "url": "http://localhost:18085/",
+        "title": "Stash",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_df90ee024e44493089950f55db44c084-web-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_df90ee024e44493089950f55db44c084_app/_data->/app/data volume:/var/lib/docker/volumes/hb_df90ee024e44493089950f55db44c084_models/_data->/app/models"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_df90ee024e44493089950f55db44c084-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_df90ee024e44493089950f55db44c084_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/stash/stash-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_df90ee024e44493089950f55db44c084_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "models",
+            "name": "hb_df90ee024e44493089950f55db44c084_models",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 124,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 124s; page title \"Stash\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "termix",
+      "title": "Install, readiness, browser check and remove of termix",
+      "status": "fail",
+      "at": "2026-10-12T17:27:03.874Z",
+      "details": {
+        "error": "harbor install termix --name termix-q1713 --yes exited 1:     },\n    {\n      \"cursor\": \"122\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_550b3194f1d247af9d8b7fd7be7f5208_data on the drive (/srv/harbor/harbor-apps/termix/termix-q1713/volumes/data)\"\n    },\n    {\n      \"cursor\": \"123\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"124\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"125\",\n      \"at\": \"2026-10-12T17:24:07Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"126\",\n      \"at\": \"2026-10-12T17:27:03Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"127\",\n      \"at\": \"2026-10-12T17:27:03Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): _550b3194f1d247af9d8b7fd7be7f5208-guacd-1 Started \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Starting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Started \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Waiting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-guacd-1 Waiting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Healthy \\napplication not healthy after 2m55s\\n\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install termix --name termix-q1713 --yes exited 1:     },\n    {\n      \"cursor\": \"122\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_550b3194f1d247af9d8b7fd7be7f5208_data on the drive (/srv/harbor/harbor-apps/termix/termix-q1713/volumes/data)\"\n    },\n    {\n      \"cursor\": \"123\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"124\",\n      \"at\": \"2026-10-12T17:23:52Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"125\",\n      \"at\": \"2026-10-12T17:24:07Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"126\",\n      \"at\": \"2026-10-12T17:27:03Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"127\",\n      \"at\": \"2026-10-12T17:27:03Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): _550b3194f1d247af9d8b7fd7be7f5208-guacd-1 Started \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Starting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Started \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Waiting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-guacd-1 Waiting \\n Container hb_550b3194f1d247af9d8b7fd7be7f5208-web-1 Healthy \\napplication not healthy after 2m55s\\n\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "wallos",
+      "title": "Install, readiness, browser check and remove of wallos",
+      "status": "pass",
+      "at": "2026-10-12T17:27:47.366Z",
+      "details": {
+        "name": "wallos-q1713",
+        "instanceId": "fd4f3c58-dc26-4ee8-b8b3-e9986be5ba29",
+        "url": "http://localhost:18087/",
+        "title": "Wallos - Subscription Tracker",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_fd4f3c58dc264ee8b8b3e9986be5ba29-server-1 Up 17 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_fd4f3c58dc264ee8b8b3e9986be5ba29_db/_data->/var/www/html/db volume:/var/lib/docker/volumes/hb_fd4f3c58dc264ee8b8b3e9986be5ba29_logos/_data->/var/www/html/images/uploads/logos"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_fd4f3c58dc264ee8b8b3e9986be5ba29-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_fd4f3c58dc264ee8b8b3e9986be5ba29_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wallos/wallos-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_fd4f3c58dc264ee8b8b3e9986be5ba29_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logos",
+            "name": "hb_fd4f3c58dc264ee8b8b3e9986be5ba29_logos",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"Wallos - Subscription Tracker\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

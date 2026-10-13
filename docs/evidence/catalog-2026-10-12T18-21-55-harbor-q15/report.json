@@ -1,0 +1,569 @@
+{
+  "runId": "catalog-2026-10-12T18-21-55-harbor-q15",
+  "target": "digitalocean droplet 608474748",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "autobrr": "passed",
+    "bitboard": "blocked",
+    "element": "passed",
+    "influxdb2": "passed",
+    "invio": "passed",
+    "myspeed": "passed",
+    "pinchflat": "passed",
+    "strix": "passed",
+    "whoogle-search": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:17.938Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "3a6d16f9-0930-43dd-8c69-27636bf5cc5a",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "autobrr",
+      "title": "Install, readiness, browser check and remove of autobrr",
+      "status": "pass",
+      "at": "2026-10-12T18:23:43.261Z",
+      "details": {
+        "name": "autobrr-q1821",
+        "instanceId": "7bb20163-8b5c-4f62-bbe5-e7e609a71b47",
+        "url": "http://localhost:18080/",
+        "title": "autobrr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7bb201638b5c4f62bbe5e7e609a71b47-web-1 Up 10 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_7bb201638b5c4f62bbe5e7e609a71b47_data/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_7bb201638b5c4f62bbe5e7e609a71b47-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7bb201638b5c4f62bbe5e7e609a71b47_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/autobrr/autobrr-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_7bb201638b5c4f62bbe5e7e609a71b47_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 22,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        ]
+      },
+      "notes": [
+        "healthy after 22s; page title \"autobrr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "bitboard",
+      "title": "Install, readiness, browser check and remove of bitboard",
+      "status": "fail",
+      "at": "2026-10-12T18:28:51.411Z",
+      "details": {
+        "error": "harbor install bitboard --name bitboard-q1821 --yes exited 1:  \": \"37\",\n      \"at\": \"2026-10-12T18:26:10Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 500\"\n    },\n    {\n      \"cursor\": \"38\",\n      \"at\": \"2026-10-12T18:26:30Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 500\"\n    },\n    {\n      \"cursor\": \"39\",\n      \"at\": \"2026-10-12T18:26:50Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 500\"\n    },\n    {\n      \"cursor\": \"40\",\n      \"at\": \"2026-10-12T18:27:10Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 500\"\n    },\n    {\n      \"cursor\": \"41\",\n      \"at\": \"2026-10-12T18:27:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 500\"\n    },\n    {\n      \"cursor\": \"42\",\n      \"at\": \"2026-10-12T18:27:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 500\"\n    },\n    {\n      \"cursor\": \"43\",\n      \"at\": \"2026-10-12T18:28:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 500\"\n    },\n    {\n      \"cursor\": \"44\",\n      \"at\": \"2026-10-12T18:28:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 500\"\n    },\n    {\n      \"cursor\": \"45\",\n      \"at\": \"2026-10-12T18:28:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 150: 500\"\n    },\n    {\n      \"cursor\": \"46\",\n      \"at\": \"2026-10-12T18:28:51Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 500); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install bitboard --name bitboard-q1821 --yes exited 1:  \": \"37\",\n      \"at\": \"2026-10-12T18:26:10Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 500\"\n    },\n    {\n      \"cursor\": \"38\",\n      \"at\": \"2026-10-12T18:26:30Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 500\"\n    },\n    {\n      \"cursor\": \"39\",\n      \"at\": \"2026-10-12T18:26:50Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 500\"\n    },\n    {\n      \"cursor\": \"40\",\n      \"at\": \"2026-10-12T18:27:10Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 500\"\n    },\n    {\n      \"cursor\": \"41\",\n      \"at\": \"2026-10-12T18:27:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 500\"\n    },\n    {\n      \"cursor\": \"42\",\n      \"at\": \"2026-10-12T18:27:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 500\"\n    },\n    {\n      \"cursor\": \"43\",\n      \"at\": \"2026-10-12T18:28:11Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 500\"\n    },\n    {\n      \"cursor\": \"44\",\n      \"at\": \"2026-10-12T18:28:31Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 500\"\n    },\n    {\n      \"cursor\": \"45\",\n      \"at\": \"2026-10-12T18:28:51Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 150: 500\"\n    },\n    {\n      \"cursor\": \"46\",\n      \"at\": \"2026-10-12T18:28:51Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 500); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "element",
+      "title": "Install, readiness, browser check and remove of element",
+      "status": "pass",
+      "at": "2026-10-12T18:29:46.485Z",
+      "details": {
+        "name": "element-q1821",
+        "instanceId": "0c2e3887-9057-4f58-b649-26fa7b4102db",
+        "url": "http://localhost:18082/",
+        "title": "Element",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0c2e388790574f58b64926fa7b4102db-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_0c2e388790574f58b64926fa7b4102db-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0c2e388790574f58b64926fa7b4102db_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/element/element-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 34,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 403 ()",
+          "Failed to register as guest M_FORBIDDEN: MatrixError: [403] Registration has been disabled. Only m.login.application_service registrations are allowed. (https://matrix-client.matrix.org/_matrix/client"
+        ]
+      },
+      "notes": [
+        "healthy after 34s; page title \"Element\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "influxdb2",
+      "title": "Install, readiness, browser check and remove of influxdb2",
+      "status": "pass",
+      "at": "2026-10-12T18:30:22.945Z",
+      "details": {
+        "name": "influxdb2-q1821",
+        "instanceId": "844e8cf4-0358-4846-b06b-d19ac785f4d8",
+        "url": "http://localhost:18083/",
+        "title": "InfluxDB",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_844e8cf403584846b06bd19ac785f4d8-app-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_844e8cf403584846b06bd19ac785f4d8_config/_data->/etc/influxdb2 volume:/var/lib/docker/volumes/hb_844e8cf403584846b06bd19ac785f4d8_data/_data->/var/lib/influxdb2"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_844e8cf403584846b06bd19ac785f4d8-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_844e8cf403584846b06bd19ac785f4d8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/influxdb2/influxdb2-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_844e8cf403584846b06bd19ac785f4d8_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_844e8cf403584846b06bd19ac785f4d8_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 36,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 36s; page title \"InfluxDB\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "invio",
+      "title": "Install, readiness, browser check and remove of invio",
+      "status": "pass",
+      "at": "2026-10-12T18:31:33.951Z",
+      "details": {
+        "name": "invio-q1821",
+        "instanceId": "e7dc6af9-26c1-41fa-9ef8-18857bb036e0",
+        "url": "http://localhost:18084/",
+        "title": "Invio",
+        "healthStatus": 303,
+        "probeHistory": [
+          303
+        ],
+        "containers": [
+          "hb_e7dc6af926c141fa9ef818857bb036e0-frontend-1 Up 19 seconds",
+          "hb_e7dc6af926c141fa9ef818857bb036e0-backend-1 Up 19 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e7dc6af926c141fa9ef818857bb036e0_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "backend",
+            "name": "hb_e7dc6af926c141fa9ef818857bb036e0-backend-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "frontend",
+            "name": "hb_e7dc6af926c141fa9ef818857bb036e0-frontend-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e7dc6af926c141fa9ef818857bb036e0_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/invio/invio-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_e7dc6af926c141fa9ef818857bb036e0_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 71,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 71s; page title \"Invio\"; health 303",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "myspeed",
+      "title": "Install, readiness, browser check and remove of myspeed",
+      "status": "pass",
+      "at": "2026-10-12T18:32:25.273Z",
+      "details": {
+        "name": "myspeed-q1821",
+        "instanceId": "c6f187b8-2fc6-42ee-adf5-4586fd713ba8",
+        "url": "http://localhost:18085/",
+        "title": "MySpeed",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c6f187b82fc642eeadf54586fd713ba8-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c6f187b82fc642eeadf54586fd713ba8_myspeed/_data->/myspeed/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_c6f187b82fc642eeadf54586fd713ba8-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c6f187b82fc642eeadf54586fd713ba8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/myspeed/myspeed-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "myspeed",
+            "name": "hb_c6f187b82fc642eeadf54586fd713ba8_myspeed",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"MySpeed\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pinchflat",
+      "title": "Install, readiness, browser check and remove of pinchflat",
+      "status": "pass",
+      "at": "2026-10-12T18:33:20.506Z",
+      "details": {
+        "name": "pinchflat-q1821",
+        "instanceId": "52d9b898-6c9b-4311-8b20-9acbd2b671d4",
+        "url": "http://localhost:18086/",
+        "title": "Pinchflat",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_52d9b8986c9b43118b209acbd2b671d4-web-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_52d9b8986c9b43118b209acbd2b671d4_config/_data->/config volume:/var/lib/docker/volumes/hb_52d9b8986c9b43118b209acbd2b671d4_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_52d9b8986c9b43118b209acbd2b671d4-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_52d9b8986c9b43118b209acbd2b671d4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pinchflat/pinchflat-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_52d9b8986c9b43118b209acbd2b671d4_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_52d9b8986c9b43118b209acbd2b671d4_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 55,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 55s; page title \"Pinchflat\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pinchflat (external storage)",
+      "title": "Install, readiness, browser check and remove of pinchflat (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:33:51.153Z",
+      "details": {
+        "name": "pinchflat-q1821x",
+        "instanceId": "f0669e94-ff8c-4b0e-a521-77da6cc18867",
+        "url": "http://localhost:18087/",
+        "title": "Pinchflat",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_f0669e94ff8c4b0ea52177da6cc18867-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_f0669e94ff8c4b0ea52177da6cc18867_config/_data->/config bind:/mnt/harbor-test-storage/pinchflat-downloads-q1821->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/pinchflat-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_f0669e94ff8c4b0ea52177da6cc18867-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_f0669e94ff8c4b0ea52177da6cc18867_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pinchflat/pinchflat-q1821x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_f0669e94ff8c4b0ea52177da6cc18867_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 30,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 30s; page title \"Pinchflat\"; health 200",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/pinchflat-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "strix",
+      "title": "Install, readiness, browser check and remove of strix",
+      "status": "pass",
+      "at": "2026-10-12T18:34:17.122Z",
+      "details": {
+        "name": "strix-q1821",
+        "instanceId": "a5ee7435-8d57-4c48-bfcd-4483350a4513",
+        "url": "http://localhost:18088/",
+        "title": "Strix - Camera Stream Discovery",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a5ee74358d574c48bfcd4483350a4513-web-1 Up 10 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a5ee74358d574c48bfcd4483350a4513-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a5ee74358d574c48bfcd4483350a4513_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/strix/strix-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 25,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 25s; page title \"Strix - Camera Stream Discovery\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "whoogle-search",
+      "title": "Install, readiness, browser check and remove of whoogle-search",
+      "status": "pass",
+      "at": "2026-10-12T18:35:05.406Z",
+      "details": {
+        "name": "whoogle-search-q1821",
+        "instanceId": "c3b4f528-c469-44c9-a1ea-ec0d05c05cf7",
+        "url": "http://localhost:18089/",
+        "title": "Whoogle Search",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c3b4f528c46944c9a1eaec0d05c05cf7-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/12b1d855ef0b2a562fd3d3e1f40bc3651b827ea0a8cb8370437941f73a740e37/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_c3b4f528c46944c9a1eaec0d05c05cf7-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c3b4f528c46944c9a1eaec0d05c05cf7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/whoogle-search/whoogle-search-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 48,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 48s; page title \"Whoogle Search\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

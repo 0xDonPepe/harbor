@@ -1,0 +1,694 @@
+{
+  "runId": "catalog-2026-10-12T18-21-41-harbor-q03",
+  "target": "digitalocean droplet 608474531",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "baikal": "passed",
+    "bark-wallet": "passed",
+    "btctracker": "passed",
+    "ersatztv-legacy": "passed",
+    "kiwix": "passed",
+    "nutstash-wallet": "passed",
+    "remmina": "passed",
+    "tautulli": "passed",
+    "wizarr": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:12.997Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "5b63a362-3b45-4d32-92e7-4e4ec354da88",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "baikal",
+      "title": "Install, readiness, browser check and remove of baikal",
+      "status": "pass",
+      "at": "2026-10-12T18:23:48.271Z",
+      "details": {
+        "name": "baikal-q1821",
+        "instanceId": "8bceec35-fbe0-4240-91b0-0450fe3df185",
+        "url": "http://localhost:18080/",
+        "title": "Baïkal Maintenance",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_8bceec35fbe0424091b00450fe3df185-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_8bceec35fbe0424091b00450fe3df185_specific/_data->/var/www/baikal/Specific volume:/var/lib/docker/volumes/hb_8bceec35fbe0424091b00450fe3df185_config/_data->/var/www/baikal/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8bceec35fbe0424091b00450fe3df185-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8bceec35fbe0424091b00450fe3df185_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/baikal/baikal-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_8bceec35fbe0424091b00450fe3df185_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "specific",
+            "name": "hb_8bceec35fbe0424091b00450fe3df185_specific",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 33,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 33s; page title \"Baïkal Maintenance\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "bark-wallet",
+      "title": "Install, readiness, browser check and remove of bark-wallet",
+      "status": "pass",
+      "at": "2026-10-12T18:24:35.252Z",
+      "details": {
+        "name": "bark-wallet-q1821",
+        "instanceId": "8ba9da97-cf1d-4c59-82a6-cf5a4db3b1dc",
+        "url": "http://localhost:18081/",
+        "title": "Bark Wallet",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-web-1 Up 11 seconds",
+          "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-api-1 Up 11 seconds",
+          "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-barkd-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc_wallet/_data->/wallet-data ",
+          "volume:/var/lib/docker/volumes/hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc_wallet/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "api",
+            "name": "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-api-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "barkd",
+            "name": "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-barkd-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bark-wallet/bark-wallet-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "wallet",
+            "name": "hb_8ba9da97cf1d4c5982a6cf5a4db3b1dc_wallet",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 47,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 47s; page title \"Bark Wallet\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "btctracker",
+      "title": "Install, readiness, browser check and remove of btctracker",
+      "status": "pass",
+      "at": "2026-10-12T18:25:30.404Z",
+      "details": {
+        "name": "btctracker-q1821",
+        "instanceId": "44cf4ae3-07ca-4cfb-bcd7-6229b7b8ce74",
+        "url": "http://localhost:18082/",
+        "title": "BTC Tracker",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_44cf4ae307ca4cfbbcd76229b7b8ce74-web-1 Up 27 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_44cf4ae307ca4cfbbcd76229b7b8ce74_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_44cf4ae307ca4cfbbcd76229b7b8ce74-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_44cf4ae307ca4cfbbcd76229b7b8ce74_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/btctracker/btctracker-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_44cf4ae307ca4cfbbcd76229b7b8ce74_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 55,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 55s; page title \"BTC Tracker\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "ersatztv-legacy",
+      "title": "Install, readiness, browser check and remove of ersatztv-legacy",
+      "status": "pass",
+      "at": "2026-10-12T18:26:44.902Z",
+      "details": {
+        "name": "ersatztv-legacy-q1821",
+        "instanceId": "6f6e4555-c15f-4d81-9665-f0983488c8ea",
+        "url": "http://localhost:18083/",
+        "title": "ErsatzTV Legacy",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_6f6e4555c15f4d819665f0983488c8ea-web-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6f6e4555c15f4d819665f0983488c8ea_config/_data->/config volume:/var/lib/docker/volumes/hb_6f6e4555c15f4d819665f0983488c8ea_downloads/_data->/media volume:/var/lib/docker/volumes/hb_6f6e4555c15f4d819665f0983488c8ea_transcode/_data->/transcode"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6f6e4555c15f4d819665f0983488c8ea-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6f6e4555c15f4d819665f0983488c8ea_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/ersatztv-legacy/ersatztv-legacy-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_6f6e4555c15f4d819665f0983488c8ea_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_6f6e4555c15f4d819665f0983488c8ea_downloads",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "transcode",
+            "name": "hb_6f6e4555c15f4d819665f0983488c8ea_transcode",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 74,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 74s; page title \"ErsatzTV Legacy\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "ersatztv-legacy (external storage)",
+      "title": "Install, readiness, browser check and remove of ersatztv-legacy (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:27:13.628Z",
+      "details": {
+        "name": "ersatztv-legacy-q1821x",
+        "instanceId": "b3a1e51e-9799-4a9a-ad98-752242d0037c",
+        "url": "http://localhost:18084/",
+        "title": "ErsatzTV Legacy",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b3a1e51e97994a9aad98752242d0037c-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b3a1e51e97994a9aad98752242d0037c_config/_data->/config bind:/mnt/harbor-test-storage/ersatztv-legacy-downloads-q1821->/media volume:/var/lib/docker/volumes/hb_b3a1e51e97994a9aad98752242d0037c_transcode/_data->/transcode"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/ersatztv-legacy-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_b3a1e51e97994a9aad98752242d0037c-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b3a1e51e97994a9aad98752242d0037c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/ersatztv-legacy/ersatztv-legacy-q1821x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_b3a1e51e97994a9aad98752242d0037c_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "transcode",
+            "name": "hb_b3a1e51e97994a9aad98752242d0037c_transcode",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 28,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 28s; page title \"ErsatzTV Legacy\"; health 200",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/ersatztv-legacy-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "kiwix",
+      "title": "Install, readiness, browser check and remove of kiwix",
+      "status": "pass",
+      "at": "2026-10-12T18:27:36.917Z",
+      "details": {
+        "name": "kiwix-q1821",
+        "instanceId": "badfc4b0-ee75-42e4-948a-923c822ca0cf",
+        "url": "http://localhost:18085/",
+        "title": "Welcome to Kiwix Server",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_badfc4b0ee7542e4948a923c822ca0cf-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_badfc4b0ee7542e4948a923c822ca0cf_downloads/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_badfc4b0ee7542e4948a923c822ca0cf-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_badfc4b0ee7542e4948a923c822ca0cf_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/kiwix/kiwix-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_badfc4b0ee7542e4948a923c822ca0cf_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 23,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 23s; page title \"Welcome to Kiwix Server\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "kiwix (external storage)",
+      "title": "Install, readiness, browser check and remove of kiwix (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:27:57.685Z",
+      "details": {
+        "name": "kiwix-q1821x",
+        "instanceId": "cf1e5e65-aee0-4bed-9dad-fcf6d22cdbe1",
+        "url": "http://localhost:18086/",
+        "title": "Welcome to Kiwix Server",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cf1e5e65aee04bed9dadfcf6d22cdbe1-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "bind:/mnt/harbor-test-storage/kiwix-downloads-q1821->/data"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/kiwix-downloads-q1821",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_cf1e5e65aee04bed9dadfcf6d22cdbe1-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cf1e5e65aee04bed9dadfcf6d22cdbe1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/kiwix/kiwix-q1821x",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 20,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 20s; page title \"Welcome to Kiwix Server\"; health 200",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/kiwix-downloads-q1821 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "nutstash-wallet",
+      "title": "Install, readiness, browser check and remove of nutstash-wallet",
+      "status": "pass",
+      "at": "2026-10-12T18:28:43.119Z",
+      "details": {
+        "name": "nutstash-wallet-q1821",
+        "instanceId": "882cd023-4e5e-412f-b798-88489fbc65c4",
+        "url": "http://localhost:18087/",
+        "title": "",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_882cd0234e5e412fb79888489fbc65c4-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_882cd0234e5e412fb79888489fbc65c4-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_882cd0234e5e412fb79888489fbc65c4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/nutstash-wallet/nutstash-wallet-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 45,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 45s; page title \"\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "remmina",
+      "title": "Install, readiness, browser check and remove of remmina",
+      "status": "pass",
+      "at": "2026-10-12T18:29:57.920Z",
+      "details": {
+        "name": "remmina-q1821",
+        "instanceId": "b63d85d7-395a-40e5-8fe6-d4afb71a089e",
+        "url": "http://localhost:18088/",
+        "title": "Remmina",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b63d85d7395a40e58fe6d4afb71a089e-server-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b63d85d7395a40e58fe6d4afb71a089e_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_b63d85d7395a40e58fe6d4afb71a089e-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b63d85d7395a40e58fe6d4afb71a089e_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/remmina/remmina-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_b63d85d7395a40e58fe6d4afb71a089e_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 75,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Refused to execute script from 'http://localhost:18088/public/js/pcm-player.js' because its MIME type ('text/html') is not executable, and strict MIME type checking is enabled."
+        ]
+      },
+      "notes": [
+        "healthy after 75s; page title \"Remmina\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "tautulli",
+      "title": "Install, readiness, browser check and remove of tautulli",
+      "status": "pass",
+      "at": "2026-10-12T18:30:41.227Z",
+      "details": {
+        "name": "tautulli-q1821",
+        "instanceId": "6321947d-3120-4e0b-b5d7-516591bd4bf9",
+        "url": "http://localhost:18089/",
+        "title": "Tautulli - Welcome |",
+        "healthStatus": 303,
+        "probeHistory": [
+          303
+        ],
+        "containers": [
+          "hb_6321947d31204e0bb5d7516591bd4bf9-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6321947d31204e0bb5d7516591bd4bf9_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6321947d31204e0bb5d7516591bd4bf9-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6321947d31204e0bb5d7516591bd4bf9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/tautulli/tautulli-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_6321947d31204e0bb5d7516591bd4bf9_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Tautulli - Welcome |\"; health 303",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wizarr",
+      "title": "Install, readiness, browser check and remove of wizarr",
+      "status": "pass",
+      "at": "2026-10-12T18:31:41.261Z",
+      "details": {
+        "name": "wizarr-q1821",
+        "instanceId": "c4538f7c-fc6b-499e-8a1a-24403fe40ec5",
+        "url": "http://localhost:18090/",
+        "title": "Setup Wizarr - None",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_c4538f7cfc6b499e8a1a24403fe40ec5-app-1 Up 25 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c4538f7cfc6b499e8a1a24403fe40ec5_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_c4538f7cfc6b499e8a1a24403fe40ec5-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c4538f7cfc6b499e8a1a24403fe40ec5_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wizarr/wizarr-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_c4538f7cfc6b499e8a1a24403fe40ec5_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 60,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 60s; page title \"Setup Wizarr - None\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

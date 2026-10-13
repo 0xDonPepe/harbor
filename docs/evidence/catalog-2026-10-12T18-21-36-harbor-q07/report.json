@@ -1,0 +1,557 @@
+{
+  "runId": "catalog-2026-10-12T18-21-36-harbor-q07",
+  "target": "digitalocean droplet 608474574",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "blinko": "passed",
+    "chatbot-ui": "passed",
+    "fossflow": "passed",
+    "grafana": "passed",
+    "libreoffice": "passed",
+    "nitter": "passed",
+    "overseerr": "passed",
+    "shopstr": "passed",
+    "torbrowser": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:06.195Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "c7f152f1-7256-421b-adc6-d397b3e08177",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "blinko",
+      "title": "Install, readiness, browser check and remove of blinko",
+      "status": "pass",
+      "at": "2026-10-12T18:24:18.860Z",
+      "details": {
+        "name": "blinko-q1821",
+        "instanceId": "cf0fa64d-f2b5-427f-bfd0-e4377d8440d1",
+        "url": "http://localhost:18080/",
+        "title": "Blinko",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cf0fa64df2b5427fbfd0e4377d8440d1-app-1 Up 19 seconds",
+          "hb_cf0fa64df2b5427fbfd0e4377d8440d1-db-1 Up 30 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_cf0fa64df2b5427fbfd0e4377d8440d1_app/_data->/app/.blinko ",
+          "volume:/var/lib/docker/volumes/hb_cf0fa64df2b5427fbfd0e4377d8440d1_db/_data->/var/lib/postgresql/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_cf0fa64df2b5427fbfd0e4377d8440d1-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_cf0fa64df2b5427fbfd0e4377d8440d1-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cf0fa64df2b5427fbfd0e4377d8440d1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/blinko/blinko-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_cf0fa64df2b5427fbfd0e4377d8440d1_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_cf0fa64df2b5427fbfd0e4377d8440d1_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 70,
+        "consoleErrors": [
+          "Element with ID 'page-wrap' not found",
+          "Element with ID 'outer-container' not found"
+        ]
+      },
+      "notes": [
+        "healthy after 70s; page title \"Blinko\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "chatbot-ui",
+      "title": "Install, readiness, browser check and remove of chatbot-ui",
+      "status": "pass",
+      "at": "2026-10-12T18:25:06.315Z",
+      "details": {
+        "name": "chatbot-ui-q1821",
+        "instanceId": "74aa5387-a9cf-4bea-a902-f9eeb49b745b",
+        "url": "http://localhost:18081/",
+        "title": "Chatbot UI",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_74aa5387a9cf4beaa902f9eeb49b745b-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_74aa5387a9cf4beaa902f9eeb49b745b-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_74aa5387a9cf4beaa902f9eeb49b745b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/chatbot-ui/chatbot-ui-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 47,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 47s; page title \"Chatbot UI\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "fossflow",
+      "title": "Install, readiness, browser check and remove of fossflow",
+      "status": "pass",
+      "at": "2026-10-12T18:25:54.357Z",
+      "details": {
+        "name": "fossflow-q1821",
+        "instanceId": "a2bc47c1-aa03-4e65-a152-7d7affd51709",
+        "url": "http://localhost:18082/",
+        "title": "FossFLOW - Isometric Diagramming Tool",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a2bc47c1aa034e65a1527d7affd51709-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a2bc47c1aa034e65a1527d7affd51709_diagrams/_data->/data/diagrams"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a2bc47c1aa034e65a1527d7affd51709-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a2bc47c1aa034e65a1527d7affd51709_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/fossflow/fossflow-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "diagrams",
+            "name": "hb_a2bc47c1aa034e65a1527d7affd51709_diagrams",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 48,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 48s; page title \"FossFLOW - Isometric Diagramming Tool\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "grafana",
+      "title": "Install, readiness, browser check and remove of grafana",
+      "status": "pass",
+      "at": "2026-10-12T18:26:52.552Z",
+      "details": {
+        "name": "grafana-q1821",
+        "instanceId": "beeed3fa-8191-46be-9859-c76d1c4abb44",
+        "url": "http://localhost:18083/",
+        "title": "Grafana",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_beeed3fa819146be9859c76d1c4abb44-web-1 Up 22 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_beeed3fa819146be9859c76d1c4abb44_data/_data->/var/lib/grafana"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_beeed3fa819146be9859c76d1c4abb44-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_beeed3fa819146be9859c76d1c4abb44_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/grafana/grafana-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_beeed3fa819146be9859c76d1c4abb44_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 58,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 58s; page title \"Grafana\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "libreoffice",
+      "title": "Install, readiness, browser check and remove of libreoffice",
+      "status": "pass",
+      "at": "2026-10-12T18:27:55.324Z",
+      "details": {
+        "name": "libreoffice-q1821",
+        "instanceId": "dc4c5e7e-7b43-4671-bb1b-05d15d423919",
+        "url": "http://localhost:18084/",
+        "title": "LibreOffice",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_dc4c5e7e7b434671bb1b05d15d423919-server-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_dc4c5e7e7b434671bb1b05d15d423919_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_dc4c5e7e7b434671bb1b05d15d423919-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_dc4c5e7e7b434671bb1b05d15d423919_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/libreoffice/libreoffice-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_dc4c5e7e7b434671bb1b05d15d423919_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 63,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 63s; page title \"LibreOffice\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "nitter",
+      "title": "Install, readiness, browser check and remove of nitter",
+      "status": "pass",
+      "at": "2026-10-12T18:28:37.281Z",
+      "details": {
+        "name": "nitter-q1821",
+        "instanceId": "cbdebead-1636-45b4-91a9-9128a16744fb",
+        "url": "http://localhost:18085/",
+        "title": "nitter",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cbdebead163645b491a99128a16744fb-web-1 Up 12 seconds",
+          "hb_cbdebead163645b491a99128a16744fb-redis-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_cbdebead163645b491a99128a16744fb_redis/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "redis",
+            "name": "hb_cbdebead163645b491a99128a16744fb-redis-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_cbdebead163645b491a99128a16744fb-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cbdebead163645b491a99128a16744fb_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/nitter/nitter-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redis",
+            "name": "hb_cbdebead163645b491a99128a16744fb_redis",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 42,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 42s; page title \"nitter\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "overseerr",
+      "title": "Install, readiness, browser check and remove of overseerr",
+      "status": "pass",
+      "at": "2026-10-12T18:29:33.346Z",
+      "details": {
+        "name": "overseerr-q1821",
+        "instanceId": "f4daefce-6924-47e3-a5c1-773f34a77267",
+        "url": "http://localhost:18086/",
+        "title": "Setup - Overseerr",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_f4daefce692447e3a5c1773f34a77267-server-1 Up 21 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_f4daefce692447e3a5c1773f34a77267_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_f4daefce692447e3a5c1773f34a77267-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_f4daefce692447e3a5c1773f34a77267_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/overseerr/overseerr-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_f4daefce692447e3a5c1773f34a77267_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 56,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 56s; page title \"Setup - Overseerr\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "shopstr",
+      "title": "Install, readiness, browser check and remove of shopstr",
+      "status": "pass",
+      "at": "2026-10-12T18:30:40.021Z",
+      "details": {
+        "name": "shopstr-q1821",
+        "instanceId": "5acb9fb7-12d3-4d08-8ac1-cf38cdce9e89",
+        "url": "http://localhost:18087/",
+        "title": "Shopstr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_5acb9fb712d34d088ac1cf38cdce9e89-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_5acb9fb712d34d088ac1cf38cdce9e89-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5acb9fb712d34d088ac1cf38cdce9e89_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/shopstr/shopstr-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 67,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 67s; page title \"Shopstr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "torbrowser",
+      "title": "Install, readiness, browser check and remove of torbrowser",
+      "status": "pass",
+      "at": "2026-10-12T18:31:28.653Z",
+      "details": {
+        "name": "torbrowser-q1821",
+        "instanceId": "416f2955-e8d4-4681-a150-a80720567951",
+        "url": "http://localhost:18088/",
+        "title": "Tor Browser",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_416f2955e8d44681a150a80720567951-web-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_416f2955e8d44681a150a80720567951_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_416f2955e8d44681a150a80720567951-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_416f2955e8d44681a150a80720567951_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/torbrowser/torbrowser-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_416f2955e8d44681a150a80720567951_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 49,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 49s; page title \"Tor Browser\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

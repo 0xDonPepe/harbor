@@ -1,0 +1,555 @@
+{
+  "runId": "catalog-2026-10-12T17-13-55-harbor-q13",
+  "target": "digitalocean droplet 608459113",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "element": "passed",
+    "hortusfox": "passed",
+    "influxdb2": "passed",
+    "myspeed": "passed",
+    "pinchflat": "blocked",
+    "strix": "passed",
+    "whoogle-search": "passed",
+    "yamtrack": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:16.607Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "a6b3799d-6d0f-4cb2-bf7a-98ae875faa85",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "element",
+      "title": "Install, readiness, browser check and remove of element",
+      "status": "pass",
+      "at": "2026-10-12T17:15:57.140Z",
+      "details": {
+        "name": "element-q1713",
+        "instanceId": "7b0e5861-4c68-416d-942c-46b12e9dd887",
+        "url": "http://localhost:18080/",
+        "title": "Element",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7b0e58614c68416d942c46b12e9dd887-web-1 Up 18 seconds (healthy)"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_7b0e58614c68416d942c46b12e9dd887-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7b0e58614c68416d942c46b12e9dd887_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/element/element-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 38,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 403 ()",
+          "Failed to register as guest M_FORBIDDEN: MatrixError: [403] Registration has been disabled. Only m.login.application_service registrations are allowed. (https://matrix-client.matrix.org/_matrix/client"
+        ]
+      },
+      "notes": [
+        "healthy after 38s; page title \"Element\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "hortusfox",
+      "title": "Install, readiness, browser check and remove of hortusfox",
+      "status": "pass",
+      "at": "2026-10-12T17:16:59.949Z",
+      "details": {
+        "name": "hortusfox-q1713",
+        "instanceId": "b03b60d5-b917-469f-9ba3-ab7e6e67ea26",
+        "url": "http://localhost:18081/",
+        "title": "My workspace",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_b03b60d5b917469f9ba3ab7e6e67ea26-app-1 Up 26 seconds",
+          "hb_b03b60d5b917469f9ba3ab7e6e67ea26-db-1 Up 26 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_logs/_data->/var/www/html/app/logs volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_migrate/_data->/var/www/html/app/migrations volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_attachments/_data->/var/www/html/public/attachments volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_backup/_data->/var/www/html/public/backup volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_images/_data->/var/www/html/public/img volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_themes/_data->/var/www/html/public/themes ",
+          "volume:/var/lib/docker/volumes/hb_b03b60d5b917469f9ba3ab7e6e67ea26_db-data/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/hortusfox/hortusfox-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "attachments",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_attachments",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backup",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_backup",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db-data",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_db-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_images",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logs",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_logs",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "migrate",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_migrate",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "themes",
+            "name": "hb_b03b60d5b917469f9ba3ab7e6e67ea26_themes",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 63,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 63s; page title \"My workspace\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "influxdb2",
+      "title": "Install, readiness, browser check and remove of influxdb2",
+      "status": "pass",
+      "at": "2026-10-12T17:17:31.139Z",
+      "details": {
+        "name": "influxdb2-q1713",
+        "instanceId": "0b50debe-4b4b-41a8-8f09-70103bc2e519",
+        "url": "http://localhost:18082/",
+        "title": "InfluxDB",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0b50debe4b4b41a88f0970103bc2e519-app-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0b50debe4b4b41a88f0970103bc2e519_config/_data->/etc/influxdb2 volume:/var/lib/docker/volumes/hb_0b50debe4b4b41a88f0970103bc2e519_data/_data->/var/lib/influxdb2"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_0b50debe4b4b41a88f0970103bc2e519-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0b50debe4b4b41a88f0970103bc2e519_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/influxdb2/influxdb2-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_0b50debe4b4b41a88f0970103bc2e519_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_0b50debe4b4b41a88f0970103bc2e519_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 31,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 31s; page title \"InfluxDB\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "myspeed",
+      "title": "Install, readiness, browser check and remove of myspeed",
+      "status": "pass",
+      "at": "2026-10-12T17:18:22.058Z",
+      "details": {
+        "name": "myspeed-q1713",
+        "instanceId": "b14eca3a-c32d-43cc-be9c-271d60cf202d",
+        "url": "http://localhost:18083/",
+        "title": "MySpeed",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_b14eca3ac32d43ccbe9c271d60cf202d-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_b14eca3ac32d43ccbe9c271d60cf202d_myspeed/_data->/myspeed/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_b14eca3ac32d43ccbe9c271d60cf202d-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_b14eca3ac32d43ccbe9c271d60cf202d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/myspeed/myspeed-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "myspeed",
+            "name": "hb_b14eca3ac32d43ccbe9c271d60cf202d_myspeed",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"MySpeed\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pinchflat",
+      "title": "Install, readiness, browser check and remove of pinchflat",
+      "status": "pass",
+      "at": "2026-10-12T17:19:09.914Z",
+      "details": {
+        "name": "pinchflat-q1713",
+        "instanceId": "2c8ce2a9-1a26-4405-a22f-30906fa30662",
+        "url": "http://localhost:18084/",
+        "title": "Pinchflat",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2c8ce2a91a264405a22f30906fa30662-web-1 Up 21 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2c8ce2a91a264405a22f30906fa30662_config/_data->/config volume:/var/lib/docker/volumes/hb_2c8ce2a91a264405a22f30906fa30662_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_2c8ce2a91a264405a22f30906fa30662-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2c8ce2a91a264405a22f30906fa30662_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pinchflat/pinchflat-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_2c8ce2a91a264405a22f30906fa30662_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_2c8ce2a91a264405a22f30906fa30662_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 48,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 48s; page title \"Pinchflat\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pinchflat (external storage)",
+      "title": "Install, readiness, browser check and remove of pinchflat (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:19:12.223Z",
+      "details": {
+        "error": "harbor install pinchflat --name pinchflat-q1713x --storage downloads=/mnt/harbor-test-storage/pinchflat-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"pinchflat does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install pinchflat --name pinchflat-q1713x --storage downloads=/mnt/harbor-test-storage/pinchflat-downloads-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"pinchflat does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "strix",
+      "title": "Install, readiness, browser check and remove of strix",
+      "status": "pass",
+      "at": "2026-10-12T17:20:13.548Z",
+      "details": {
+        "name": "strix-q1713",
+        "instanceId": "746ca89d-c017-4f02-be76-b9caaeb6d682",
+        "url": "http://localhost:18085/",
+        "title": "Strix - Camera Stream Discovery",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_746ca89dc0174f02be76b9caaeb6d682-web-1 Up 43 seconds (healthy)"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_746ca89dc0174f02be76b9caaeb6d682-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_746ca89dc0174f02be76b9caaeb6d682_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/strix/strix-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 60,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 60s; page title \"Strix - Camera Stream Discovery\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "whoogle-search",
+      "title": "Install, readiness, browser check and remove of whoogle-search",
+      "status": "pass",
+      "at": "2026-10-12T17:22:06.222Z",
+      "details": {
+        "name": "whoogle-search-q1713",
+        "instanceId": "9a65fa07-d036-4f67-9770-678a31acab03",
+        "url": "http://localhost:18086/",
+        "title": "Whoogle Search",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_9a65fa07d0364f679770678a31acab03-web-1 Up About a minute (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/70334d808d98c350912346bd5ba66559da91b6fc7466f079382b6ff2a2f6f7ba/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_9a65fa07d0364f679770678a31acab03-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_9a65fa07d0364f679770678a31acab03_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/whoogle-search/whoogle-search-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 113,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 113s; page title \"Whoogle Search\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "yamtrack",
+      "title": "Install, readiness, browser check and remove of yamtrack",
+      "status": "pass",
+      "at": "2026-10-12T17:24:02.132Z",
+      "details": {
+        "name": "yamtrack-q1713",
+        "instanceId": "6142cbad-cafb-4641-b70e-a31391a51d06",
+        "url": "http://localhost:18087/",
+        "title": "Login - Yamtrack",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_6142cbadcafb4641b70ea31391a51d06-web-1 Up About a minute (healthy)",
+          "hb_6142cbadcafb4641b70ea31391a51d06-redis-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6142cbadcafb4641b70ea31391a51d06_db/_data->/yamtrack/db ",
+          "volume:/var/lib/docker/volumes/hb_6142cbadcafb4641b70ea31391a51d06_redis/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "redis",
+            "name": "hb_6142cbadcafb4641b70ea31391a51d06-redis-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_6142cbadcafb4641b70ea31391a51d06-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6142cbadcafb4641b70ea31391a51d06_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/yamtrack/yamtrack-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_6142cbadcafb4641b70ea31391a51d06_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redis",
+            "name": "hb_6142cbadcafb4641b70ea31391a51d06_redis",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 116,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 116s; page title \"Login - Yamtrack\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

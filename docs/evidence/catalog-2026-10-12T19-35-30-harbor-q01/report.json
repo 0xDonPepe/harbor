@@ -1,0 +1,60 @@
+{
+  "runId": "catalog-2026-10-12T19-35-30-harbor-q01",
+  "target": "digitalocean droplet 608492173",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "wireguard": "blocked"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T19:36:46.093Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "2b20fdcb-475d-4d41-a4d8-d8685985b073",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791833593,
+          "commit": "3be48ab0598c8b10c46d58a702afc383dbcd00f1",
+          "createdAt": "2026-10-12T19:33:13.000Z",
+          "origin": "bundled",
+          "packages": 139,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791833593, updates off)"
+      ]
+    },
+    {
+      "id": "wireguard",
+      "title": "Install, readiness, browser check and remove of wireguard",
+      "status": "fail",
+      "at": "2026-10-12T19:39:53.202Z",
+      "details": {
+        "error": "harbor --accept-permissions install wireguard --name wireguard-q1935 --yes exited 1:     },\n    {\n      \"cursor\": \"6\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_99c41dcfbd34470280fe78329a57afdc_config on the drive (/srv/harbor/harbor-apps/wireguard/wireguard-q1935/volumes/config)\"\n    },\n    {\n      \"cursor\": \"7\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"8\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"9\",\n      \"at\": \"2026-10-12T19:36:57Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"10\",\n      \"at\": \"2026-10-12T19:39:53Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"11\",\n      \"at\": \"2026-10-12T19:39:53Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): b_99c41dcfbd34470280fe78329a57afdc_default Created \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Creating \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Created \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Starting \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Started \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Waiting \\napplication not healthy after 2m55s\\n\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor --accept-permissions install wireguard --name wireguard-q1935 --yes exited 1:     },\n    {\n      \"cursor\": \"6\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_99c41dcfbd34470280fe78329a57afdc_config on the drive (/srv/harbor/harbor-apps/wireguard/wireguard-q1935/volumes/config)\"\n    },\n    {\n      \"cursor\": \"7\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"8\",\n      \"at\": \"2026-10-12T19:36:52Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"9\",\n      \"at\": \"2026-10-12T19:36:57Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"10\",\n      \"at\": \"2026-10-12T19:39:53Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"11\",\n      \"at\": \"2026-10-12T19:39:53Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): b_99c41dcfbd34470280fe78329a57afdc_default Created \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Creating \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Created \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Starting \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Started \\n Container hb_99c41dcfbd34470280fe78329a57afdc-app-1 Waiting \\napplication not healthy after 2m55s\\n\"\n    }\n  ]\n}\n"
+      ]
+    }
+  ]
+}

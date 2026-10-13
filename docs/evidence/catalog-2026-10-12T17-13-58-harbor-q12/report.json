@@ -1,0 +1,588 @@
+{
+  "runId": "catalog-2026-10-12T17-13-58-harbor-q12",
+  "target": "digitalocean droplet 608459101",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "duplicati": "blocked",
+    "ghost": "passed",
+    "homebox": "passed",
+    "mstream": "blocked",
+    "picoclaw": "passed",
+    "stirling-pdf": "passed",
+    "wavelog": "passed",
+    "webcheck": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:39.716Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "dd0ee907-46a5-4b19-bcdb-c91d9d873763",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "duplicati",
+      "title": "Install, readiness, browser check and remove of duplicati",
+      "status": "pass",
+      "at": "2026-10-12T17:16:28.719Z",
+      "details": {
+        "name": "duplicati-q1713",
+        "instanceId": "64594b85-d71a-4669-94b8-36038684a4d1",
+        "url": "http://localhost:18080/",
+        "title": "Duplicati ngclient",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_64594b85d71a466994b836038684a4d1-duplicati-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_64594b85d71a466994b836038684a4d1_data/_data->/data volume:/var/lib/docker/volumes/hb_64594b85d71a466994b836038684a4d1_storage/_data->/umbrel"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "duplicati",
+            "name": "hb_64594b85d71a466994b836038684a4d1-duplicati-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_64594b85d71a466994b836038684a4d1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/duplicati/duplicati-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_64594b85d71a466994b836038684a4d1_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "storage",
+            "name": "hb_64594b85d71a466994b836038684a4d1_storage",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 46s; page title \"Duplicati ngclient\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "duplicati (external storage)",
+      "title": "Install, readiness, browser check and remove of duplicati (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:16:31.350Z",
+      "details": {
+        "error": "harbor install duplicati --name duplicati-q1713x --storage storage=/mnt/harbor-test-storage/duplicati-storage-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"duplicati does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install duplicati --name duplicati-q1713x --storage storage=/mnt/harbor-test-storage/duplicati-storage-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"duplicati does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "ghost",
+      "title": "Install, readiness, browser check and remove of ghost",
+      "status": "pass",
+      "at": "2026-10-12T17:18:47.418Z",
+      "details": {
+        "name": "ghost-q1713",
+        "instanceId": "e4495887-c4af-48f8-a7eb-971eaaa36e77",
+        "url": "http://localhost:18081/",
+        "title": "Ghost",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e4495887c4af48f8a7eb971eaaa36e77-web-1 Up 40 seconds",
+          "hb_e4495887c4af48f8a7eb971eaaa36e77-db-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e4495887c4af48f8a7eb971eaaa36e77_content/_data->/var/lib/ghost/content ",
+          "volume:/var/lib/docker/volumes/hb_e4495887c4af48f8a7eb971eaaa36e77_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_e4495887c4af48f8a7eb971eaaa36e77-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_e4495887c4af48f8a7eb971eaaa36e77-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e4495887c4af48f8a7eb971eaaa36e77_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/ghost/ghost-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "content",
+            "name": "hb_e4495887c4af48f8a7eb971eaaa36e77_content",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_e4495887c4af48f8a7eb971eaaa36e77_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 134,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 134s; page title \"Ghost\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "homebox",
+      "title": "Install, readiness, browser check and remove of homebox",
+      "status": "pass",
+      "at": "2026-10-12T17:19:20.980Z",
+      "details": {
+        "name": "homebox-q1713",
+        "instanceId": "c40166d4-3c64-481e-86fc-c5484a189fd5",
+        "url": "http://localhost:18082/",
+        "title": "HomeBox | Organize and Tag Your Stuff",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c40166d43c64481e86fcc5484a189fd5-web-1 Up 18 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c40166d43c64481e86fcc5484a189fd5_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_c40166d43c64481e86fcc5484a189fd5-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c40166d43c64481e86fcc5484a189fd5_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/homebox/homebox-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_c40166d43c64481e86fcc5484a189fd5_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 34,
+        "consoleErrors": [
+          "Failed to set theme TypeError: Cannot read properties of null (reading 'theme')\n    at http://localhost:18082/set-theme.js:3:81",
+          "[nuxt] Error creating app manifest matcher. undefined"
+        ]
+      },
+      "notes": [
+        "healthy after 34s; page title \"HomeBox | Organize and Tag Your Stuff\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "mstream",
+      "title": "Install, readiness, browser check and remove of mstream",
+      "status": "pass",
+      "at": "2026-10-12T17:20:30.146Z",
+      "details": {
+        "name": "mstream-q1713",
+        "instanceId": "9af18eaf-ec60-4f2d-85e5-6d6e2cf2531a",
+        "url": "http://localhost:18083/",
+        "title": "mStream Music",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_9af18eafec604f2d85e56d6e2cf2531a-server-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_9af18eafec604f2d85e56d6e2cf2531a_data/_data->/config volume:/var/lib/docker/volumes/hb_9af18eafec604f2d85e56d6e2cf2531a_downloads-music/_data->/music"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_9af18eafec604f2d85e56d6e2cf2531a-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_9af18eafec604f2d85e56d6e2cf2531a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/mstream/mstream-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_9af18eafec604f2d85e56d6e2cf2531a_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads-music",
+            "name": "hb_9af18eafec604f2d85e56d6e2cf2531a_downloads-music",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 69,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+        ]
+      },
+      "notes": [
+        "healthy after 69s; page title \"mStream Music\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "mstream (external storage)",
+      "title": "Install, readiness, browser check and remove of mstream (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:20:33.034Z",
+      "details": {
+        "error": "harbor install mstream --name mstream-q1713x --storage downloads-music=/mnt/harbor-test-storage/mstream-downloads-music-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"mstream does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install mstream --name mstream-q1713x --storage downloads-music=/mnt/harbor-test-storage/mstream-downloads-music-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"mstream does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "picoclaw",
+      "title": "Install, readiness, browser check and remove of picoclaw",
+      "status": "pass",
+      "at": "2026-10-12T17:21:07.040Z",
+      "details": {
+        "name": "picoclaw-q1713",
+        "instanceId": "36b097b6-49b5-474e-a332-53f57ee0a222",
+        "url": "http://localhost:18084/",
+        "title": "PicoClaw",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_36b097b649b5474ea33253f57ee0a222-server-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_36b097b649b5474ea33253f57ee0a222_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_36b097b649b5474ea33253f57ee0a222-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_36b097b649b5474ea33253f57ee0a222_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/picoclaw/picoclaw-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_36b097b649b5474ea33253f57ee0a222_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 32s; page title \"PicoClaw\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "stirling-pdf",
+      "title": "Install, readiness, browser check and remove of stirling-pdf",
+      "status": "pass",
+      "at": "2026-10-12T17:23:48.653Z",
+      "details": {
+        "name": "stirling-pdf-q1713",
+        "instanceId": "9521edb4-b599-432b-a7a9-053cef124667",
+        "url": "http://localhost:18085/",
+        "title": "Stirling PDF",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_9521edb4b599432ba7a9053cef124667-app-1 Up About a minute (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_9521edb4b599432ba7a9053cef124667_configs/_data->/configs volume:/var/lib/docker/volumes/hb_9521edb4b599432ba7a9053cef124667_logs/_data->/logs volume:/var/lib/docker/volumes/hb_9521edb4b599432ba7a9053cef124667_pipeline/_data->/pipeline volume:/var/lib/docker/volumes/hb_9521edb4b599432ba7a9053cef124667_tessdata/_data->/usr/share/tessdata"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_9521edb4b599432ba7a9053cef124667-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_9521edb4b599432ba7a9053cef124667_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/stirling-pdf/stirling-pdf-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "configs",
+            "name": "hb_9521edb4b599432ba7a9053cef124667_configs",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logs",
+            "name": "hb_9521edb4b599432ba7a9053cef124667_logs",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "pipeline",
+            "name": "hb_9521edb4b599432ba7a9053cef124667_pipeline",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "tessdata",
+            "name": "hb_9521edb4b599432ba7a9053cef124667_tessdata",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 162,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 162s; page title \"Stirling PDF\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wavelog",
+      "title": "Install, readiness, browser check and remove of wavelog",
+      "status": "pass",
+      "at": "2026-10-12T17:24:40.426Z",
+      "details": {
+        "name": "wavelog-q1713",
+        "instanceId": "ab190398-fb9e-44a4-949f-ec3deb2a30b4",
+        "url": "http://localhost:18086/",
+        "title": "Install | Wavelog",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_ab190398fb9e44a4949fec3deb2a30b4-app-1 Up 13 seconds",
+          "hb_ab190398fb9e44a4949fec3deb2a30b4-wavelog-db-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_ab190398fb9e44a4949fec3deb2a30b4_uploads/_data->/var/www/html/uploads volume:/var/lib/docker/volumes/hb_ab190398fb9e44a4949fec3deb2a30b4_userdata/_data->/var/www/html/userdata volume:/var/lib/docker/volumes/hb_ab190398fb9e44a4949fec3deb2a30b4_config/_data->/var/www/html/application/config/docker ",
+          "volume:/var/lib/docker/volumes/hb_ab190398fb9e44a4949fec3deb2a30b4_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "wavelog-db",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4-wavelog-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wavelog/wavelog-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "uploads",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4_uploads",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "userdata",
+            "name": "hb_ab190398fb9e44a4949fec3deb2a30b4_userdata",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 52,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 52s; page title \"Install | Wavelog\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "webcheck",
+      "title": "Install, readiness, browser check and remove of webcheck",
+      "status": "pass",
+      "at": "2026-10-12T17:25:51.773Z",
+      "details": {
+        "name": "webcheck-q1713",
+        "instanceId": "d04e2b81-f627-4891-9f12-a13cbde246ab",
+        "url": "http://localhost:18087/",
+        "title": "Web Check",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_d04e2b81f62748919f12a13cbde246ab-server-1 Up 21 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_d04e2b81f62748919f12a13cbde246ab_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_d04e2b81f62748919f12a13cbde246ab-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d04e2b81f62748919f12a13cbde246ab_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/webcheck/webcheck-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_d04e2b81f62748919f12a13cbde246ab_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 71,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 71s; page title \"Web Check\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

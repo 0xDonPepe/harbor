@@ -1,0 +1,157 @@
+{
+  "runId": "catalog-2026-10-12T18-49-30-harbor-q01",
+  "target": "digitalocean droplet 608480497",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "metube": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:50:06.290Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "b87378a4-4ac0-40b1-9b20-6824e2c3ec75",
+        "fresh": false,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791830947,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:49:07.000Z",
+          "origin": "bundled",
+          "packages": 141,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791830947, updates off)"
+      ]
+    },
+    {
+      "id": "metube",
+      "title": "Install, readiness, browser check and remove of metube",
+      "status": "pass",
+      "at": "2026-10-12T18:50:33.255Z",
+      "details": {
+        "name": "metube-q1849",
+        "instanceId": "140ce260-d6c2-47fc-9a13-7d82c4db1e8c",
+        "url": "http://localhost:18083/",
+        "title": "MeTube",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_140ce260d6c247fc9a137d82c4db1e8c-metube-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_140ce260d6c247fc9a137d82c4db1e8c_downloads-metube/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "metube",
+            "name": "hb_140ce260d6c247fc9a137d82c4db1e8c-metube-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_140ce260d6c247fc9a137d82c4db1e8c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/metube/metube-q1849",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads-metube",
+            "name": "hb_140ce260d6c247fc9a137d82c4db1e8c_downloads-metube",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 24,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 24s; page title \"MeTube\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "metube (external storage)",
+      "title": "Install, readiness, browser check and remove of metube (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:50:56.838Z",
+      "details": {
+        "name": "metube-q1849x",
+        "instanceId": "496e0f66-faa6-4540-8edf-7c6fab30c3ba",
+        "url": "http://localhost:18084/",
+        "title": "MeTube",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_496e0f66faa645408edf7c6fab30c3ba-metube-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "bind:/mnt/harbor-test-storage/metube-downloads-metube-q1849->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads-metube",
+            "name": "/mnt/harbor-test-storage/metube-downloads-metube-q1849",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "metube",
+            "name": "hb_496e0f66faa645408edf7c6fab30c3ba-metube-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_496e0f66faa645408edf7c6fab30c3ba_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/metube/metube-q1849x",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 23,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 23s; page title \"MeTube\"; health 200",
+        "external storage: --storage downloads-metube=/mnt/harbor-test-storage/metube-downloads-metube-q1849 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

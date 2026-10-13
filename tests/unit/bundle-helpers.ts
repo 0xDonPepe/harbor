@@ -2,6 +2,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { sha256Hex } from '../../src/packages/inventory.js';
 import { writeZip } from '../../src/packages/zip.js';
+import type { ReleaseKey } from '../../src/release-keys.js';
+import { signDetached } from '../../src/signing.js';
+import { generateKeyPairSync } from 'node:crypto';
 
 // Catalog bundles for tests (decision 158): catalog.zip + the catalog.json that pins it (an integrity check).
 
@@ -36,9 +39,21 @@ export function bumpRevision(files: Record<string, Buffer>, id: string, revision
   return out;
 }
 
+// Decision 168: a throwaway Ed25519 key per test run signs every test bundle (never the real release key).
+export function testKeyPair(id: string): { key: ReleaseKey; privatePem: string } {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  return { key: { id, pem: publicKey.export({ type: 'spki', format: 'pem' }).toString() }, privatePem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString() };
+}
+export const TEST_SIGNER = testKeyPair('test-FIXTURE-key');
+export const TEST_KEYS: readonly ReleaseKey[] = [TEST_SIGNER.key];
+
 export interface TestBundle {
   meta: Buffer;
   zip: Buffer;
+  // the release tag c<serial> it is published under
+  serial: number;
+  // catalog.json.sig by TEST_SIGNER
+  sig: Buffer;
 }
 
 export function buildBundle(files: Record<string, Buffer | string>, opts: { serial: number; commit?: string; createdAt?: string; metaPatch?: Record<string, unknown> }): TestBundle {
@@ -56,5 +71,5 @@ export function buildBundle(files: Record<string, Buffer | string>, opts: { seri
       ...(opts.metaPatch ?? {}),
     }),
   );
-  return { meta, zip };
+  return { meta, zip, serial: opts.serial, sig: Buffer.from(signDetached(meta, TEST_SIGNER.privatePem)) };
 }

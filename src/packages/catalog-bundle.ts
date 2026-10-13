@@ -15,6 +15,8 @@ import { readZip, type ZipLimits } from './zip.js';
 export const OFFICIAL_CATALOG_URL = 'https://github.com/carlosalaniz/harbor-apps/releases/latest/download';
 
 export const BUNDLE_FILES = { zip: 'catalog.zip', meta: 'catalog.json' } as const;
+// decision 168: base64 Ed25519 signature over the exact catalog.json bytes (src/signing.ts), a release asset beside it
+export const BUNDLE_SIG_FILE = 'catalog.json.sig';
 export const BUNDLE_ZIP_LIMITS: ZipLimits = { maxEntries: 4096, maxFileBytes: 4 * 1024 * 1024, maxTotalBytes: 96 * 1024 * 1024 };
 export const MAX_BUNDLE_ZIP_BYTES = 96 * 1024 * 1024;
 export const MAX_BUNDLE_META_BYTES = 64 * 1024;

@@ -1,0 +1,496 @@
+{
+  "runId": "catalog-2026-10-12T17-13-30-harbor-q06",
+  "target": "digitalocean droplet 608459041",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "bitaxe-sentry": "passed",
+    "chatpad-ai": "passed",
+    "gitea-mirror": "passed",
+    "librespeed": "passed",
+    "llama-gpt": "passed",
+    "palmr": "passed",
+    "slink": "passed",
+    "transmute": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:14:49.196Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "f9499288-df5c-4f3a-a6e7-d9af39bc0ac1",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "bitaxe-sentry",
+      "title": "Install, readiness, browser check and remove of bitaxe-sentry",
+      "status": "pass",
+      "at": "2026-10-12T17:15:44.461Z",
+      "details": {
+        "name": "bitaxe-sentry-q1713",
+        "instanceId": "4efe2403-4203-4c7e-8979-9a265ee6934e",
+        "url": "http://localhost:18080/",
+        "title": "Dashboard - Bitaxe Sentry",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_4efe240342034c7e89799a265ee6934e-web-1 Up 17 seconds",
+          "hb_4efe240342034c7e89799a265ee6934e-sentry-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_4efe240342034c7e89799a265ee6934e_sentry/_data->/var/lib/bitaxe ",
+          "volume:/var/lib/docker/volumes/hb_4efe240342034c7e89799a265ee6934e_sentry/_data->/var/lib/bitaxe"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "sentry",
+            "name": "hb_4efe240342034c7e89799a265ee6934e-sentry-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_4efe240342034c7e89799a265ee6934e-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_4efe240342034c7e89799a265ee6934e_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bitaxe-sentry/bitaxe-sentry-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "sentry",
+            "name": "hb_4efe240342034c7e89799a265ee6934e_sentry",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"Dashboard - Bitaxe Sentry\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "chatpad-ai",
+      "title": "Install, readiness, browser check and remove of chatpad-ai",
+      "status": "pass",
+      "at": "2026-10-12T17:16:11.186Z",
+      "details": {
+        "name": "chatpad-ai-q1713",
+        "instanceId": "e9a66f19-14b9-4af1-bb91-c54462204926",
+        "url": "http://localhost:18081/",
+        "title": "Chatpad AI",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e9a66f1914b94af1bb91c54462204926-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_e9a66f1914b94af1bb91c54462204926-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e9a66f1914b94af1bb91c54462204926_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/chatpad-ai/chatpad-ai-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 27,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 27s; page title \"Chatpad AI\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "gitea-mirror",
+      "title": "Install, readiness, browser check and remove of gitea-mirror",
+      "status": "pass",
+      "at": "2026-10-12T17:17:00.098Z",
+      "details": {
+        "name": "gitea-mirror-q1713",
+        "instanceId": "a39e2677-6fa8-4b50-9e9c-8319aa57bb0c",
+        "url": "http://localhost:18082/",
+        "title": "Setup Admin Account - Gitea Mirror",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_a39e26776fa84b509e9c8319aa57bb0c-web-1 Up 18 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a39e26776fa84b509e9c8319aa57bb0c_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a39e26776fa84b509e9c8319aa57bb0c-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a39e26776fa84b509e9c8319aa57bb0c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/gitea-mirror/gitea-mirror-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_a39e26776fa84b509e9c8319aa57bb0c_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 49,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 49s; page title \"Setup Admin Account - Gitea Mirror\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "librespeed",
+      "title": "Install, readiness, browser check and remove of librespeed",
+      "status": "pass",
+      "at": "2026-10-12T17:17:42.987Z",
+      "details": {
+        "name": "librespeed-q1713",
+        "instanceId": "e5e26467-539c-4fb4-b439-6f689d823ebc",
+        "url": "http://localhost:18083/",
+        "title": "LibreSpeed",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e5e26467539c4fb4b4396f689d823ebc-server-1 Up 16 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e5e26467539c4fb4b4396f689d823ebc_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_e5e26467539c4fb4b4396f689d823ebc-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e5e26467539c4fb4b4396f689d823ebc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/librespeed/librespeed-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_e5e26467539c4fb4b4396f689d823ebc_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"LibreSpeed\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "llama-gpt",
+      "title": "Install, readiness, browser check and remove of llama-gpt",
+      "status": "pass",
+      "at": "2026-10-12T17:21:41.995Z",
+      "details": {
+        "name": "llama-gpt-q1713",
+        "instanceId": "d4cd4870-c71e-4ace-9fd5-4e5b82c99b5f",
+        "url": "http://localhost:18084/",
+        "title": "LlamaGPT",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_d4cd4870c71e4ace9fd54e5b82c99b5f-llama-gpt-api-1 Up 54 seconds",
+          "hb_d4cd4870c71e4ace9fd54e5b82c99b5f-llama-gpt-ui-1 Up 53 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "llama-gpt-api",
+            "name": "hb_d4cd4870c71e4ace9fd54e5b82c99b5f-llama-gpt-api-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "llama-gpt-ui",
+            "name": "hb_d4cd4870c71e4ace9fd54e5b82c99b5f-llama-gpt-ui-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_d4cd4870c71e4ace9fd54e5b82c99b5f_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/llama-gpt/llama-gpt-q1713",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 239,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 239s; page title \"LlamaGPT\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "palmr",
+      "title": "Install, readiness, browser check and remove of palmr",
+      "status": "pass",
+      "at": "2026-10-12T17:22:51.741Z",
+      "details": {
+        "name": "palmr-q1713",
+        "instanceId": "1c0e1000-fbd1-4619-9e61-f2d50b5c3d36",
+        "url": "http://localhost:18085/",
+        "title": "Palmr.",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_1c0e1000fbd146199e61f2d50b5c3d36-server-1 Up 28 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_1c0e1000fbd146199e61f2d50b5c3d36_data/_data->/app/server"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_1c0e1000fbd146199e61f2d50b5c3d36-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1c0e1000fbd146199e61f2d50b5c3d36_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/palmr/palmr-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_1c0e1000fbd146199e61f2d50b5c3d36_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 70,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 70s; page title \"Palmr.\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "slink",
+      "title": "Install, readiness, browser check and remove of slink",
+      "status": "pass",
+      "at": "2026-10-12T17:24:11.920Z",
+      "details": {
+        "name": "slink-q1713",
+        "instanceId": "ffd3e7c9-bbd6-4dab-8843-b520ea49d3d1",
+        "url": "http://localhost:18086/",
+        "title": "Explore Gallery | Slink",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_ffd3e7c9bbd64dab8843b520ea49d3d1-web-1 Up 48 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/bb3925e0186c0e5ff854d300d316d4bdb34b1cc855e6c5e82a1209460eae3d2d/_data->/data volume:/var/lib/docker/volumes/hb_ffd3e7c9bbd64dab8843b520ea49d3d1_images/_data->/app/slink/images volume:/var/lib/docker/volumes/hb_ffd3e7c9bbd64dab8843b520ea49d3d1_var/_data->/app/var/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_ffd3e7c9bbd64dab8843b520ea49d3d1-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_ffd3e7c9bbd64dab8843b520ea49d3d1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/slink/slink-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_ffd3e7c9bbd64dab8843b520ea49d3d1_images",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "var",
+            "name": "hb_ffd3e7c9bbd64dab8843b520ea49d3d1_var",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 80,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 80s; page title \"Explore Gallery | Slink\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "transmute",
+      "title": "Install, readiness, browser check and remove of transmute",
+      "status": "pass",
+      "at": "2026-10-12T17:26:15.091Z",
+      "details": {
+        "name": "transmute-q1713",
+        "instanceId": "582e49dd-1541-4856-896d-a687289c8fb7",
+        "url": "http://localhost:18087/",
+        "title": "Transmute - Sign In",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_582e49dd15414856896da687289c8fb7-web-1 Up 29 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_582e49dd15414856896da687289c8fb7_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_582e49dd15414856896da687289c8fb7-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_582e49dd15414856896da687289c8fb7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/transmute/transmute-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_582e49dd15414856896da687289c8fb7_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 123,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 123s; page title \"Transmute - Sign In\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

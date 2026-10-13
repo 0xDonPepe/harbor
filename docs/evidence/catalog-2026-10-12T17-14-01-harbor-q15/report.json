@@ -1,0 +1,609 @@
+{
+  "runId": "catalog-2026-10-12T17-14-01-harbor-q15",
+  "target": "digitalocean droplet 608459128",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "baikal": "passed",
+    "btctracker": "passed",
+    "enclosed": "passed",
+    "invio": "passed",
+    "jotty": "passed",
+    "notediscovery": "passed",
+    "pyload-ng": "blocked",
+    "swingmusic": "blocked",
+    "wingfit": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:15.811Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "5c7158b5-f2e0-4813-ba1f-e5c93b4a0dfd",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "baikal",
+      "title": "Install, readiness, browser check and remove of baikal",
+      "status": "pass",
+      "at": "2026-10-12T17:15:47.275Z",
+      "details": {
+        "name": "baikal-q1714",
+        "instanceId": "39ad14fb-b746-4dce-b40c-c7cdc367c2c4",
+        "url": "http://localhost:18080/",
+        "title": "Baïkal Maintenance",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_39ad14fbb7464dceb40cc7cdc367c2c4-web-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_39ad14fbb7464dceb40cc7cdc367c2c4_specific/_data->/var/www/baikal/Specific volume:/var/lib/docker/volumes/hb_39ad14fbb7464dceb40cc7cdc367c2c4_config/_data->/var/www/baikal/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_39ad14fbb7464dceb40cc7cdc367c2c4-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_39ad14fbb7464dceb40cc7cdc367c2c4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/baikal/baikal-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_39ad14fbb7464dceb40cc7cdc367c2c4_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "specific",
+            "name": "hb_39ad14fbb7464dceb40cc7cdc367c2c4_specific",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Baïkal Maintenance\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "btctracker",
+      "title": "Install, readiness, browser check and remove of btctracker",
+      "status": "pass",
+      "at": "2026-10-12T17:16:38.035Z",
+      "details": {
+        "name": "btctracker-q1714",
+        "instanceId": "df1ac50f-e5a8-40ca-88bd-6a3102832ac1",
+        "url": "http://localhost:18081/",
+        "title": "BTC Tracker",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_df1ac50fe5a840ca88bd6a3102832ac1-web-1 Up 26 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_df1ac50fe5a840ca88bd6a3102832ac1_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_df1ac50fe5a840ca88bd6a3102832ac1-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_df1ac50fe5a840ca88bd6a3102832ac1_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/btctracker/btctracker-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_df1ac50fe5a840ca88bd6a3102832ac1_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"BTC Tracker\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "enclosed",
+      "title": "Install, readiness, browser check and remove of enclosed",
+      "status": "pass",
+      "at": "2026-10-12T17:17:20.692Z",
+      "details": {
+        "name": "enclosed-q1714",
+        "instanceId": "96b69064-9cc9-4e0b-a6b8-ca4a468c8e7b",
+        "url": "http://localhost:18082/",
+        "title": "Enclosed - Send private and secure notes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_96b690649cc94e0ba6b8ca4a468c8e7b-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_96b690649cc94e0ba6b8ca4a468c8e7b_data/_data->/app/.data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_96b690649cc94e0ba6b8ca4a468c8e7b-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_96b690649cc94e0ba6b8ca4a468c8e7b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/enclosed/enclosed-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_96b690649cc94e0ba6b8ca4a468c8e7b_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Enclosed - Send private and secure notes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "invio",
+      "title": "Install, readiness, browser check and remove of invio",
+      "status": "pass",
+      "at": "2026-10-12T17:18:31.801Z",
+      "details": {
+        "name": "invio-q1714",
+        "instanceId": "2da501c1-55c8-4e03-ba5a-9cd1a47c6a29",
+        "url": "http://localhost:18083/",
+        "title": "Invio",
+        "healthStatus": 303,
+        "probeHistory": [
+          303
+        ],
+        "containers": [
+          "hb_2da501c155c84e03ba5a9cd1a47c6a29-frontend-1 Up 29 seconds",
+          "hb_2da501c155c84e03ba5a9cd1a47c6a29-backend-1 Up 30 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2da501c155c84e03ba5a9cd1a47c6a29_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "backend",
+            "name": "hb_2da501c155c84e03ba5a9cd1a47c6a29-backend-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "frontend",
+            "name": "hb_2da501c155c84e03ba5a9cd1a47c6a29-frontend-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2da501c155c84e03ba5a9cd1a47c6a29_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/invio/invio-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_2da501c155c84e03ba5a9cd1a47c6a29_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 71,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 71s; page title \"Invio\"; health 303",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jotty",
+      "title": "Install, readiness, browser check and remove of jotty",
+      "status": "pass",
+      "at": "2026-10-12T17:19:17.285Z",
+      "details": {
+        "name": "jotty-q1714",
+        "instanceId": "01e09917-f138-4bd3-ba52-c02fb93d16a6",
+        "url": "http://localhost:18084/",
+        "title": "jotty·page",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_01e09917f1384bd3ba52c02fb93d16a6-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_01e09917f1384bd3ba52c02fb93d16a6_config/_data->/app/config volume:/var/lib/docker/volumes/hb_01e09917f1384bd3ba52c02fb93d16a6_app/_data->/app/data volume:/var/lib/docker/volumes/hb_01e09917f1384bd3ba52c02fb93d16a6_cache/_data->/app/.next/cache"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_01e09917f1384bd3ba52c02fb93d16a6-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_01e09917f1384bd3ba52c02fb93d16a6_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/jotty/jotty-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_01e09917f1384bd3ba52c02fb93d16a6_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "cache",
+            "name": "hb_01e09917f1384bd3ba52c02fb93d16a6_cache",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_01e09917f1384bd3ba52c02fb93d16a6_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 45,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 45s; page title \"jotty·page\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "notediscovery",
+      "title": "Install, readiness, browser check and remove of notediscovery",
+      "status": "pass",
+      "at": "2026-10-12T17:19:47.885Z",
+      "details": {
+        "name": "notediscovery-q1714",
+        "instanceId": "74e9904c-f5aa-4366-b8e4-06fdf4f900a3",
+        "url": "http://localhost:18085/",
+        "title": "NoteDiscovery",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_74e9904cf5aa4366b8e406fdf4f900a3-web-1 Up 16 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_74e9904cf5aa4366b8e406fdf4f900a3_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_74e9904cf5aa4366b8e406fdf4f900a3-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_74e9904cf5aa4366b8e406fdf4f900a3_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/notediscovery/notediscovery-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_74e9904cf5aa4366b8e406fdf4f900a3_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 31,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 31s; page title \"NoteDiscovery\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pyload-ng",
+      "title": "Install, readiness, browser check and remove of pyload-ng",
+      "status": "pass",
+      "at": "2026-10-12T17:20:27.021Z",
+      "details": {
+        "name": "pyload-ng-q1714",
+        "instanceId": "933ac9e0-7617-48e9-87b2-c12f82135d4a",
+        "url": "http://localhost:18086/",
+        "title": "Login - pyLoad",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_933ac9e0761748e987b2c12f82135d4a-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_933ac9e0761748e987b2c12f82135d4a_config/_data->/config volume:/var/lib/docker/volumes/hb_933ac9e0761748e987b2c12f82135d4a_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_933ac9e0761748e987b2c12f82135d4a-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_933ac9e0761748e987b2c12f82135d4a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pyload-ng/pyload-ng-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_933ac9e0761748e987b2c12f82135d4a_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_933ac9e0761748e987b2c12f82135d4a_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 39,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 39s; page title \"Login - pyLoad\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pyload-ng (external storage)",
+      "title": "Install, readiness, browser check and remove of pyload-ng (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:20:29.275Z",
+      "details": {
+        "error": "harbor install pyload-ng --name pyload-ng-q1714x --storage downloads=/mnt/harbor-test-storage/pyload-ng-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"pyload-ng does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install pyload-ng --name pyload-ng-q1714x --storage downloads=/mnt/harbor-test-storage/pyload-ng-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"pyload-ng does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "swingmusic",
+      "title": "Install, readiness, browser check and remove of swingmusic",
+      "status": "pass",
+      "at": "2026-10-12T17:21:13.521Z",
+      "details": {
+        "name": "swingmusic-q1714",
+        "instanceId": "fed1cf3a-cc02-455f-a153-fe277c2acc64",
+        "url": "http://localhost:18087/",
+        "title": "Swing Music",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_fed1cf3acc02455fa153fe277c2acc64-app-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_fed1cf3acc02455fa153fe277c2acc64_config/_data->/config volume:/var/lib/docker/volumes/hb_fed1cf3acc02455fa153fe277c2acc64_downloads/_data->/downloads volume:/var/lib/docker/volumes/hb_fed1cf3acc02455fa153fe277c2acc64_music/_data->/music"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_fed1cf3acc02455fa153fe277c2acc64-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_fed1cf3acc02455fa153fe277c2acc64_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/swingmusic/swingmusic-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_fed1cf3acc02455fa153fe277c2acc64_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_fed1cf3acc02455fa153fe277c2acc64_downloads",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "music",
+            "name": "hb_fed1cf3acc02455fa153fe277c2acc64_music",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Swing Music\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "swingmusic (external storage)",
+      "title": "Install, readiness, browser check and remove of swingmusic (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:21:15.759Z",
+      "details": {
+        "error": "harbor install swingmusic --name swingmusic-q1714x --storage downloads=/mnt/harbor-test-storage/swingmusic-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"swingmusic does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install swingmusic --name swingmusic-q1714x --storage downloads=/mnt/harbor-test-storage/swingmusic-downloads-q1714 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"swingmusic does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "wingfit",
+      "title": "Install, readiness, browser check and remove of wingfit",
+      "status": "pass",
+      "at": "2026-10-12T17:21:46.848Z",
+      "details": {
+        "name": "wingfit-q1714",
+        "instanceId": "f41295ec-7ba1-4666-9a01-1730068d3635",
+        "url": "http://localhost:18088/",
+        "title": "Wingfit - Authentication",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_f41295ec7ba146669a011730068d3635-app-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_f41295ec7ba146669a011730068d3635_data/_data->/app/storage"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_f41295ec7ba146669a011730068d3635-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_f41295ec7ba146669a011730068d3635_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wingfit/wingfit-q1714",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_f41295ec7ba146669a011730068d3635_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Wingfit - Authentication\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

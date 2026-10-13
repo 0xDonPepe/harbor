@@ -1,0 +1,506 @@
+{
+  "runId": "catalog-2026-10-12T18-21-42-harbor-q10",
+  "target": "digitalocean droplet 608474632",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "databag": "passed",
+    "etherpad": "passed",
+    "gupt": "passed",
+    "lubelogger": "passed",
+    "passky-client": "passed",
+    "skybro": "passed",
+    "snort": "passed",
+    "trip": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:14.310Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "25b41e8b-17b5-498f-96d5-6eaaf878b918",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "databag",
+      "title": "Install, readiness, browser check and remove of databag",
+      "status": "pass",
+      "at": "2026-10-12T18:24:07.666Z",
+      "details": {
+        "name": "databag-q1821",
+        "instanceId": "a6a51af5-a96e-423d-9f3e-59c6e95505fc",
+        "url": "http://localhost:18080/",
+        "title": "Databag",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a6a51af5a96e423d9f3e59c6e95505fc-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a6a51af5a96e423d9f3e59c6e95505fc_databag/_data->/var/lib/databag"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a6a51af5a96e423d9f3e59c6e95505fc-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a6a51af5a96e423d9f3e59c6e95505fc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/databag/databag-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "databag",
+            "name": "hb_a6a51af5a96e423d9f3e59c6e95505fc_databag",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"Databag\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "etherpad",
+      "title": "Install, readiness, browser check and remove of etherpad",
+      "status": "pass",
+      "at": "2026-10-12T18:25:18.221Z",
+      "details": {
+        "name": "etherpad-q1821",
+        "instanceId": "be100007-b8ed-4178-a9cb-ba1ca5f2e95a",
+        "url": "http://localhost:18081/",
+        "title": "Etherpad",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_be100007b8ed4178a9cbba1ca5f2e95a-app-1 Up 19 seconds",
+          "hb_be100007b8ed4178a9cbba1ca5f2e95a-postgres-1 Up 26 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_be100007b8ed4178a9cbba1ca5f2e95a_etherpad-var/_data->/opt/etherpad-lite/var volume:/var/lib/docker/volumes/hb_be100007b8ed4178a9cbba1ca5f2e95a_plugins/_data->/opt/etherpad-lite/src/plugin_packages ",
+          "volume:/var/lib/docker/volumes/22aded792f287b3db8c9efcc91ce55edba5e667c085c227eff4daff1ea32366a/_data->/var/lib/postgresql/data volume:/var/lib/docker/volumes/hb_be100007b8ed4178a9cbba1ca5f2e95a_postgres-data/_data->/var/lib/postgresql/data/pgdata"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "postgres",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a-postgres-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/etherpad/etherpad-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "etherpad-var",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a_etherpad-var",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "plugins",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a_plugins",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "postgres-data",
+            "name": "hb_be100007b8ed4178a9cbba1ca5f2e95a_postgres-data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 71,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 71s; page title \"Etherpad\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "gupt",
+      "title": "Install, readiness, browser check and remove of gupt",
+      "status": "pass",
+      "at": "2026-10-12T18:25:40.259Z",
+      "details": {
+        "name": "gupt-q1821",
+        "instanceId": "e9e79c14-6f09-4753-acab-93e23fd7b1eb",
+        "url": "http://localhost:18082/",
+        "title": "GUPT — Anonymous Privacy Suite",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e9e79c146f094753acab93e23fd7b1eb-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_e9e79c146f094753acab93e23fd7b1eb-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e9e79c146f094753acab93e23fd7b1eb_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/gupt/gupt-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 22,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 22s; page title \"GUPT — Anonymous Privacy Suite\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "lubelogger",
+      "title": "Install, readiness, browser check and remove of lubelogger",
+      "status": "pass",
+      "at": "2026-10-12T18:26:08.834Z",
+      "details": {
+        "name": "lubelogger-q1821",
+        "instanceId": "c26cd75e-01b5-40d5-a158-6faa38bb8612",
+        "url": "http://localhost:18083/",
+        "title": "Garage - LubeLogger",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_c26cd75e01b540d5a1586faa38bb8612-app-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_c26cd75e01b540d5a1586faa38bb8612_app/_data->/App/data volume:/var/lib/docker/volumes/hb_c26cd75e01b540d5a1586faa38bb8612_keys/_data->/root/.aspnet/DataProtection-Keys"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_c26cd75e01b540d5a1586faa38bb8612-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_c26cd75e01b540d5a1586faa38bb8612_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/lubelogger/lubelogger-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_c26cd75e01b540d5a1586faa38bb8612_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "keys",
+            "name": "hb_c26cd75e01b540d5a1586faa38bb8612_keys",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Garage - LubeLogger\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "passky-client",
+      "title": "Install, readiness, browser check and remove of passky-client",
+      "status": "pass",
+      "at": "2026-10-12T18:26:35.141Z",
+      "details": {
+        "name": "passky-client-q1821",
+        "instanceId": "8086483f-f7f5-4695-8adc-da8b4ec8f370",
+        "url": "http://localhost:18084/",
+        "title": "Passky",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_8086483ff7f546958adcda8b4ec8f370-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8086483ff7f546958adcda8b4ec8f370-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8086483ff7f546958adcda8b4ec8f370_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/passky-client/passky-client-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 26,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 26s; page title \"Passky\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "skybro",
+      "title": "Install, readiness, browser check and remove of skybro",
+      "status": "pass",
+      "at": "2026-10-12T18:27:10.392Z",
+      "details": {
+        "name": "skybro-q1821",
+        "instanceId": "1513320f-3664-4e19-a911-5dbc741b3fb0",
+        "url": "http://localhost:18085/",
+        "title": "SkyBro",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_1513320f36644e19a9115dbc741b3fb0-web-1 Up 13 seconds",
+          "hb_1513320f36644e19a9115dbc741b3fb0-tracker-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_1513320f36644e19a9115dbc741b3fb0_data/_data->/data ",
+          "volume:/var/lib/docker/volumes/hb_1513320f36644e19a9115dbc741b3fb0_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "tracker",
+            "name": "hb_1513320f36644e19a9115dbc741b3fb0-tracker-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_1513320f36644e19a9115dbc741b3fb0-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1513320f36644e19a9115dbc741b3fb0_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/skybro/skybro-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_1513320f36644e19a9115dbc741b3fb0_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 35,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 35s; page title \"SkyBro\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "snort",
+      "title": "Install, readiness, browser check and remove of snort",
+      "status": "pass",
+      "at": "2026-10-12T18:27:37.262Z",
+      "details": {
+        "name": "snort-q1821",
+        "instanceId": "514f82c6-a222-4480-80dc-c8b04664be7a",
+        "url": "http://localhost:18086/",
+        "title": "Snort - Nostr",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_514f82c6a222448080dcc8b04664be7a-web-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_514f82c6a222448080dcc8b04664be7a-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_514f82c6a222448080dcc8b04664be7a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/snort/snort-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 27,
+        "consoleErrors": [
+          "Access to fetch at 'https://pa.v0l.io/api/event' from origin 'http://localhost:18086' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Contr",
+          "Failed to load resource: net::ERR_FAILED"
+        ]
+      },
+      "notes": [
+        "healthy after 27s; page title \"Snort - Nostr\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "trip",
+      "title": "Install, readiness, browser check and remove of trip",
+      "status": "pass",
+      "at": "2026-10-12T18:28:09.326Z",
+      "details": {
+        "name": "trip-q1821",
+        "instanceId": "66f65dea-0b28-47dc-b830-06a56b81b488",
+        "url": "http://localhost:18087/",
+        "title": "TRIP - Authentication",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_66f65dea0b2847dcb83006a56b81b488-app-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_66f65dea0b2847dcb83006a56b81b488_app/_data->/app/storage"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_66f65dea0b2847dcb83006a56b81b488-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_66f65dea0b2847dcb83006a56b81b488_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/trip/trip-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_66f65dea0b2847dcb83006a56b81b488_app",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 32s; page title \"TRIP - Authentication\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

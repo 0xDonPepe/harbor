@@ -1,0 +1,387 @@
+{
+  "runId": "catalog-2026-10-12T17-13-28-harbor-q07",
+  "target": "digitalocean droplet 608459051",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "blinko": "blocked",
+    "convertx": "passed",
+    "grocy": "passed",
+    "localai": "passed",
+    "nitter": "blocked",
+    "papra": "passed",
+    "snapdrop": "passed",
+    "trilium-notes": "blocked"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:14:45.432Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "7cc3d28a-3e9e-48cc-9944-90a6185ccd7b",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "blinko",
+      "title": "Install, readiness, browser check and remove of blinko",
+      "status": "fail",
+      "at": "2026-10-12T17:18:10.661Z",
+      "details": {
+        "error": "harbor install blinko --name blinko-q1713 --yes exited 1:  9080757a46384e5dbf5ae2cf9fca2915_app on the drive (/srv/harbor/harbor-apps/blinko/blinko-q1713/volumes/app)\"\n    },\n    {\n      \"cursor\": \"8\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated retained secret app-seed\"\n    },\n    {\n      \"cursor\": \"9\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"10\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"11\",\n      \"at\": \"2026-10-12T17:15:28Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"12\",\n      \"at\": \"2026-10-12T17:18:10Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"13\",\n      \"at\": \"2026-10-12T17:18:10Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): 2cf9fca2915-db-1 Healthy \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Starting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Started \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Waiting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-db-1 Waiting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-db-1 Healthy \\ncontainer hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install blinko --name blinko-q1713 --yes exited 1:  9080757a46384e5dbf5ae2cf9fca2915_app on the drive (/srv/harbor/harbor-apps/blinko/blinko-q1713/volumes/app)\"\n    },\n    {\n      \"cursor\": \"8\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated retained secret app-seed\"\n    },\n    {\n      \"cursor\": \"9\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"10\",\n      \"at\": \"2026-10-12T17:14:51Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"11\",\n      \"at\": \"2026-10-12T17:15:28Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"12\",\n      \"at\": \"2026-10-12T17:18:10Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"13\",\n      \"at\": \"2026-10-12T17:18:10Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): 2cf9fca2915-db-1 Healthy \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Starting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Started \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 Waiting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-db-1 Waiting \\n Container hb_9080757a46384e5dbf5ae2cf9fca2915-db-1 Healthy \\ncontainer hb_9080757a46384e5dbf5ae2cf9fca2915-app-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "convertx",
+      "title": "Install, readiness, browser check and remove of convertx",
+      "status": "pass",
+      "at": "2026-10-12T17:20:24.491Z",
+      "details": {
+        "name": "convertx-q1713",
+        "instanceId": "5dae5327-64e5-4aa9-aed3-f13bb1da09aa",
+        "url": "http://localhost:18081/",
+        "title": "ConvertX | Setup",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_5dae532764e54aa9aed3f13bb1da09aa-server-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5dae532764e54aa9aed3f13bb1da09aa_app/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_5dae532764e54aa9aed3f13bb1da09aa-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5dae532764e54aa9aed3f13bb1da09aa_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/convertx/convertx-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_5dae532764e54aa9aed3f13bb1da09aa_app",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 127,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 127s; page title \"ConvertX | Setup\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "grocy",
+      "title": "Install, readiness, browser check and remove of grocy",
+      "status": "pass",
+      "at": "2026-10-12T17:21:07.076Z",
+      "details": {
+        "name": "grocy-q1713",
+        "instanceId": "bab609ce-9032-4368-96fb-0e24600697a2",
+        "url": "http://localhost:18082/",
+        "title": "Login | Grocy",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_bab609ce9032436896fb0e24600697a2-server-1 Up 18 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_bab609ce9032436896fb0e24600697a2_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_bab609ce9032436896fb0e24600697a2-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_bab609ce9032436896fb0e24600697a2_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/grocy/grocy-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_bab609ce9032436896fb0e24600697a2_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Login | Grocy\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "localai",
+      "title": "Install, readiness, browser check and remove of localai",
+      "status": "pass",
+      "at": "2026-10-12T17:22:00.161Z",
+      "details": {
+        "name": "localai-q1713",
+        "instanceId": "59a27bbe-7a4e-47b3-be3e-3195aa420b51",
+        "url": "http://localhost:18083/",
+        "title": "LocalAI",
+        "healthStatus": 301,
+        "probeHistory": [
+          301
+        ],
+        "containers": [
+          "hb_59a27bbe7a4e47b3be3e3195aa420b51-api-1 Up 22 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_59a27bbe7a4e47b3be3e3195aa420b51_backends/_data->/backends volume:/var/lib/docker/volumes/hb_59a27bbe7a4e47b3be3e3195aa420b51_configuration/_data->/configuration volume:/var/lib/docker/volumes/hb_59a27bbe7a4e47b3be3e3195aa420b51_data/_data->/data volume:/var/lib/docker/volumes/hb_59a27bbe7a4e47b3be3e3195aa420b51_models/_data->/models volume:/var/lib/docker/volumes/hb_59a27bbe7a4e47b3be3e3195aa420b51_images/_data->/tmp/generated/images"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "api",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51-api-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/localai/localai-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backends",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_backends",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "configuration",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_configuration",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_images",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "models",
+            "name": "hb_59a27bbe7a4e47b3be3e3195aa420b51_models",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"LocalAI\"; health 301",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "nitter",
+      "title": "Install, readiness, browser check and remove of nitter",
+      "status": "fail",
+      "at": "2026-10-12T17:22:16.740Z",
+      "details": {
+        "error": "harbor install nitter --name nitter-q1713 --yes exited 1:  t\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"kernel-sealed /srv/harbor/harbor-apps/nitter/nitter-q1713/volumes (fscrypt v2, per-app key)\"\n    },\n    {\n      \"cursor\": \"86\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created encrypted app home /srv/harbor/harbor-apps/nitter/nitter-q1713 (this machine unlocks it silently) (kernel-sealed)\"\n    },\n    {\n      \"cursor\": \"87\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_e27232599c4c4f73bcda7536a28b6f0f_redis on the drive (/srv/harbor/harbor-apps/nitter/nitter-q1713/volumes/redis)\"\n    },\n    {\n      \"cursor\": \"88\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"89\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"90\",\n      \"at\": \"2026-10-12T17:22:13Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"91\",\n      \"at\": \"2026-10-12T17:22:16Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"92\",\n      \"at\": \"2026-10-12T17:22:16Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: service web is not running after start\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install nitter --name nitter-q1713 --yes exited 1:  t\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"kernel-sealed /srv/harbor/harbor-apps/nitter/nitter-q1713/volumes (fscrypt v2, per-app key)\"\n    },\n    {\n      \"cursor\": \"86\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created encrypted app home /srv/harbor/harbor-apps/nitter/nitter-q1713 (this machine unlocks it silently) (kernel-sealed)\"\n    },\n    {\n      \"cursor\": \"87\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_e27232599c4c4f73bcda7536a28b6f0f_redis on the drive (/srv/harbor/harbor-apps/nitter/nitter-q1713/volumes/redis)\"\n    },\n    {\n      \"cursor\": \"88\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"89\",\n      \"at\": \"2026-10-12T17:22:04Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 2 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"90\",\n      \"at\": \"2026-10-12T17:22:13Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"91\",\n      \"at\": \"2026-10-12T17:22:16Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 2 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"92\",\n      \"at\": \"2026-10-12T17:22:16Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: service web is not running after start\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "papra",
+      "title": "Install, readiness, browser check and remove of papra",
+      "status": "pass",
+      "at": "2026-10-12T17:23:15.917Z",
+      "details": {
+        "name": "papra-q1713",
+        "instanceId": "0e39f916-2281-4024-be84-ef3dac812dc9",
+        "url": "http://localhost:18085/",
+        "title": "Papra - Document archiving and sharing platform",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0e39f91622814024be84ef3dac812dc9-server-1 Up 22 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0e39f91622814024be84ef3dac812dc9_data/_data->/app/app-data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_0e39f91622814024be84ef3dac812dc9-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0e39f91622814024be84ef3dac812dc9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/papra/papra-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_0e39f91622814024be84ef3dac812dc9_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 54,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 54s; page title \"Papra - Document archiving and sharing platform\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "snapdrop",
+      "title": "Install, readiness, browser check and remove of snapdrop",
+      "status": "pass",
+      "at": "2026-10-12T17:23:47.670Z",
+      "details": {
+        "name": "snapdrop-q1713",
+        "instanceId": "3d48e4e2-8ccc-4f79-a2bf-299236b57e2c",
+        "url": "http://localhost:18086/",
+        "title": "Snapdrop",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_3d48e4e28ccc4f79a2bf299236b57e2c-server-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_3d48e4e28ccc4f79a2bf299236b57e2c_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_3d48e4e28ccc4f79a2bf299236b57e2c-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_3d48e4e28ccc4f79a2bf299236b57e2c_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/snapdrop/snapdrop-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_3d48e4e28ccc4f79a2bf299236b57e2c_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 32s; page title \"Snapdrop\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "trilium-notes",
+      "title": "Install, readiness, browser check and remove of trilium-notes",
+      "status": "fail",
+      "at": "2026-10-12T17:24:05.618Z",
+      "details": {
+        "error": "harbor install trilium-notes --name trilium-notes-q1713 --yes exited 1:      \"cursor\": \"144\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_143b170b1bc94176a39e463383167b24_data on the drive (/srv/harbor/harbor-apps/trilium-notes/trilium-notes-q1713/volumes/data)\"\n    },\n    {\n      \"cursor\": \"145\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"146\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"147\",\n      \"at\": \"2026-10-12T17:24:01Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"148\",\n      \"at\": \"2026-10-12T17:24:03Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"149\",\n      \"at\": \"2026-10-12T17:24:03Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): ted \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Creating \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Created \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Starting \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Started \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Waiting \\ncontainer hb_143b170b1bc94176a39e463383167b24-server-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install trilium-notes --name trilium-notes-q1713 --yes exited 1:      \"cursor\": \"144\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"created retained volume hb_143b170b1bc94176a39e463383167b24_data on the drive (/srv/harbor/harbor-apps/trilium-notes/trilium-notes-q1713/volumes/data)\"\n    },\n    {\n      \"cursor\": \"145\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"preparing\",\n      \"message\": \"generated private Compose file and validated it with Compose\"\n    },\n    {\n      \"cursor\": \"146\",\n      \"at\": \"2026-10-12T17:23:51Z\",\n      \"phase\": \"pulling\",\n      \"message\": \"pulling 1 image(s) by digest\"\n    },\n    {\n      \"cursor\": \"147\",\n      \"at\": \"2026-10-12T17:24:01Z\",\n      \"phase\": \"starting\",\n      \"message\": \"creating and starting the Compose project\"\n    },\n    {\n      \"cursor\": \"148\",\n      \"at\": \"2026-10-12T17:24:03Z\",\n      \"phase\": \"starting\",\n      \"message\": \"recorded 1 owned container(s) and the project network\"\n    },\n    {\n      \"cursor\": \"149\",\n      \"at\": \"2026-10-12T17:24:03Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: docker compose up failed (exit 1): ted \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Creating \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Created \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Starting \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Started \\n Container hb_143b170b1bc94176a39e463383167b24-server-1 Waiting \\ncontainer hb_143b170b1bc94176a39e463383167b24-server-1 is unhealthy\\n\"\n    }\n  ]\n}\n"
+      ]
+    }
+  ]
+}

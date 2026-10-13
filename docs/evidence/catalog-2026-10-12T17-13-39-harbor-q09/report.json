@@ -1,0 +1,555 @@
+{
+  "runId": "catalog-2026-10-12T17-13-39-harbor-q09",
+  "target": "digitalocean droplet 608459071",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "docuseal": "passed",
+    "downtify": "blocked",
+    "heimdall": "passed",
+    "metube": "blocked",
+    "passky-server": "passed",
+    "pastefy": "passed",
+    "spacebot": "passed",
+    "valorgrid": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T17:15:08.212Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "4d38e321-bbb5-4481-9b25-73e2b2bf37fa",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791824769,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T17:06:09.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791824769, updates off)"
+      ]
+    },
+    {
+      "id": "docuseal",
+      "title": "Install, readiness, browser check and remove of docuseal",
+      "status": "pass",
+      "at": "2026-10-12T17:16:12.367Z",
+      "details": {
+        "name": "docuseal-q1713",
+        "instanceId": "6a6a406f-edd8-4e32-a0b2-2161a75f0cb4",
+        "url": "http://localhost:18080/",
+        "title": "DocuSeal | Open Source Document Signing",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_6a6a406fedd84e32a0b22161a75f0cb4-server-1 Up 19 seconds",
+          "hb_6a6a406fedd84e32a0b22161a75f0cb4-db-1 Up 19 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_6a6a406fedd84e32a0b22161a75f0cb4_app/_data->/data/docuseal ",
+          "volume:/var/lib/docker/volumes/hb_6a6a406fedd84e32a0b22161a75f0cb4_db/_data->/var/lib/postgresql/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_6a6a406fedd84e32a0b22161a75f0cb4-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_6a6a406fedd84e32a0b22161a75f0cb4-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_6a6a406fedd84e32a0b22161a75f0cb4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/docuseal/docuseal-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_6a6a406fedd84e32a0b22161a75f0cb4_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_6a6a406fedd84e32a0b22161a75f0cb4_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 61,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 61s; page title \"DocuSeal | Open Source Document Signing\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "downtify",
+      "title": "Install, readiness, browser check and remove of downtify",
+      "status": "pass",
+      "at": "2026-10-12T17:16:55.168Z",
+      "details": {
+        "name": "downtify-q1713",
+        "instanceId": "2a0a7887-e764-485b-9fa8-411e0b8b0919",
+        "url": "http://localhost:18081/",
+        "title": "Downtify",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2a0a7887e764485b9fa8411e0b8b0919-downtify-1 Up 21 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2a0a7887e764485b9fa8411e0b8b0919_data/_data->/data volume:/var/lib/docker/volumes/hb_2a0a7887e764485b9fa8411e0b8b0919_downloads-downtify/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "downtify",
+            "name": "hb_2a0a7887e764485b9fa8411e0b8b0919-downtify-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2a0a7887e764485b9fa8411e0b8b0919_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/downtify/downtify-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_2a0a7887e764485b9fa8411e0b8b0919_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads-downtify",
+            "name": "hb_2a0a7887e764485b9fa8411e0b8b0919_downloads-downtify",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "WebSocket connection to 'ws://localhost:18081/api/ws?client_id=611e9fd5-df36-4778-8cb7-04bab757a15b' failed: Error during WebSocket handshake: Unexpected response code: 403",
+          "WebSocket connection to 'ws://localhost:18081/api/ws?client_id=611e9fd5-df36-4778-8cb7-04bab757a15b' failed: Error during WebSocket handshake: Unexpected response code: 403",
+          "WebSocket connection to 'ws://localhost:18081/api/ws?client_id=611e9fd5-df36-4778-8cb7-04bab757a15b' failed: Error during WebSocket handshake: Unexpected response code: 403"
+        ]
+      },
+      "notes": [
+        "healthy after 43s; page title \"Downtify\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "downtify (external storage)",
+      "title": "Install, readiness, browser check and remove of downtify (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:16:57.621Z",
+      "details": {
+        "error": "harbor install downtify --name downtify-q1713x --storage downloads-downtify=/mnt/harbor-test-storage/downtify-downloads-downtify-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"downtify does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install downtify --name downtify-q1713x --storage downloads-downtify=/mnt/harbor-test-storage/downtify-downloads-downtify-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"downtify does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "heimdall",
+      "title": "Install, readiness, browser check and remove of heimdall",
+      "status": "pass",
+      "at": "2026-10-12T17:17:47.511Z",
+      "details": {
+        "name": "heimdall-q1713",
+        "instanceId": "923fc74b-9c50-4ef0-9bfd-97ab0d4f78a7",
+        "url": "http://localhost:18082/",
+        "title": "Heimdall",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_923fc74b9c504ef09bfd97ab0d4f78a7-server-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_923fc74b9c504ef09bfd97ab0d4f78a7_config/_data->/config"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_923fc74b9c504ef09bfd97ab0d4f78a7-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_923fc74b9c504ef09bfd97ab0d4f78a7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/heimdall/heimdall-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_923fc74b9c504ef09bfd97ab0d4f78a7_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 48,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 48s; page title \"Heimdall\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "metube",
+      "title": "Install, readiness, browser check and remove of metube",
+      "status": "pass",
+      "at": "2026-10-12T17:18:30.152Z",
+      "details": {
+        "name": "metube-q1713",
+        "instanceId": "2e2fd73f-326e-4b20-9427-3c022856ccd8",
+        "url": "http://localhost:18083/",
+        "title": "MeTube",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2e2fd73f326e4b2094273c022856ccd8-metube-1 Up 17 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2e2fd73f326e4b2094273c022856ccd8_downloads-metube/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "metube",
+            "name": "hb_2e2fd73f326e4b2094273c022856ccd8-metube-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2e2fd73f326e4b2094273c022856ccd8_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/metube/metube-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads-metube",
+            "name": "hb_2e2fd73f326e4b2094273c022856ccd8_downloads-metube",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"MeTube\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "metube (external storage)",
+      "title": "Install, readiness, browser check and remove of metube (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T17:18:32.501Z",
+      "details": {
+        "error": "harbor install metube --name metube-q1713x --storage downloads-metube=/mnt/harbor-test-storage/metube-downloads-metube-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"metube does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      },
+      "notes": [
+        "harbor install metube --name metube-q1713x --storage downloads-metube=/mnt/harbor-test-storage/metube-downloads-metube-q1713 --yes exited 3:  {\n  \"error\": {\n    \"code\": \"NAME_CONFLICT\",\n    \"message\": \"metube does not support multiple instances\",\n    \"nextAction\": \"Remove the existing instance first.\"\n  }\n}\n"
+      ]
+    },
+    {
+      "id": "passky-server",
+      "title": "Install, readiness, browser check and remove of passky-server",
+      "status": "pass",
+      "at": "2026-10-12T17:19:17.190Z",
+      "details": {
+        "name": "passky-server-q1713",
+        "instanceId": "300472fc-aa22-4f2c-ae9a-a7a9bb944999",
+        "url": "http://localhost:18084/",
+        "title": "Passky",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_300472fcaa224f2cae9aa7a9bb944999-server-1 Up 13 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_300472fcaa224f2cae9aa7a9bb944999_passky/_data->/var/www/html/databases"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_300472fcaa224f2cae9aa7a9bb944999-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_300472fcaa224f2cae9aa7a9bb944999_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/passky-server/passky-server-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "passky",
+            "name": "hb_300472fcaa224f2cae9aa7a9bb944999_passky",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 43,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 43s; page title \"Passky\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pastefy",
+      "title": "Install, readiness, browser check and remove of pastefy",
+      "status": "pass",
+      "at": "2026-10-12T17:20:13.156Z",
+      "details": {
+        "name": "pastefy-q1713",
+        "instanceId": "db9759e4-dd95-4008-9f92-399e38f18263",
+        "url": "http://localhost:18085/",
+        "title": "Pastefy • Share your code snippets",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_db9759e4dd9540089f92399e38f18263-app-1 Up 17 seconds",
+          "hb_db9759e4dd9540089f92399e38f18263-db-1 Up 27 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_db9759e4dd9540089f92399e38f18263_db/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_db9759e4dd9540089f92399e38f18263-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_db9759e4dd9540089f92399e38f18263-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_db9759e4dd9540089f92399e38f18263_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pastefy/pastefy-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_db9759e4dd9540089f92399e38f18263_db",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 56,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ]
+      },
+      "notes": [
+        "healthy after 56s; page title \"Pastefy • Share your code snippets\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "spacebot",
+      "title": "Install, readiness, browser check and remove of spacebot",
+      "status": "pass",
+      "at": "2026-10-12T17:21:31.228Z",
+      "details": {
+        "name": "spacebot-q1713",
+        "instanceId": "414269f3-7752-44f8-bdec-fb46e20d2d0b",
+        "url": "http://localhost:18086/",
+        "title": "Spacebot",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_414269f3775244f8bdecfb46e20d2d0b-server-1 Up 44 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_414269f3775244f8bdecfb46e20d2d0b_data/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_414269f3775244f8bdecfb46e20d2d0b-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_414269f3775244f8bdecfb46e20d2d0b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/spacebot/spacebot-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_414269f3775244f8bdecfb46e20d2d0b_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 78,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)",
+          "Failed to load resource: the server responded with a status of 404 (Not Found)"
+        ]
+      },
+      "notes": [
+        "healthy after 78s; page title \"Spacebot\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "valorgrid",
+      "title": "Install, readiness, browser check and remove of valorgrid",
+      "status": "pass",
+      "at": "2026-10-12T17:22:22.372Z",
+      "details": {
+        "name": "valorgrid-q1713",
+        "instanceId": "7ce47bf1-ae21-4f1b-9316-566fd619affe",
+        "url": "http://localhost:18087/",
+        "title": "ValorGrid",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_7ce47bf1ae214f1b9316566fd619affe-app-1 Up 19 seconds (healthy)"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_7ce47bf1ae214f1b9316566fd619affe_data/_data->/data volume:/var/lib/docker/volumes/2ce2df7417815452b6a88b25edf5136daf4053c3de505a82565fa3dbed7ee128/_data->/app/.backups"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_7ce47bf1ae214f1b9316566fd619affe-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_7ce47bf1ae214f1b9316566fd619affe_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/valorgrid/valorgrid-q1713",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_7ce47bf1ae214f1b9316566fd619affe_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 51,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 51s; page title \"ValorGrid\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

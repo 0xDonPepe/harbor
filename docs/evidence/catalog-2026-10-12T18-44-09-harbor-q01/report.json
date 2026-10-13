@@ -1,0 +1,114 @@
+{
+  "runId": "catalog-2026-10-12T18-44-09-harbor-q01",
+  "target": "digitalocean droplet 608480497",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "metube": "blocked"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:45:26.490Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "b87378a4-4ac0-40b1-9b20-6824e2c3ec75",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "metube",
+      "title": "Install, readiness, browser check and remove of metube",
+      "status": "pass",
+      "at": "2026-10-12T18:46:07.660Z",
+      "details": {
+        "name": "metube-q1844",
+        "instanceId": "2883b96f-81c3-4ee9-8cbf-96775e1c14c7",
+        "url": "http://localhost:18080/",
+        "title": "MeTube",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2883b96f81c34ee98cbf96775e1c14c7-metube-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_2883b96f81c34ee98cbf96775e1c14c7_downloads-metube/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "metube",
+            "name": "hb_2883b96f81c34ee98cbf96775e1c14c7-metube-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2883b96f81c34ee98cbf96775e1c14c7_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/metube/metube-q1844",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads-metube",
+            "name": "hb_2883b96f81c34ee98cbf96775e1c14c7_downloads-metube",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 38,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 38s; page title \"MeTube\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "metube (external storage)",
+      "title": "Install, readiness, browser check and remove of metube (external storage)",
+      "status": "fail",
+      "at": "2026-10-12T18:46:28.058Z",
+      "details": {
+        "error": "ssh command failed (exit 1): docker inspect -f '{{range .Mounts}}{{.Type}}:{{.Source}}->{{.Destination}} {{end}}' $(docker ps -q --filter label=io.harbor.preview/instance=dd36bcb3-2c62-46c8-bff0-5177ff266a2d)\ndocker: 'docker inspect' requires at least 1 argument\n\nUsage:  docker inspect [OPTIONS] NAME|ID [NAME|ID...]\n\nSee 'docker inspect --help' for more information\n\n"
+      },
+      "notes": [
+        "ssh command failed (exit 1): docker inspect -f '{{range .Mounts}}{{.Type}}:{{.Source}}->{{.Destination}} {{end}}' $(docker ps -q --filter label=io.harbor.preview/instance=dd36bcb3-2c62-46c8-bff0-5177ff266a2d)\ndocker: 'docker inspect' requires at least 1 argument\n\nUsage:  docker inspect [OPTIONS] NAME|ID [NAME|ID...]\n\nSee 'docker inspect --help' for more information\n\n"
+      ]
+    }
+  ]
+}

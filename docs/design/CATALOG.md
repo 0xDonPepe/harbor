@@ -216,14 +216,16 @@ tools of each of those releases at its exact commit: the latest on every app, ea
 the apps declaring it. *bundle* (main push or manual run only; read-only, no token) builds `catalog.zip`
 + `catalog.json` + `summary.json` with the latest release's tools and uploads them. *publish* (the only
 job with `contents: write`; no checkout, no install, its token only on the two `gh` steps) downloads that
-artifact, checks it belongs to this commit, and runs `gh release create c<serial> catalog.zip catalog.json
+artifact, checks it belongs to this commit, signs `catalog.json` with `HARBOR_SIGNING_KEY` (decision 168), and runs `gh release create c<serial> catalog.zip catalog.json catalog.json.sig
 --latest`.
 
-**Trust.** HTTPS to GitHub, exactly like Harbor's self-update: whoever can publish a harbor-apps release
-is trusted, as whoever can publish a Harbor release already is. There is no signature (decision 158:
-built, then removed before release; signing Harbor releases and the catalog together with one key is in
-docs/TODO.md). `catalog.json` catches a truncated download or a zip from one release next to the
-metadata of another; it is not a trust anchor. A box accepts a bundle only if the catalog URL is https
+**Trust.** Since 0.32.0 (decision 168, `docs/design/SIGNING.md`): the release key that signs Harbor's own
+releases also signs every catalog. The publish job writes `catalog.json.sig` (base64 Ed25519 over the exact
+`catalog.json` bytes) and uploads it with the release; a box verifies it with the pinned keys
+(`src/release-keys.ts`) before it reads anything in `catalog.json`, and refuses an unsigned or badly signed
+bundle (status error, the active catalog stays). `catalog.json` then pins the zip (sha256 + size). Before
+0.32.0 the trust was HTTPS to GitHub only (decision 158: signing the catalog alone was built and removed).
+A box accepts a bundle only if the signature verifies, the catalog URL is https
 (plain http only for loopback), the serial is strictly higher than the active one (no rollback) and at
 most 24 h ahead of the box's clock ("the app catalog is dated in the future" otherwise: a far-future
 serial would block every newer bundle until then), the zip is within its caps and matches the sha256 and
@@ -238,19 +240,26 @@ size in `catalog.json`, it extracts safely, and the index validates with every l
 - Downloads: `<stateDir>/catalog/<serial>/` (same layout) and `<stateDir>/catalog/current.json`
   (`{"serial": N}`, written via rename). Every catalog read picks the downloaded folder only when the
   pointer parses, its `index.json` exists, its serial beats the seed's, and its stored `catalog.json`
-  still parses and names that folder's serial (= the pointer); otherwise the seed (logged once as
-  "damaged"). This is an integrity re-check of the stored folder, not a trust check. It is cached by
-  serial + size/mtime of `catalog.json`, so reads stay cheap, and the next bundle is compared with the
-  seed, not with the damaged folder. A Harbor upgrade
+  still verifies with the `catalog.json.sig` stored beside it (0.32.0, decision 168), parses and names that
+  folder's serial (= the pointer); otherwise the seed (logged once as "damaged" or "not signed"). The
+  signature re-check also retires a folder that Harbor 0.31 or older downloaded unsigned: after the update to
+  0.32.0 the box uses its seed until the first check (a minute later) downloads the newest signed bundle. It is
+  cached by serial + size/mtime of `catalog.json` and `catalog.json.sig`, so reads stay cheap, and the next
+  bundle is compared with the seed, not with the damaged folder. A Harbor upgrade
   with a newer seed takes over by itself.
 - Check: a minute after start, then every hour (6 h before 0.30.0, decision 164), or on demand (`POST /v1/catalog/refresh`,
-  `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Fetch `catalog.json` first
-  (30 s), stop if the serial is not newer, then `catalog.zip` (capped at the size `catalog.json` gives,
+  `harbor catalog refresh`, Store → *Check for new apps*; single-flight). Resolve `releases/latest` once
+  (redirect not followed; its Location names tag `c<serial>`) and stop if that serial is not newer; then
+  everything comes from `releases/download/c<serial>/` (0.32.0, decision 168; before, each file came from
+  `releases/latest/download` and a check that read two releases started over once): `catalog.json` and
+  `catalog.json.sig` (30 s each), verify the signature, require the serial in `catalog.json` to be the tag's,
+  then `catalog.zip` (capped at the size `catalog.json` gives,
   5 min), extract to `.partial-<serial>` with a path check, validate, rename, write the pointer,
   prune all but the new folder and the one it replaced. The whole check has one deadline of 240 s (each
-  step gets at most what is left), below the CLI's 300 s wait for the response. A zip/`catalog.json`
-  checksum mismatch (or a zip over its stated size) is what a release published between the fetches from
-  `releases/latest` looks like, so such a check starts over once. Any failure leaves the active catalog
+  step gets at most what is left), below the CLI's 300 s wait for the response. A `catalog.url` that is not
+  a `…/releases/latest/download` URL (a mirror) is read as is, signature required the same way; there a publish
+  between two reads can still mix two bundles (a signature or checksum that does not match), so a mirror check
+  that sees one starts over once. Any failure leaves the active catalog
   as it was and is reported in `GET /v1/catalog/status` (`error`; `checkedAt` lives in memory only).
   The Store's catalog line shows a stored failure on load ("Last check failed: …", role=status) and
   "· checked <relative time>", so a stuck automatic check is never silent.
@@ -283,9 +292,9 @@ upload of an official id is still refused.
 released, and `pnpm catalog:plan`, which the per-version checks need, exists from 0.28.2 (0.28.1 was
 released without it, so harbor-apps CI fails until 0.28.2 is the latest release).
 
-**Not done yet** (docs/TODO.md): signing Harbor releases and the catalog together, the daemon downloading by tag instead of
-`releases/latest` (`pnpm package` already pins the tag; today a check that reads two releases starts over once), persisting `checkedAt`,
-and a review policy for community submissions.
+**Not done yet** (docs/TODO.md): persisting `checkedAt`, and a review policy for community submissions.
+(Signing Harbor releases and the catalog with one key, and the daemon downloading by tag, shipped in 0.32.0,
+decision 168.)
 
 ## 10. Compatibility: the format only grows (added 2026-10-11, v0.28.0, decision 159; minHarbor reworked in v0.28.2, decision 161)
 

@@ -1,0 +1,509 @@
+{
+  "runId": "catalog-2026-10-12T18-21-32-harbor-q06",
+  "target": "digitalocean droplet 608474562",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "bitaxe-sentry": "passed",
+    "changedetection-io": "passed",
+    "foldergram": "passed",
+    "libreddit": "blocked",
+    "llama-gpt": "passed",
+    "opencode": "passed",
+    "seedtool": "passed",
+    "threema": "passed",
+    "zeronote": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:22:59.631Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "2517e02c-3997-4599-83a1-aa396ace51bd",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "bitaxe-sentry",
+      "title": "Install, readiness, browser check and remove of bitaxe-sentry",
+      "status": "pass",
+      "at": "2026-10-12T18:23:50.018Z",
+      "details": {
+        "name": "bitaxe-sentry-q1821",
+        "instanceId": "92e2faee-ade3-4f74-990f-b316a603b62d",
+        "url": "http://localhost:18080/",
+        "title": "Dashboard - Bitaxe Sentry",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_92e2faeeade34f74990fb316a603b62d-web-1 Up 15 seconds",
+          "hb_92e2faeeade34f74990fb316a603b62d-sentry-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_92e2faeeade34f74990fb316a603b62d_sentry/_data->/var/lib/bitaxe ",
+          "volume:/var/lib/docker/volumes/hb_92e2faeeade34f74990fb316a603b62d_sentry/_data->/var/lib/bitaxe"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "sentry",
+            "name": "hb_92e2faeeade34f74990fb316a603b62d-sentry-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_92e2faeeade34f74990fb316a603b62d-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_92e2faeeade34f74990fb316a603b62d_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/bitaxe-sentry/bitaxe-sentry-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "sentry",
+            "name": "hb_92e2faeeade34f74990fb316a603b62d_sentry",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 47,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 47s; page title \"Dashboard - Bitaxe Sentry\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "changedetection-io",
+      "title": "Install, readiness, browser check and remove of changedetection-io",
+      "status": "pass",
+      "at": "2026-10-12T18:24:42.966Z",
+      "details": {
+        "name": "changedetection-io-q1821",
+        "instanceId": "e66ae182-d227-4286-b809-2d0d5cd5b725",
+        "url": "http://localhost:18081/",
+        "title": "Change Detection",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_e66ae182d2274286b8092d0d5cd5b725-app-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_e66ae182d2274286b8092d0d5cd5b725_data/_data->/datastore"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_e66ae182d2274286b8092d0d5cd5b725-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_e66ae182d2274286b8092d0d5cd5b725_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/changedetection-io/changedetection-io-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_e66ae182d2274286b8092d0d5cd5b725_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 53,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 53s; page title \"Change Detection\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "foldergram",
+      "title": "Install, readiness, browser check and remove of foldergram",
+      "status": "pass",
+      "at": "2026-10-12T18:25:29.247Z",
+      "details": {
+        "name": "foldergram-q1821",
+        "instanceId": "a28811e1-3e58-42ed-be85-4a2f71ac1bbc",
+        "url": "http://localhost:18082/",
+        "title": "Foldergram",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_a28811e13e5842edbe854a2f71ac1bbc-web-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a28811e13e5842edbe854a2f71ac1bbc_db/_data->/app/data/db volume:/var/lib/docker/volumes/hb_a28811e13e5842edbe854a2f71ac1bbc_gallery/_data->/app/data/gallery volume:/var/lib/docker/volumes/hb_a28811e13e5842edbe854a2f71ac1bbc_previews/_data->/app/data/previews volume:/var/lib/docker/volumes/hb_a28811e13e5842edbe854a2f71ac1bbc_thumbnails/_data->/app/data/thumbnails"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/foldergram/foldergram-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "gallery",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc_gallery",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "previews",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc_previews",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "thumbnails",
+            "name": "hb_a28811e13e5842edbe854a2f71ac1bbc_thumbnails",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 46,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 46s; page title \"Foldergram\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "libreddit",
+      "title": "Install, readiness, browser check and remove of libreddit",
+      "status": "fail",
+      "at": "2026-10-12T18:30:36.865Z",
+      "details": {
+        "error": "harbor install libreddit --name libreddit-q1821 --yes exited 1:  r\": \"77\",\n      \"at\": \"2026-10-12T18:27:38Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 60: 404\"\n    },\n    {\n      \"cursor\": \"78\",\n      \"at\": \"2026-10-12T18:27:58Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 404\"\n    },\n    {\n      \"cursor\": \"79\",\n      \"at\": \"2026-10-12T18:28:18Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 404\"\n    },\n    {\n      \"cursor\": \"80\",\n      \"at\": \"2026-10-12T18:28:38Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 404\"\n    },\n    {\n      \"cursor\": \"81\",\n      \"at\": \"2026-10-12T18:28:58Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 404\"\n    },\n    {\n      \"cursor\": \"82\",\n      \"at\": \"2026-10-12T18:29:19Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 404\"\n    },\n    {\n      \"cursor\": \"83\",\n      \"at\": \"2026-10-12T18:29:39Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 404\"\n    },\n    {\n      \"cursor\": \"84\",\n      \"at\": \"2026-10-12T18:30:00Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 404\"\n    },\n    {\n      \"cursor\": \"85\",\n      \"at\": \"2026-10-12T18:30:20Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 404\"\n    },\n    {\n      \"cursor\": \"86\",\n      \"at\": \"2026-10-12T18:30:36Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 404); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      },
+      "notes": [
+        "harbor install libreddit --name libreddit-q1821 --yes exited 1:  r\": \"77\",\n      \"at\": \"2026-10-12T18:27:38Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 60: 404\"\n    },\n    {\n      \"cursor\": \"78\",\n      \"at\": \"2026-10-12T18:27:58Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 70: 404\"\n    },\n    {\n      \"cursor\": \"79\",\n      \"at\": \"2026-10-12T18:28:18Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 80: 404\"\n    },\n    {\n      \"cursor\": \"80\",\n      \"at\": \"2026-10-12T18:28:38Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 90: 404\"\n    },\n    {\n      \"cursor\": \"81\",\n      \"at\": \"2026-10-12T18:28:58Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 100: 404\"\n    },\n    {\n      \"cursor\": \"82\",\n      \"at\": \"2026-10-12T18:29:19Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 110: 404\"\n    },\n    {\n      \"cursor\": \"83\",\n      \"at\": \"2026-10-12T18:29:39Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 120: 404\"\n    },\n    {\n      \"cursor\": \"84\",\n      \"at\": \"2026-10-12T18:30:00Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 130: 404\"\n    },\n    {\n      \"cursor\": \"85\",\n      \"at\": \"2026-10-12T18:30:20Z\",\n      \"phase\": \"checking\",\n      \"message\": \"readiness attempt 140: 404\"\n    },\n    {\n      \"cursor\": \"86\",\n      \"at\": \"2026-10-12T18:30:36Z\",\n      \"phase\": \"failed\",\n      \"message\": \"install failed: readiness check did not pass within 300s (last: 404); containers were kept for inspection\"\n    }\n  ]\n}\n"
+      ]
+    },
+    {
+      "id": "llama-gpt",
+      "title": "Install, readiness, browser check and remove of llama-gpt",
+      "status": "pass",
+      "at": "2026-10-12T18:35:07.506Z",
+      "details": {
+        "name": "llama-gpt-q1821",
+        "instanceId": "0b8d735b-1866-44eb-97c1-cb4ea818d7a9",
+        "url": "http://localhost:18084/",
+        "title": "LlamaGPT",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_0b8d735b186644eb97c1cb4ea818d7a9-llama-gpt-api-1 Up 49 seconds",
+          "hb_0b8d735b186644eb97c1cb4ea818d7a9-llama-gpt-ui-1 Up 49 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "llama-gpt-api",
+            "name": "hb_0b8d735b186644eb97c1cb4ea818d7a9-llama-gpt-api-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "llama-gpt-ui",
+            "name": "hb_0b8d735b186644eb97c1cb4ea818d7a9-llama-gpt-ui-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0b8d735b186644eb97c1cb4ea818d7a9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/llama-gpt/llama-gpt-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 250,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 250s; page title \"LlamaGPT\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "opencode",
+      "title": "Install, readiness, browser check and remove of opencode",
+      "status": "pass",
+      "at": "2026-10-12T18:35:57.355Z",
+      "details": {
+        "name": "opencode-q1821",
+        "instanceId": "5f1c55cf-b50a-40c4-abee-e104b9154871",
+        "url": "http://localhost:18085/",
+        "title": "OpenCode",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_5f1c55cfb50a40c4abeee104b9154871-app-1 Up 21 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_5f1c55cfb50a40c4abeee104b9154871_opencode/_data->/home/opencode"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_5f1c55cfb50a40c4abeee104b9154871-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_5f1c55cfb50a40c4abeee104b9154871_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/opencode/opencode-q1821",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "opencode",
+            "name": "hb_5f1c55cfb50a40c4abeee104b9154871_opencode",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 50,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 50s; page title \"OpenCode\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "seedtool",
+      "title": "Install, readiness, browser check and remove of seedtool",
+      "status": "pass",
+      "at": "2026-10-12T18:36:27.334Z",
+      "details": {
+        "name": "seedtool-q1821",
+        "instanceId": "57684dc3-8424-41e2-9d07-82de7a2500d9",
+        "url": "http://localhost:18086/",
+        "title": "Seed Tool",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_57684dc3842441e29d0782de7a2500d9-app-1 Up 13 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_57684dc3842441e29d0782de7a2500d9-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_57684dc3842441e29d0782de7a2500d9_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/seedtool/seedtool-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 30,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 30s; page title \"Seed Tool\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "threema",
+      "title": "Install, readiness, browser check and remove of threema",
+      "status": "pass",
+      "at": "2026-10-12T18:36:55.901Z",
+      "details": {
+        "name": "threema-q1821",
+        "instanceId": "dc91f85d-80ff-4267-a7b4-815d06f847ee",
+        "url": "http://localhost:18087/",
+        "title": "Threema Web",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_dc91f85d80ff4267a7b4815d06f847ee-web-1 Up 11 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_dc91f85d80ff4267a7b4815d06f847ee-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_dc91f85d80ff4267a7b4815d06f847ee_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/threema/threema-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 29,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 29s; page title \"Threema Web\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "zeronote",
+      "title": "Install, readiness, browser check and remove of zeronote",
+      "status": "pass",
+      "at": "2026-10-12T18:37:20.624Z",
+      "details": {
+        "name": "zeronote-q1821",
+        "instanceId": "67642f9a-94f9-4774-9c52-956b88588d3b",
+        "url": "http://localhost:18088/",
+        "title": "ZeroNote - Zero Knowledge Encrypted Notes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_67642f9a94f947749c52956b88588d3b-app-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_67642f9a94f947749c52956b88588d3b-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_67642f9a94f947749c52956b88588d3b_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/zeronote/zeronote-q1821",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 25,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 25s; page title \"ZeroNote - Zero Knowledge Encrypted Notes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

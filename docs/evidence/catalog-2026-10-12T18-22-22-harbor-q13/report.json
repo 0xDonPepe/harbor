@@ -1,0 +1,557 @@
+{
+  "runId": "catalog-2026-10-12T18-22-22-harbor-q13",
+  "target": "digitalocean droplet 608474712",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "dumbpad": "passed",
+    "homarr": "passed",
+    "hortusfox": "passed",
+    "mqttx-web": "passed",
+    "perplexica": "passed",
+    "stash": "passed",
+    "wallos": "passed",
+    "yamtrack": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:23:53.721Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "8cf6dc12-d4c7-4767-b9b7-d6d50dc749df",
+        "fresh": true,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "dumbpad",
+      "title": "Install, readiness, browser check and remove of dumbpad",
+      "status": "pass",
+      "at": "2026-10-12T18:24:33.572Z",
+      "details": {
+        "name": "dumbpad-q1822",
+        "instanceId": "96f55cbd-4572-41c4-bc4e-b821436d5362",
+        "url": "http://localhost:18080/",
+        "title": "DumbPad - Simple Notes",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_96f55cbd457241c4bc4eb821436d5362-web-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_96f55cbd457241c4bc4eb821436d5362_data/_data->/app/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_96f55cbd457241c4bc4eb821436d5362-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_96f55cbd457241c4bc4eb821436d5362_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/dumbpad/dumbpad-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_96f55cbd457241c4bc4eb821436d5362_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 37,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 37s; page title \"DumbPad - Simple Notes\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "homarr",
+      "title": "Install, readiness, browser check and remove of homarr",
+      "status": "pass",
+      "at": "2026-10-12T18:25:36.940Z",
+      "details": {
+        "name": "homarr-q1822",
+        "instanceId": "0e1cc857-002e-4d83-88a0-920d3f3ca7db",
+        "url": "http://localhost:18081/",
+        "title": "Homarr",
+        "healthStatus": 307,
+        "probeHistory": [
+          307
+        ],
+        "containers": [
+          "hb_0e1cc857002e4d8388a0920d3f3ca7db-web-1 Up 39 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0e1cc857002e4d8388a0920d3f3ca7db_data/_data->/appdata"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_0e1cc857002e4d8388a0920d3f3ca7db-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0e1cc857002e4d8388a0920d3f3ca7db_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/homarr/homarr-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_0e1cc857002e4d8388a0920d3f3ca7db_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 63,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 63s; page title \"Homarr\"; health 307",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "hortusfox",
+      "title": "Install, readiness, browser check and remove of hortusfox",
+      "status": "pass",
+      "at": "2026-10-12T18:26:47.120Z",
+      "details": {
+        "name": "hortusfox-q1822",
+        "instanceId": "43238252-ad51-416f-a2d2-e3d1ee33b7a3",
+        "url": "http://localhost:18082/",
+        "title": "My workspace",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_43238252ad51416fa2d2e3d1ee33b7a3-app-1 Up 31 seconds",
+          "hb_43238252ad51416fa2d2e3d1ee33b7a3-db-1 Up 31 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_logs/_data->/var/www/html/app/logs volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_migrate/_data->/var/www/html/app/migrations volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_attachments/_data->/var/www/html/public/attachments volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_backup/_data->/var/www/html/public/backup volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_images/_data->/var/www/html/public/img volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_themes/_data->/var/www/html/public/themes ",
+          "volume:/var/lib/docker/volumes/hb_43238252ad51416fa2d2e3d1ee33b7a3_db-data/_data->/var/lib/mysql"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3-app-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3-db-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/hortusfox/hortusfox-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "attachments",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_attachments",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backup",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_backup",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db-data",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_db-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_images",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logs",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_logs",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "migrate",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_migrate",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "themes",
+            "name": "hb_43238252ad51416fa2d2e3d1ee33b7a3_themes",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 70,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 70s; page title \"My workspace\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "mqttx-web",
+      "title": "Install, readiness, browser check and remove of mqttx-web",
+      "status": "pass",
+      "at": "2026-10-12T18:27:22.800Z",
+      "details": {
+        "name": "mqttx-web-q1822",
+        "instanceId": "3bed5892-e813-484e-bd77-349d91aaedcb",
+        "url": "http://localhost:18083/",
+        "title": "Easy-to-Use Online MQTT Client | Try Now",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_3bed5892e813484ebd77349d91aaedcb-app-1 Up 16 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_3bed5892e813484ebd77349d91aaedcb-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_3bed5892e813484ebd77349d91aaedcb_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/mqttx-web/mqttx-web-q1822",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 36,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 36s; page title \"Easy-to-Use Online MQTT Client | Try Now\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "perplexica",
+      "title": "Install, readiness, browser check and remove of perplexica",
+      "status": "pass",
+      "at": "2026-10-12T18:31:30.802Z",
+      "details": {
+        "name": "perplexica-q1822",
+        "instanceId": "1519dcc7-4276-48d3-ad01-c96597a64463",
+        "url": "http://localhost:18084/",
+        "title": "Chat - Vane",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_1519dcc7427648d3ad01c96597a64463-web-1 Up 28 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_1519dcc7427648d3ad01c96597a64463_app-data/_data->/home/perplexica/data volume:/var/lib/docker/volumes/hb_1519dcc7427648d3ad01c96597a64463_uploads/_data->/home/perplexica/uploads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_1519dcc7427648d3ad01c96597a64463-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1519dcc7427648d3ad01c96597a64463_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/perplexica/perplexica-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app-data",
+            "name": "hb_1519dcc7427648d3ad01c96597a64463_app-data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "uploads",
+            "name": "hb_1519dcc7427648d3ad01c96597a64463_uploads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 248,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 248s; page title \"Chat - Vane\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "stash",
+      "title": "Install, readiness, browser check and remove of stash",
+      "status": "pass",
+      "at": "2026-10-12T18:33:51.205Z",
+      "details": {
+        "name": "stash-q1822",
+        "instanceId": "cf94ef21-b218-46df-af93-3f76fd28f202",
+        "url": "http://localhost:18085/",
+        "title": "Stash",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_cf94ef21b21846dfaf933f76fd28f202-web-1 Up 20 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_cf94ef21b21846dfaf933f76fd28f202_app/_data->/app/data volume:/var/lib/docker/volumes/hb_cf94ef21b21846dfaf933f76fd28f202_models/_data->/app/models"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_cf94ef21b21846dfaf933f76fd28f202-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_cf94ef21b21846dfaf933f76fd28f202_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/stash/stash-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "app",
+            "name": "hb_cf94ef21b21846dfaf933f76fd28f202_app",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "models",
+            "name": "hb_cf94ef21b21846dfaf933f76fd28f202_models",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 140,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 140s; page title \"Stash\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wallos",
+      "title": "Install, readiness, browser check and remove of wallos",
+      "status": "pass",
+      "at": "2026-10-12T18:34:31.151Z",
+      "details": {
+        "name": "wallos-q1822",
+        "instanceId": "a79edbf0-9fbd-4f13-aa45-bb45d04c41d4",
+        "url": "http://localhost:18086/",
+        "title": "Wallos - Subscription Tracker",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_a79edbf09fbd4f13aa45bb45d04c41d4-server-1 Up 15 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_a79edbf09fbd4f13aa45bb45d04c41d4_db/_data->/var/www/html/db volume:/var/lib/docker/volumes/hb_a79edbf09fbd4f13aa45bb45d04c41d4_logos/_data->/var/www/html/images/uploads/logos"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_a79edbf09fbd4f13aa45bb45d04c41d4-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_a79edbf09fbd4f13aa45bb45d04c41d4_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wallos/wallos-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_a79edbf09fbd4f13aa45bb45d04c41d4_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "logos",
+            "name": "hb_a79edbf09fbd4f13aa45bb45d04c41d4_logos",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 40,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 40s; page title \"Wallos - Subscription Tracker\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "yamtrack",
+      "title": "Install, readiness, browser check and remove of yamtrack",
+      "status": "pass",
+      "at": "2026-10-12T18:36:35.189Z",
+      "details": {
+        "name": "yamtrack-q1822",
+        "instanceId": "0b9c03d3-3642-405e-8a6e-4f198c68694a",
+        "url": "http://localhost:18087/",
+        "title": "Login - Yamtrack",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_0b9c03d33642405e8a6e4f198c68694a-web-1 Up About a minute",
+          "hb_0b9c03d33642405e8a6e4f198c68694a-redis-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_0b9c03d33642405e8a6e4f198c68694a_db/_data->/yamtrack/db ",
+          "volume:/var/lib/docker/volumes/hb_0b9c03d33642405e8a6e4f198c68694a_redis/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "redis",
+            "name": "hb_0b9c03d33642405e8a6e4f198c68694a-redis-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_0b9c03d33642405e8a6e4f198c68694a-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_0b9c03d33642405e8a6e4f198c68694a_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/yamtrack/yamtrack-q1822",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "db",
+            "name": "hb_0b9c03d33642405e8a6e4f198c68694a_db",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redis",
+            "name": "hb_0b9c03d33642405e8a6e4f198c68694a_redis",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 124,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 124s; page title \"Login - Yamtrack\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

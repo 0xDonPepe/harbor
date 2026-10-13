@@ -1,0 +1,749 @@
+{
+  "runId": "catalog-2026-10-12T18-19-57-harbor-q01",
+  "target": "digitalocean droplet 608465791",
+  "versions": {
+    "node": "v24.12.0",
+    "docker": "29.9.0",
+    "compose": "5.6.0",
+    "ubuntu": "Ubuntu 24.04.5 LTS",
+    "arch": "x86_64"
+  },
+  "results": {
+    "emby": "passed",
+    "jackett": "passed",
+    "networkingtoolbox": "passed",
+    "paperless": "passed",
+    "pingvin-share": "passed",
+    "super-productivity": "passed",
+    "wikijs": "passed"
+  },
+  "results_detail": [
+    {
+      "id": "HOST",
+      "title": "Host prepared: Harbor bootstrapped from the release archive",
+      "status": "pass",
+      "at": "2026-10-12T18:20:34.604Z",
+      "details": {
+        "versions": {
+          "node": "v24.12.0",
+          "docker": "29.9.0",
+          "compose": "5.6.0",
+          "ubuntu": "Ubuntu 24.04.5 LTS",
+          "arch": "x86_64"
+        },
+        "installationId": "440eee6e-4505-4420-b2fb-f77f32e6335e",
+        "fresh": false,
+        "rebuilt": false,
+        "catalog": {
+          "source": null,
+          "serial": 1791829172,
+          "commit": "8ce526d573cbc7b890f1f653b63e56d8e0310156",
+          "createdAt": "2026-10-12T18:19:32.000Z",
+          "origin": "bundled",
+          "packages": 142,
+          "checkedAt": null,
+          "error": null
+        }
+      },
+      "notes": [
+        "Docker 29.9.0, Compose 5.6.0, Node v24.12.0, Ubuntu 24.04.5 LTS x86_64",
+        "app catalog pinned to the archive seed (serial 1791829172, updates off)"
+      ]
+    },
+    {
+      "id": "emby",
+      "title": "Install, readiness, browser check and remove of emby",
+      "status": "pass",
+      "at": "2026-10-12T18:21:27.075Z",
+      "details": {
+        "name": "emby-q1819",
+        "instanceId": "54e67635-5814-434d-aea6-83aba03e5181",
+        "url": "http://localhost:18088/",
+        "title": "9382df6e54bf",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_54e676355814434daea683aba03e5181-server-1 Up 16 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_54e676355814434daea683aba03e5181_config/_data->/config volume:/var/lib/docker/volumes/hb_54e676355814434daea683aba03e5181_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_54e676355814434daea683aba03e5181-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_54e676355814434daea683aba03e5181_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/emby/emby-q1819",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_54e676355814434daea683aba03e5181_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_54e676355814434daea683aba03e5181_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 50,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 50s; page title \"9382df6e54bf\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "emby (external storage)",
+      "title": "Install, readiness, browser check and remove of emby (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:21:58.570Z",
+      "details": {
+        "name": "emby-q1819x",
+        "instanceId": "920f4db4-d1bc-46db-ae28-48654fd1f936",
+        "url": "http://localhost:18089/",
+        "title": "93b9d7a53473",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_920f4db4d1bc46dbae2848654fd1f936-server-1 Up 17 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_920f4db4d1bc46dbae2848654fd1f936_config/_data->/config bind:/mnt/harbor-test-storage/emby-downloads-q1819->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/emby-downloads-q1819",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_920f4db4d1bc46dbae2848654fd1f936-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_920f4db4d1bc46dbae2848654fd1f936_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/emby/emby-q1819x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_920f4db4d1bc46dbae2848654fd1f936_config",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 31,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 31s; page title \"93b9d7a53473\"; health 302",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/emby-downloads-q1819 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jackett",
+      "title": "Install, readiness, browser check and remove of jackett",
+      "status": "pass",
+      "at": "2026-10-12T18:22:40.301Z",
+      "details": {
+        "name": "jackett-q1819",
+        "instanceId": "865fdf04-1596-4c64-94af-04fdecfb01ae",
+        "url": "http://localhost:18090/",
+        "title": "Jackett",
+        "healthStatus": 301,
+        "probeHistory": [
+          301
+        ],
+        "containers": [
+          "hb_865fdf0415964c6494af04fdecfb01ae-server-1 Up 21 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_865fdf0415964c6494af04fdecfb01ae_data/_data->/config volume:/var/lib/docker/volumes/hb_865fdf0415964c6494af04fdecfb01ae_downloads/_data->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_865fdf0415964c6494af04fdecfb01ae-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_865fdf0415964c6494af04fdecfb01ae_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/jackett/jackett-q1819",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_865fdf0415964c6494af04fdecfb01ae_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "downloads",
+            "name": "hb_865fdf0415964c6494af04fdecfb01ae_downloads",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 40,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 40s; page title \"Jackett\"; health 301",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "jackett (external storage)",
+      "title": "Install, readiness, browser check and remove of jackett (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:23:10.854Z",
+      "details": {
+        "name": "jackett-q1819x",
+        "instanceId": "909a2857-0b8f-4832-9066-1791d94c0c91",
+        "url": "http://localhost:18091/",
+        "title": "Jackett",
+        "healthStatus": 301,
+        "probeHistory": [
+          301
+        ],
+        "containers": [
+          "hb_909a28570b8f483290661791d94c0c91-server-1 Up 19 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_909a28570b8f483290661791d94c0c91_data/_data->/config bind:/mnt/harbor-test-storage/jackett-downloads-q1819->/downloads"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "downloads",
+            "name": "/mnt/harbor-test-storage/jackett-downloads-q1819",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_909a28570b8f483290661791d94c0c91-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_909a28570b8f483290661791d94c0c91_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/jackett/jackett-q1819x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_909a28570b8f483290661791d94c0c91_data",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 30,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 30s; page title \"Jackett\"; health 301",
+        "external storage: --storage downloads=/mnt/harbor-test-storage/jackett-downloads-q1819 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "networkingtoolbox",
+      "title": "Install, readiness, browser check and remove of networkingtoolbox",
+      "status": "pass",
+      "at": "2026-10-12T18:23:32.738Z",
+      "details": {
+        "name": "networkingtoolbox-q1819",
+        "instanceId": "2b0e36e6-f437-483a-a54e-591da675a00e",
+        "url": "http://localhost:18092/",
+        "title": "Networking Toolbox",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_2b0e36e6f437483aa54e591da675a00e-app-1 Up 12 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "app",
+            "name": "hb_2b0e36e6f437483aa54e591da675a00e-app-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_2b0e36e6f437483aa54e591da675a00e_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/networkingtoolbox/networkingtoolbox-q1819",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 21,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 21s; page title \"Networking Toolbox\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "paperless",
+      "title": "Install, readiness, browser check and remove of paperless",
+      "status": "pass",
+      "at": "2026-10-12T18:26:33.888Z",
+      "details": {
+        "name": "paperless-q1819",
+        "instanceId": "1b433398-a75e-4f93-b7f6-0f5ffe3ee1fc",
+        "url": "http://localhost:18093/",
+        "title": "Paperless-ngx sign in",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-webserver-1 Up About a minute",
+          "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-db-1 Up About a minute",
+          "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-broker-1 Up About a minute",
+          "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-gotenberg-1 Up About a minute",
+          "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-tika-1 Up About a minute"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_paperless-consume/_data->/usr/src/paperless/consume volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_data/_data->/usr/src/paperless/data volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_paperless-export/_data->/usr/src/paperless/export volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_media/_data->/usr/src/paperless/media ",
+          "volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_pgdata/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_1b433398a75e4f93b7f60f5ffe3ee1fc_redisdata/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "broker",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-broker-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "gotenberg",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-gotenberg-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "tika",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-tika-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "webserver",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc-webserver-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/paperless/paperless-q1819",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "media",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_media",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "paperless-consume",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_paperless-consume",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "paperless-export",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_paperless-export",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "pgdata",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_pgdata",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redisdata",
+            "name": "hb_1b433398a75e4f93b7f60f5ffe3ee1fc_redisdata",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 181,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 181s; page title \"Paperless-ngx sign in\"; health 302",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "paperless (external storage)",
+      "title": "Install, readiness, browser check and remove of paperless (external storage)",
+      "status": "pass",
+      "at": "2026-10-12T18:28:22.874Z",
+      "details": {
+        "name": "paperless-q1819x",
+        "instanceId": "fe0ecab0-96bb-42bc-ad29-898c6c2e3129",
+        "url": "http://localhost:18094/",
+        "title": "Paperless-ngx sign in",
+        "healthStatus": 302,
+        "probeHistory": [
+          302
+        ],
+        "containers": [
+          "hb_fe0ecab096bb42bcad29898c6c2e3129-webserver-1 Up About a minute",
+          "hb_fe0ecab096bb42bcad29898c6c2e3129-db-1 Up About a minute",
+          "hb_fe0ecab096bb42bcad29898c6c2e3129-broker-1 Up About a minute",
+          "hb_fe0ecab096bb42bcad29898c6c2e3129-gotenberg-1 Up About a minute",
+          "hb_fe0ecab096bb42bcad29898c6c2e3129-tika-1 Up About a minute"
+        ],
+        "mounts": [
+          "bind:/mnt/harbor-test-storage/paperless-paperless-consume-q1819->/usr/src/paperless/consume volume:/var/lib/docker/volumes/hb_fe0ecab096bb42bcad29898c6c2e3129_data/_data->/usr/src/paperless/data bind:/mnt/harbor-test-storage/paperless-paperless-export-q1819->/usr/src/paperless/export volume:/var/lib/docker/volumes/hb_fe0ecab096bb42bcad29898c6c2e3129_media/_data->/usr/src/paperless/media ",
+          "volume:/var/lib/docker/volumes/hb_fe0ecab096bb42bcad29898c6c2e3129_pgdata/_data->/var/lib/postgresql/data ",
+          "volume:/var/lib/docker/volumes/hb_fe0ecab096bb42bcad29898c6c2e3129_redisdata/_data->/data"
+        ],
+        "resources": [
+          {
+            "kind": "bind",
+            "role": "paperless-consume",
+            "name": "/mnt/harbor-test-storage/paperless-paperless-consume-q1819",
+            "present": true
+          },
+          {
+            "kind": "bind",
+            "role": "paperless-export",
+            "name": "/mnt/harbor-test-storage/paperless-paperless-export-q1819",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "broker",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129-broker-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "db",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129-db-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "gotenberg",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129-gotenberg-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "tika",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129-tika-1",
+            "present": true
+          },
+          {
+            "kind": "container",
+            "role": "webserver",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129-webserver-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/paperless/paperless-q1819x",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "media",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129_media",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "pgdata",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129_pgdata",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "redisdata",
+            "name": "hb_fe0ecab096bb42bcad29898c6c2e3129_redisdata",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 107,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 107s; page title \"Paperless-ngx sign in\"; health 302",
+        "external storage: --storage paperless-export=/mnt/harbor-test-storage/paperless-paperless-export-q1819 --storage paperless-consume=/mnt/harbor-test-storage/paperless-paperless-consume-q1819 mounted as bind",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "pingvin-share",
+      "title": "Install, readiness, browser check and remove of pingvin-share",
+      "status": "pass",
+      "at": "2026-10-12T18:29:25.919Z",
+      "details": {
+        "name": "pingvin-share-q1819",
+        "instanceId": "8324898c-b292-4121-a740-9e4c864484ed",
+        "url": "http://localhost:18095/",
+        "title": "Home - Pingvin Share",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_8324898cb2924121a7409e4c864484ed-web-1 Up 22 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_8324898cb2924121a7409e4c864484ed_backend/_data->/opt/app/backend/data volume:/var/lib/docker/volumes/hb_8324898cb2924121a7409e4c864484ed_images/_data->/opt/app/frontend/public/img"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_8324898cb2924121a7409e4c864484ed-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_8324898cb2924121a7409e4c864484ed_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/pingvin-share/pingvin-share-q1819",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "backend",
+            "name": "hb_8324898cb2924121a7409e4c864484ed_backend",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "images",
+            "name": "hb_8324898cb2924121a7409e4c864484ed_images",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 62,
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+        ]
+      },
+      "notes": [
+        "healthy after 62s; page title \"Home - Pingvin Share\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "super-productivity",
+      "title": "Install, readiness, browser check and remove of super-productivity",
+      "status": "pass",
+      "at": "2026-10-12T18:29:58.163Z",
+      "details": {
+        "name": "super-productivity-q1819",
+        "instanceId": "469922a0-9f08-4b07-a65b-b226334b07b2",
+        "url": "http://localhost:18096/",
+        "title": "Super Productivity",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_469922a09f084b07a65bb226334b07b2-web-1 Up 15 seconds"
+        ],
+        "mounts": [
+          ""
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "web",
+            "name": "hb_469922a09f084b07a65bb226334b07b2-web-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_469922a09f084b07a65bb226334b07b2_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/super-productivity/super-productivity-q1819",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 32,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 32s; page title \"Super Productivity\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    },
+    {
+      "id": "wikijs",
+      "title": "Install, readiness, browser check and remove of wikijs",
+      "status": "pass",
+      "at": "2026-10-12T18:30:47.182Z",
+      "details": {
+        "name": "wikijs-q1819",
+        "instanceId": "65774322-d770-4ffb-86c4-2da80bbb4712",
+        "url": "http://localhost:18097/",
+        "title": "Wiki.js Setup",
+        "healthStatus": 200,
+        "probeHistory": [
+          200
+        ],
+        "containers": [
+          "hb_65774322d7704ffb86c42da80bbb4712-server-1 Up 14 seconds"
+        ],
+        "mounts": [
+          "volume:/var/lib/docker/volumes/hb_65774322d7704ffb86c42da80bbb4712_config/_data->/config volume:/var/lib/docker/volumes/hb_65774322d7704ffb86c42da80bbb4712_data/_data->/data volume:/var/lib/docker/volumes/hb_65774322d7704ffb86c42da80bbb4712_repo/_data->/app/wiki/data/repo"
+        ],
+        "resources": [
+          {
+            "kind": "container",
+            "role": "server",
+            "name": "hb_65774322d7704ffb86c42da80bbb4712-server-1",
+            "present": true
+          },
+          {
+            "kind": "network",
+            "role": "default",
+            "name": "hb_65774322d7704ffb86c42da80bbb4712_default",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "__home__",
+            "name": "/srv/harbor/harbor-apps/wikijs/wikijs-q1819",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "config",
+            "name": "hb_65774322d7704ffb86c42da80bbb4712_config",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "data",
+            "name": "hb_65774322d7704ffb86c42da80bbb4712_data",
+            "present": true
+          },
+          {
+            "kind": "volume",
+            "role": "repo",
+            "name": "hb_65774322d7704ffb86c42da80bbb4712_repo",
+            "present": true
+          }
+        ],
+        "secondsToHealthy": 49,
+        "consoleErrors": []
+      },
+      "notes": [
+        "healthy after 49s; page title \"Wiki.js Setup\"; health 200",
+        "removed after the check; volumes and folders retained"
+      ]
+    }
+  ]
+}

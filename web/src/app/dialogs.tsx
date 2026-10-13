@@ -77,6 +77,11 @@ export function PlanDialog({ c }: { c: Console }) {
           {planError}
         </p>
       )}
+      {c.waitingFor && !plan && (
+        <p className="muted" role="status">
+          {c.waitingFor}
+        </p>
+      )}
       {plan && (
         <div className="plan">
           <p className="lead">{humanSummary(plan, displayName)}</p>

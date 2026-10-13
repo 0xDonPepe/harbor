@@ -23,4 +23,17 @@ describe('where Open takes you: the console scheme decides', () => {
   it('a tailnet or public main address always wins', () => {
     expect(appUrlFrom({ ...urls, public: 'https://cloud.example.com/' }, 'public', { protocol: 'http:', hostname: 'harbor.local' })).toBe('https://cloud.example.com/');
   });
+  it('from the tailnet console: the app\'s tailnet address, never the tailnet name on a LAN port (wrong certificate)', () => {
+    const ts = { ...urls, tailnet: 'https://harbor.tail7d0db4.ts.net:8443/' };
+    const here = { protocol: 'https:', hostname: 'harbor.tail7d0db4.ts.net' };
+    expect(appUrlFrom(ts, 'loopback', here)).toBe('https://harbor.tail7d0db4.ts.net:8443/');
+    // an app with no tailnet address keeps Harbor's own LAN name (works at home) instead of harbor.tail…:38080
+    expect(appUrlFrom(urls, 'loopback', here)).toBe('https://harbor.local:38080/');
+    expect(appUrlFrom(urls, 'loopback', here)).not.toContain('ts.net');
+  });
+  it('from a public console name: the app\'s address on that name when it has one', () => {
+    const pub = { ...urls, public: 'https://cloud.example.com/' };
+    expect(appUrlFrom(pub, 'loopback', { protocol: 'https:', hostname: 'cloud.example.com' })).toBe('https://cloud.example.com/');
+    expect(appUrlFrom(urls, 'loopback', { protocol: 'https:', hostname: 'harbor.example.com' })).toBe('https://harbor.local:38080/');
+  });
 });

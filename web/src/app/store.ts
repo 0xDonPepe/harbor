@@ -73,6 +73,10 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const [pending, setPending] = useState<Action | null>(null);
   const [plan, setPlan] = useState<PlanDto | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
+  // The app already runs an operation: the review waits its turn instead of failing (a plan is a snapshot of the
+  // app, so it is made once the other operation is done). Text for the dialog while waiting; null otherwise.
+  const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  const startToken = useRef(0);
   // decision 164: the daemon restarted and this machine's key is locked; the review dialog asks for the password
   const [locked, setLocked] = useState(false);
   const lastApprove = useRef<{ secrets?: Record<string, string>; acceptPermissions: boolean }>({ acceptPermissions: false });
@@ -135,27 +139,65 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     setPlanError(e instanceof ApiError ? `${e.message} ${e.nextAction}` : String(e));
   };
 
+  // Resolves when operation `id` has finished, or false when the review was cancelled or replaced meanwhile.
+  const waitTurn = async (id: string, token: number): Promise<boolean> => {
+    for (;;) {
+      if (startToken.current !== token) return false;
+      try {
+        const op = await api.operation(id);
+        if (isFinal(op)) return startToken.current === token;
+        const who = data.instances.find((i) => i.id === op.instanceId);
+        setWaitingFor(`Waiting for ${who ? `${who.displayName ?? who.name}'s` : 'the current'} ${op.kind} to finish. The review opens by itself when it is done.`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) throw e;
+        if (!(e instanceof ApiError && e.status === 404)) throw e;
+        return startToken.current === token; // the operation is gone: try again
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  };
+
   const start = async (action: Action) => {
+    const token = ++startToken.current;
     setPending(action);
     setPlan(null);
     setPlanError(null);
+    setWaitingFor(null);
     setLocked(false);
     try {
-      // Strip the passphrase for the plan call: the daemon validates it but
-      // never stores it in the plan. It travels with approve() instead.
-      if (action.kind === 'restore-app') {
-        setPlan(await api.restoreAppPlan({ targetId: action.targetId, instanceId: action.instanceId, runId: action.runId, location: { dir: action.dir }, ...(action.name ? { name: action.name } : {}) }));
-        key.current = newIdempotencyKey();
-        return;
+      for (;;) {
+        try {
+          await planOnce(action);
+          break;
+        } catch (e) {
+          if (e instanceof ApiError && e.code === 'BUSY' && e.operationId) {
+            if (!(await waitTurn(e.operationId, token))) return;
+            continue;
+          }
+          throw e;
+        }
       }
-      const req = planRequestFor(action);
-      if (req.kind === 'install' && req.location) req.location = { dir: req.location.dir, passphrase: req.location.passphrase };
-      setPlan(await api.plan(req));
-      key.current = newIdempotencyKey();
+      if (startToken.current === token) setWaitingFor(null);
     } catch (e) {
+      if (startToken.current !== token) return;
+      setWaitingFor(null);
       if (e instanceof ApiError && e.status === 401) return onAuthLost();
       failed(e);
     }
+  };
+
+  const planOnce = async (action: Action) => {
+    // Strip the passphrase for the plan call: the daemon validates it but
+    // never stores it in the plan. It travels with approve() instead.
+    if (action.kind === 'restore-app') {
+      setPlan(await api.restoreAppPlan({ targetId: action.targetId, instanceId: action.instanceId, runId: action.runId, location: { dir: action.dir }, ...(action.name ? { name: action.name } : {}) }));
+      key.current = newIdempotencyKey();
+      return;
+    }
+    const req = planRequestFor(action);
+    if (req.kind === 'install' && req.location) req.location = { dir: req.location.dir, passphrase: req.location.passphrase };
+    setPlan(await api.plan(req));
+    key.current = newIdempotencyKey();
   };
 
   // secrets: values typed in the review dialog for operator-provided secrets (decision 125); in memory only.
@@ -165,7 +207,17 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     lastApprove.current = { ...(secrets ? { secrets } : {}), acceptPermissions };
     try {
       const k = key.current ?? (key.current = newIdempotencyKey());
-      const r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions);
+      let r;
+      try {
+        r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions);
+      } catch (e) {
+        // Another operation started on the app since the review was made: wait for it, then review again.
+        if (e instanceof ApiError && e.code === 'BUSY' && pending) {
+          submitting.current = false;
+          return void start(pending);
+        }
+        throw e;
+      }
       setWatching(r.operation);
       setPending(null);
       setPlan(null);
@@ -179,6 +231,8 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   };
 
   const cancel = () => {
+    startToken.current++;
+    setWaitingFor(null);
     setPending(null);
     setPlan(null);
     setPlanError(null);
@@ -198,7 +252,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const patchData = useCallback((fn: (d: Data) => Data) => setData(fn), []);
 
   const busy = Boolean(watching && !isFinal(watching)) || data.system?.busyOperationId != null;
-  return { data, loaded, loadError, pending, plan, planError, locked, unlockAndRetry, watching, lastDone, busy, start, approve, cancel, refresh, patchData, dismiss: () => { setWatching(null); setLastDone(null); } };
+  return { data, loaded, loadError, pending, plan, planError, waitingFor, locked, unlockAndRetry, watching, lastDone, busy, start, approve, cancel, refresh, patchData, dismiss: () => { setWatching(null); setLastDone(null); } };
 }
 
 export type Console = ReturnType<typeof useConsole>;

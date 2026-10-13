@@ -348,12 +348,27 @@ program
     out(plan, () => planSummary(plan) + `\nApply with: ${PRODUCT.cliName} apply ${plan.id} --idempotency-key <key>${opts.location ? ' --passphrase-stdin < passphrase.txt' : ''}`);
   });
 
+// The app already runs an operation: wait for it, then plan (a plan is a snapshot of the app, so it is made once
+// the other operation is done) instead of failing with BUSY.
+async function planWhenFree(api: ApiClient, body: Record<string, unknown>): Promise<PlanDto> {
+  for (;;) {
+    try {
+      return await api.post<PlanDto>('/v1/plans', body);
+    } catch (e) {
+      if (!(e instanceof HarborError && e.code === 'BUSY' && e.operationId)) throw e;
+      const op = await api.get<OperationDto>(`/v1/operations/${e.operationId}`);
+      if (!globals().json) process.stderr.write(`Waiting for the running ${op.kind} to finish…\n`);
+      await waitOperation(api, e.operationId, false);
+    }
+  }
+}
+
 async function createPlan(api: ApiClient, kind: string, target: string | undefined, name?: string, extra: Record<string, unknown> = {}): Promise<PlanDto> {
   if (!target) throw new HarborError('INVALID_REQUEST', `${kind} requires a target`);
-  if (kind === 'install') return api.post<PlanDto>('/v1/plans', { kind, packageId: target, ...(name ? { name } : {}), ...extra });
+  if (kind === 'install') return planWhenFree(api, { kind, packageId: target, ...(name ? { name } : {}), ...extra });
   if (!['start', 'stop', 'restart', 'remove', 'reinstall', 'purge', 'update', 'expose', 'unexpose', 'reconfigure', 'seal', 'move', 'restore'].includes(kind)) throw new HarborError('INVALID_REQUEST', `unknown plan kind ${kind}`);
   const inst = await resolveInstance(api, target);
-  return api.post<PlanDto>('/v1/plans', { kind, instanceId: inst.id, ...extra });
+  return planWhenFree(api, { kind, instanceId: inst.id, ...extra });
 }
 
 program
@@ -442,7 +457,7 @@ program
     const inst = await resolveInstance(api, ref);
     const secrets = await readSecretFlags(opts.secret);
     const links: Record<string, LinkChoice | null> = { ...(await readLinkFlags(api, opts.link)), ...Object.fromEntries(opts.unlink.map((id) => [id, null])) };
-    const plan = await api.post<PlanDto>('/v1/plans', { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}) });
+    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}) });
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets });
   });
 

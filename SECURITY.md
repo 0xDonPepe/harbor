@@ -11,14 +11,18 @@ Docker (root-equivalent) authority. This policy describes what that means for re
   The console itself is loopback, LAN and tailnet only, never public: its LAN names are only answered to peers on
   a local network (loopback, RFC 1918, link-local, CGNAT, IPv6 ULA, or one of the machine's own subnets), whatever
   `Host` a request sends (decision 165).
-- Apps in LAN mode share one host name (`harbor.local:<port>`), and browsers scope cookies by host, not port: a
-  malicious app you install can read the cookies of your other apps in the same browser. Install apps you trust;
-  one address per app is planned for 1.0.
+- Apps in LAN mode share one host name (`harbor.local:<port>`), and browsers scope cookies by host, not port. Since
+  0.32.0 (decision 167) Harbor's HTTPS relay renames and signs every `HttpOnly` cookie per app and strips other
+  apps' cookies, and refuses cross-app form posts; **HTTPS only** (Settings → Network) closes the plain-http path.
+  Not covered: cookies an app's own JavaScript reads (not `HttpOnly`), plain-http addresses while HTTPS only is
+  off, and tailnet addresses.
 - The plain-http console (`http://harbor.local/`) stays reachable after LAN HTTPS is on (the move to https is done
   by the page itself); a hostile device on your network can imitate it. Use the https address once it is trusted.
 - The local certificate authority (LAN HTTPS) is name-constrained to `.local`, the machine's own name and private
   addresses; one minted before 0.31.0 is not, and Settings → Network offers to replace it.
-- Releases and the app catalog are checked against checksums from GitHub over HTTPS, not signed (yet).
+- Releases (`SHA256SUMS.sig`) and the app catalog (`catalog.json.sig`) are signed with one Ed25519 key whose public
+  half is pinned in Harbor (decision 168); installs, self-updates and catalog downloads refuse anything else, and
+  self-update never downgrades on its own. Key custody and rotation: `docs/design/SIGNING.md`.
 - Application secrets live in `/var/lib/harbor/instances/<uuid>/secrets/` (0600) and appear in
   plaintext in the private generated Compose file. That is deliberate for the trusted local
   preview; there is no encrypted vault for them.

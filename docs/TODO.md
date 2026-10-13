@@ -142,12 +142,12 @@ without a restart; each Harbor release ships the latest as the seed. Next:
       `pnpm -s catalog:plan` with the latest release and each declared version's own `catalog:verify`;
       then publish an app declaring `release.minHarbor: "0.28.2"` and check that a 0.28.0 (or 0.28.1) box lists it as
       "needs Harbor 0.28.2 or newer" and a 0.28.2 box installs it.
-- [ ] **Sign Harbor releases and the catalog together, with one key.** Today both trust GitHub over
+- [x] *(0.32.0, decision 168)* **Sign Harbor releases and the catalog together, with one key.** Today both trust GitHub over
       HTTPS (self-update and catalog alike). Signing only the catalog was built and dropped (decision 158):
       it guarded the catalog while the Harbor release on the same account stayed unsigned. Do both at once:
       one key, its custody and rotation written down (and what to do if it leaks), the self-update and the
       catalog download both refusing what it did not sign.
-- [ ] **Daemon: download by tag, not `releases/latest`** (`pnpm package` already does, via `catalogTagFromLocation`). A release published between the `catalog.json` and
+- [x] *(0.32.0, decision 168)* **Daemon: download by tag, not `releases/latest`** (`pnpm package` already does, via `catalogTagFromLocation`). A release published between the `catalog.json` and
       `catalog.zip` fetches mixes two bundles; the daemon now starts such a check over once (zip/`catalog.json`
       checksum mismatch). Cleaner: resolve the `c<serial>` tag once and fetch both files from
       `releases/download/c<serial>/`, requiring `meta.serial` to match.
@@ -168,35 +168,48 @@ Today the Store card always shows **Install**, even when the app is already inst
 does not allow copies (`deployment.multiInstance: false`) the button is dead: the plan fails with *does not support
 multiple instances*. For one that does, nothing says you are about to create a separate copy. Wanted:
 
-- [ ] `CatalogItemDto.multiInstance` (optional field) so the console knows before planning.
-- [ ] Store card and app page, once installed: the main button becomes **Open** (the existing copy). A copyable
+- [x] *(0.32.0, decision 170)* `CatalogItemDto.multiInstance` (optional field) so the console knows before planning.
+- [x] *(0.32.0, decision 170)* Store card and app page, once installed: the main button becomes **Open** (the existing copy). A copyable
       app also gets a secondary **Add another copy…** (different label *and* style, never color alone); a
       single-copy app gets no install button at all (no dead buttons).
-- [ ] The install page for a second copy says so on top: *You already have Immich. This installs a separate copy
+- [x] *(0.32.0, decision 170)* The install page for a second copy says so on top: *You already have Immich. This installs a separate copy
       with its own data, address and login; the first one is not touched.* The name field is required and
       prefilled (`immich-2`), and Home and the drawer show that name under the icon so the copies stay apart.
-- [ ] The install review (plan) repeats it as a note; the CLI prints the same line for `harbor install` when a
+- [x] *(0.32.0, decision 170)* The install review (plan) repeats it as a note; the CLI prints the same line for `harbor install` when a
       copy already exists.
-- [ ] e2e: card states for 0/1/2 copies, single-copy app shows only Open, second-copy page notice + name.
+- [x] *(0.32.0, decision 170)* e2e: card states for 0/1/2 copies, single-copy app shows only Open, second-copy page notice + name.
 
 ## Security review (decision 165): what 0.31.0 left
 
 The audit of 2026-10-12 fixed every high and medium finding in 0.31.0. Still open:
 
-- [ ] **One address per app** (1.0 design). In LAN mode every app is `harbor.local:<port>`; browsers scope cookies by
+- [x] *(0.32.0, decision 167: cookie firewall + HTTPS only instead of one address per app; tailnet not covered yet)* **One address per app** (1.0 design). In LAN mode every app is `harbor.local:<port>`; browsers scope cookies by
       host, not port, so a malicious app's server receives the session cookies of every other app the admin uses
       (and all apps are same-site, so SameSite gives no CSRF protection between them). Needs `<app>.harbor.local`
       (mDNS names or a resolver, one SAN per app or a constrained wildcard) and the relay routing by name.
-- [ ] **Link service-name shadowing.** On a link network Compose adds each bound service's own name as an alias, so a
+- [x] *(0.32.0, decision 171)* **Link service-name shadowing.** On a link network Compose adds each bound service's own name as an alias, so a
       consumer service named like a provider-internal service (`db`) can answer the provider's lookups. Needs a
       naming scheme on link networks that keeps existing links working (refusing clashes would break common names).
-- [ ] **Signed releases + catalog with one key** (already listed under the catalog); also refuse a self-update to an
+- [x] *(0.32.0, decision 168)* **Signed releases + catalog with one key** (already listed under the catalog); also refuse a self-update to an
       older version without an explicit flag.
-- [ ] Low: an open terminal survives logout / password change (check the session on each frame or close terminals on
+- [x] *(0.32.0, decision 169; the plain-http console redirect is decision 167's HTTPS only)* Low: an open terminal survives logout / password change (check the session on each frame or close terminals on
       revoke); SMTP must require TLS when a password is set and refuse CR/LF in from/to; the Reddit wallpaper fetch
       must not follow redirects to private addresses; GCM decrypt should pin `authTagLength: 16` and a 12-byte nonce;
       root helpers should open status files with `O_NOFOLLOW` and `chownTree` should `lstat`; SFTP places should show
       the host-key fingerprint for confirmation instead of trusting the first answer; the setup routes could say less
       once an administrator exists; the plain-http console could become redirect-only once HTTPS is trusted.
-- [ ] Live checks: a request with `Host: harbor.local` from a real public address is refused by Caddy; a stick with a
+- [x] *(droplet, vm-2026-10-13T04-22-12 B11)* Live: a request with `Host: harbor.local` from a real public address is refused by Caddy.
+- [ ] Live checks still open: a stick with a
       setuid binary mounts `nosuid`; *Replace certificate…* with a trusting browser; the key file on `/run`.
+
+## 0.32.0 leftovers (decisions 167–172)
+
+- [ ] Cookie firewall on the tailnet path (decision 167 left it out: a loopback filter listener per endpoint needs a
+      port scheme, makes tailnet apps depend on the daemon, and moves existing serve targets).
+- [ ] Rollout of signing: `HARBOR_SIGNING_KEY` secret in both repos, merge harbor-apps `signing`, then release; later
+      `HARBOR_REQUIRE_SIGNED_CATALOG=1` in Harbor CI (docs/design/SIGNING.md).
+- [ ] Live: cookie firewall with real browsers (Nextcloud, Vaultwarden, Immich over https), HTTPS only with Caddy's
+      redirect route, SFTP host-key confirmation against a real server, SMTP STARTTLS on 587 and implicit TLS on 465,
+      O_NOFOLLOW root writes on Linux, an old link switching over on its first restart, install.sh on Ubuntu 24.04.
+- [ ] Small: `harbor catalog` does not list `multiInstance`; the restore path keeps "Remove the existing one first." for
+      one-copy apps; root opens harbor.db through SQLite, which follows a link at that name (follow-up to decision 169).

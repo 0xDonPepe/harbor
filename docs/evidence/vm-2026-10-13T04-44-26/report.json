@@ -1,0 +1,154 @@
+{
+  "startedAt": "2026-10-13T04:44:26.653Z",
+  "updatedAt": "2026-10-13T04:46:41.549Z",
+  "results": [
+    {
+      "id": "B04",
+      "title": "Public exposure of n8n as primary: HTTPS via Let's Encrypt, owner login and workflow through the public URL",
+      "status": "pass",
+      "at": "2026-10-13T04:45:01.487Z",
+      "details": {
+        "host": "harbor-n8n-mv675izi.apein.space",
+        "exposure": {
+          "id": "a2cbc6ff-fcbf-4d9e-bf5e-06f61105b572",
+          "instanceId": "a0859835-d294-4bd7-b317-b49ec7c612f8",
+          "instanceName": "n8n",
+          "endpointId": "web",
+          "via": "public",
+          "url": "https://harbor-n8n-mv675izi.apein.space/",
+          "hostname": "harbor-n8n-mv675izi.apein.space",
+          "port": 443,
+          "protection": "none",
+          "state": "active",
+          "observedAt": "2026-10-13T04:44:51Z",
+          "note": "answered HTTP 200",
+          "isPrimary": true
+        },
+        "baseUrlEnv": [
+          "N8N_EDITOR_BASE_URL: \"https://harbor-n8n-mv675izi.apein.space/\"",
+          "      WEBHOOK_URL: \"https://harbor-n8n-mv675izi.apein.space/\""
+        ],
+        "workflow": {
+          "workflowId": "KTL6UX8FAhbtSjm7",
+          "credentialId": "lkRIpQO7uiZaEJPC",
+          "executionId": "5",
+          "executionStatus": "success",
+          "fixtureSawCredentialedCall": true,
+          "newFixtureHits": [
+            {
+              "at": "2026-10-13T04:44:58.706Z",
+              "path": "/n8n-demo",
+              "ok": true
+            }
+          ]
+        },
+        "cookies": [
+          {
+            "secure": true,
+            "domain": "harbor-n8n-mv675izi.apein.space"
+          }
+        ],
+        "certificate": [
+          "issuer=C = US, O = Let's Encrypt, CN = YE2",
+          "subject=CN = harbor-n8n-mv675izi.apein.space",
+          "notBefore=Oct 13 03:46:09 2026 GMT",
+          "notAfter=Jan 11 03:46:08 2027 GMT"
+        ]
+      },
+      "notes": [
+        "n8n published at https://harbor-n8n-mv675izi.apein.space/ (active); certificate: issuer=C = US, O = Let's Encrypt, CN = YE2",
+        "primary switched to public: N8N_EDITOR_BASE_URL: \"https://harbor-n8n-mv675izi.apein.space/\" |       WEBHOOK_URL: \"https://harbor-n8n-mv675izi.apein.space/\"",
+        "owner login + credentialed workflow through the public URL: success"
+      ]
+    },
+    {
+      "id": "B05",
+      "title": "Public exposure of BentoPDF with basic protection: 401 without credentials, merge works with them",
+      "status": "pass",
+      "at": "2026-10-13T04:45:22.580Z",
+      "details": {
+        "host": "harbor-pdf-mv6766kj.apein.space",
+        "anonStatus": 401,
+        "authedStatus": 200,
+        "mergedPages": 2
+      },
+      "notes": [
+        "https://harbor-pdf-mv6766kj.apein.space/: 401 without credentials, 200 with; merge in the browser produced a 2-page PDF",
+        "credentials appeared once in the operation result and not in later DTOs"
+      ]
+    },
+    {
+      "id": "B10",
+      "title": "Negative: invalid hostname, duplicate hostname → clear errors, no partial config; a second name for the same app is a second route (decision 127)",
+      "status": "pass",
+      "at": "2026-10-13T04:46:03.745Z",
+      "details": {
+        "invalidHostname": {
+          "code": "INVALID_REQUEST",
+          "message": "invalid request: /: must have required property 'packageId'",
+          "nextAction": "Correct the request and retry.",
+          "details": [
+            "/: must have required property 'packageId'",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to one of the allowed values",
+            "/: must have required property 'runId'",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/hostname: must match pattern \"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$\"",
+            "/kind: must be equal to constant",
+            "/: must have required property 'primary'",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must have required property 'location'",
+            "/: must NOT have additional properties",
+            "/: must NOT have additional properties",
+            "/kind: must be equal to constant",
+            "/: must match exactly one schema in oneOf"
+          ]
+        },
+        "duplicate": {
+          "code": "NAME_CONFLICT",
+          "message": "https://harbor-dup-mv676r6u.apein.space/ is already used by another exposure",
+          "nextAction": "Choose a different instance name and create a new plan."
+        },
+        "secondName": "succeeded"
+      },
+      "notes": [
+        "invalid hostname -> INVALID_REQUEST; duplicate hostname -> NAME_CONFLICT; a second public name for the same endpoint -> its own route (decision 127); both withdrawn again"
+      ]
+    },
+    {
+      "id": "B09",
+      "title": "Reconfigure primary back to loopback; n8n works locally again; unexpose withdraws routes",
+      "status": "fail",
+      "at": "2026-10-13T04:46:41.548Z",
+      "details": {
+        "error": "reconfigure/unexpose wrong: N8N_EDITOR_BASE_URL: \"http://harbor-test.local:18086/\" success routes 2->0",
+        "stack": [
+          "Error: reconfigure/unexpose wrong: N8N_EDITOR_BASE_URL: \"http://harbor-test.local:18086/\" success routes 2->0",
+          "    at file:///Users/carlos/Documents/devshit/harbor/scripts/vm/run-vm-tests.mjs:1039:103",
+          "    at async file:///Users/carlos/Documents/devshit/harbor/scripts/vm/run-vm-tests.mjs:113:62",
+          "    at async main (file:///Users/carlos/Documents/devshit/harbor/scripts/vm/run-vm-tests.mjs:1171:26)"
+        ]
+      },
+      "notes": [
+        "reconfigure/unexpose wrong: N8N_EDITOR_BASE_URL: \"http://harbor-test.local:18086/\" success routes 2->0"
+      ]
+    }
+  ]
+}

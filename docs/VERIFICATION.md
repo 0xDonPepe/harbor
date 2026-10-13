@@ -707,6 +707,28 @@ Gate: lint, typecheck, unit 351, integration 228 + 3 skipped, e2e 35, catalog ve
 **Not verified live yet:** Caddy's `remote_ip` match from a real public address, a real `nosuid` mount, the CA
 replacement with a trusting browser, the fscrypt key file on `/run`.
 
+## 3m. Fresh droplet acceptance + the 0.32.0 round (2026-10-13, Harbor 0.31.0 → 0.32.0, decisions 165–172)
+
+**Live, fresh droplet** (`pnpm test:vm -- --fresh --exposure`, Ubuntu 24.04, archive 0.31.0 built from main):
+
+| Run | Result |
+|---|---|
+| `vm-2026-10-13T03-57-37` | 16 pass / 8 fail / 1 blocked. **Found a real bug:** while A10 restarted Docker, the observer saw no containers and the lock-guard planned starts for every running sealed app; each failed on the dead socket and left the apps `needs_action` for good (readiness never probed), so B04/B05/B07/B09/B10 refused every exposure. Fixed in `d7dcedc` (guards only act on a tick that sees Docker; a start/stop/restart failing with `DOCKER_UNAVAILABLE` keeps the install state) with tests that fail without it. |
+| `vm-2026-10-13T04-22-12` | **22 pass / 2 fail / 1 blocked** (B02/B03 tailnet: no auth key). New **B11 passed**: with LAN mode + Caddy on, a request from this Mac (a public client) with `Host: harbor.local` never reached the console, the box itself still did, and Caddy accepted the `remote_ip` matcher (decision 165). B10/B09 failed on stale runner expectations (decision 127 allows a second public name), fixed in the runner. |
+| `vm-2026-10-13T04-44-26` (`--only B04,B05,B10,B09`) | B04, B05 (Let's Encrypt, basic auth) and B10 pass; B09's only complaint was the LAN-mode base URL left by B11 (runner now accepts it). |
+
+**0.32.0 round (developer host, fake adapter):** six items built in separate worktrees, each reviewed by two
+adversarial reviewers (correctness, security/regressions) and fixed: 50 review findings, all addressed or rejected
+with reasons (details in decisions 167–172). Merged gate: lint, typecheck, unit 476 (+2 skipped), integration 285 +
+3 skipped, e2e 38, catalog verify/hash, openapi current. Real-Docker evidence for decision 171 (Docker Desktop
+29.2.1, throwaway `hbtest-linkalias-*` resources): a provider resolving `db` reached the consumer's `db` on the link
+network while its own was stopped; after re-attaching without the alias, nothing answered. Signing: the real key
+signed a local package, and OpenSSL 3 verified it with install.sh's own command. Upgrade jump: state written by
+v0.19.1 (schema 8) and v0.22.1 (schema 10) with those releases' own code opens, migrates and works.
+
+**Not verified live yet:** anything of 0.32.0 on a box (it needs the signing rollout first), cookie firewall with
+real browsers, HTTPS only through Caddy, SFTP/SMTP against real servers, an old link switching over.
+
 ## 3. Live acceptance runs (`pnpm test:vm -- --fresh`)
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed

@@ -448,6 +448,18 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
+## Phase 61 — signed releases, cookie firewall, second copies (2026-10-13, 0.32.0)
+- [x] Decision 167: cookie firewall in the LAN HTTPS relay (HttpOnly cookies renamed + signed per app, others stripped, cross-app POST/WebSocket refused, `endpoints.<id>.cookies`), HTTPS only switch
+- [x] Decision 168: Ed25519 signatures on releases (`SHA256SUMS.sig`) and the catalog (`catalog.json.sig`), install.sh/self-update/catalog refuse unsigned, no downgrades, catalog fetched by tag; harbor-apps branch `signing`
+- [x] Decision 169: low-severity round (terminal closes on revoke, SMTP TLS, wallpaper SSRF, GCM tag/nonce, O_NOFOLLOW root writes, SFTP host-key confirmation, quieter `/v1/setup`)
+- [x] Decision 170: second copies (Open / Add another copy…, copy notice + name, copy names on Home)
+- [x] Decision 171: link networks carry only Harbor's aliases (runner attaches both sides)
+- [x] Decision 172: upgrade-jump test from 0.19.1 and 0.22.1 state written by those releases
+- [x] Found on the droplet: guards acted on Docker-down ticks; a start/stop that cannot reach Docker kept nothing → fixed; tests run the terminal with HARBOR_DEV_SHELL
+- [x] Tests: unit 476 (+2 skipped), integration 285 + 3 skipped, e2e 38
+- [x] Live: fresh droplet acceptance 22/25 on 0.31.0 + fixes, B11 public Host check passed; reruns of B04/B05/B10 pass
+- [ ] Live on 0.32.0 (after the signing rollout), harbor-old, .192
+
 ## Phase 60 — security round (2026-10-12, 0.31.0)
 - [x] Decision 165: LAN names only from local peers (Caddy `remote_ip`, daemon guard, listener filter); drives `nosuid,nodev`, no stacking, system disk never removable; git build contexts checked on disk; recovery words kept out of `harbor.db` (schema v12 strips old ones, `secure_delete`); login attempts reserved before the hash, global window spares local clients, setup-code back-off doubles; BFU password change re-seals; fscrypt key file on `/run`; name-constrained local CA + `POST /v1/network/https/ca`; new fixed ports on update need acceptance (`opensPorts`); stored secrets only for the same destination; relay only for LAN-bound endpoints, real `X-Forwarded-For`
 - [x] Tests: unit 351, integration 228 + 3 skipped (new `lan-ca.test.ts`), e2e 35; openapi 103 paths

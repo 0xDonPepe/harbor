@@ -1,0 +1,58 @@
+[bootstrap] host: Ubuntu 24.04.5 LTS x64, systemd yes
+[bootstrap] Docker Engine 29.9.0, Compose 5.6.0 found; not modified
+
+Apply the Harbor installation steps above?
+  - Replace release files in /opt/harbor (current 0.31.0 -> 0.31.0)
+  - Keep service account harbor
+  - Ensure /etc/harbor (root:harbor 0750), /var/lib/harbor (harbor 0700) and the data folder /srv/harbor (harbor 0755)
+  - Keep /etc/harbor/harbor.json
+  - Keep existing state in /var/lib/harbor (apps, keys, administrator untouched)
+  - Keep the existing administrator
+  - LAN mode: install avahi (mDNS), console on port 80 and app ports on every interface of this machine
+  - LAN mode: if ufw is installed, allow the console, 443, app ports (and their HTTPS twins) and mDNS from private networks only
+  - Rewrite systemd unit harbor.service and (re)start it
+  (approved with --yes)
+[bootstrap] stopping running daemon for the release update
+[bootstrap] installed release 0.31.0 to /opt/harbor
+[bootstrap] /usr/local/bin/harbor already points at /opt/harbor/bin/harbor
+[bootstrap] LAN mode turned on in the config (apps installed before this keep answering on 127.0.0.1 until they are updated or reinstalled)
+[bootstrap] installing avahi-daemon (mDNS: this machine answers as <hostname>.local on your network)
+[bootstrap] mDNS: avahi publishes <hostname>.local only on eth0 (not on Docker bridges)
+[bootstrap] firewall: ufw is installed but off; allowed 80/tcp, 443/tcp, 18080:18999/tcp, 38080:38999/tcp, 5353/udp from private networks (comment "harbor")
+[bootstrap] per-app encryption ready on / (ext4, /dev/vda1)
+[bootstrap] existing state found (installation 2ce6a826-4310-4e20-867e-86062c5558f9); apps, keys and administrator preserved
+[bootstrap] keeping administrator admin
+
+Set up Cockpit?
+  - Cockpit is already installed: keep its current listener and settings, record its address (bind without taking ownership)
+  (approved with --yes)
+[bootstrap] Cockpit already installed (listener port 9090); not reconfigured
+
+Set up Portainer?
+  - Portainer platform project already exists: keep it and record its address
+  (approved with --yes)
+[bootstrap] starting hb_platform_portainer
+
+Set up the public proxy (Caddy, HTTPS with Let's Encrypt)?
+  - Caddy already installed: keep the package
+  - Keep the Harbor-owned /etc/caddy/harbor.json
+  - Ports 80/443 stay closed until you expose an app; then DNS for each hostname must point at this host
+  (approved with --yes)
+[bootstrap] caddy running with the Harbor-owned config; admin API on 127.0.0.1:2019
+[bootstrap] daemon healthy at http://localhost:18000
+Harbor 0.31.0 installed (node v24.12.0, docker 29.9.0, compose 5.6.0).
+Installation 2ce6a826-4310-4e20-867e-86062c5558f9; administrator kept.
+cockpit: external installed https://localhost:9090/
+    Existing Cockpit installation bound without changes. Listener on port 9090 as configured by the host. Log in with an OS account.
+portainer: managed setup_required https://localhost:9443/
+    Portainer CE 2.39.7 with Docker socket access (root-equivalent). First run: create the admin in Portainer's own form within 5 minutes of start; it asks for the one-time setup token printed in the container log (sudo docker logs hb_platform_portainer-portainer-1 2>&1 | grep setup_token). If the window expired, run: sudo docker restart hb_platform_portainer-portainer-1 (prints a new token). Self-signed certificate.
+proxy: external installed 
+    Caddy serves only the routes Harbor publishes (harbor expose --via public --host <fqdn>). Certificates come from Let's Encrypt; DNS must point at this host and ports 80/443 must be reachable.
+
+On your network: http://harbor-test.local/
+
+Web UI (on this machine): http://localhost:18000/
+From another machine, forward the same port numbers over SSH (management, app ports, tools):
+  ssh -L 18000:127.0.0.1:18000 -L 18080:127.0.0.1:18080 -L 18081:127.0.0.1:18081 -L 18082:127.0.0.1:18082 -L 9090:127.0.0.1:9090 -L 9443:127.0.0.1:9443 <user>@<this-host>
+If a local port is busy on your machine, free it or choose a different local port and open http://localhost:<that-port>/ — the remote ports never change.
+CLI: harbor login   (then: catalog, install <package>, list, tools; full path /opt/harbor/bin/harbor)

@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **167**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **173**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -58,7 +58,8 @@ web/src/        React 19 + Vite, plain CSS tokens, strict CSP; App.tsx, app/page
                 ../harbor-apps; apps/<id>/ = manifest.yaml + compose.yaml + README.md + release.json (+ icon))
 targets/<id>/   one backup place package = manifest.yaml (kind BackupTarget: a form + a transport) + README.md
 tests/          unit/ integration/ (fake adapter) e2e/ (Playwright) vm/ (live suite, opt-in);
-                fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store)
+                fixtures/catalog/ = FROZEN copies of 9 apps for tests, e2e and `pnpm dev` (not the store);
+                fixtures/state/<tag>/ = FROZEN state dirs written by old releases (upgrade-jump test, decision 172)
 scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_CATALOG_DIR, default
                 ../harbor-apps/apps), catalog-fetch.mjs (downloads the latest catalog over HTTPS + checks
                 the zip against its catalog.json), openapi.ts, package.mjs (ships that catalog as the seed), vm/ controllers
@@ -121,7 +122,8 @@ Key separations (do not blur them):
      violations before. Buttons must stay **visible and clickable** (a clipped 1px submit broke
      CI); Enter-to-submit still works with a real button.
    - Schema change → bump `SCHEMA_VERSION`, add `migrateVNtoVN+1` in `src/state/db.ts`, extend
-     `tests/unit/migration.test.ts`. Prefer the `settings` table (JSON docs, no migration) for
+     `tests/unit/migration.test.ts`; after that release ships, add `node scripts/make-state-fixture.mjs v<that
+     release>` + the tag in `tests/integration/upgrade-jump.test.ts` (never edit an existing fixture). Prefer the `settings` table (JSON docs, no migration) for
      new preferences.
    - New DTO field → `src/contracts/api.ts` → `src/lifecycle/dto.ts` → consumers (web imports
      the same contract types — never duplicate shapes).
@@ -131,16 +133,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (356)
-   pnpm test:integration        # 228 + 3 live-Docker skipped (~5 min)
-   pnpm build && pnpm test:e2e  # 35 Playwright (~2 min, ports 18500/18700)
+   pnpm test                    # unit (476)
+   pnpm test:integration        # 285 + 3 live-Docker skipped (~5 min)
+   pnpm build && pnpm test:e2e  # 38 Playwright (~2 min, ports 18500/18700)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
    pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **167**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **173**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -150,7 +152,8 @@ Key separations (do not blur them):
      scratch): commit ONLY the run VERIFICATION cites, with `git add -f docs/evidence/vm-<ts>`
      and a README.md inside saying what it proves.
    - New routes → `docs/openapi.json` via `pnpm openapi` (never hand-edit).
-6. **Commit + ship**: commit on `main`, push — CI publishes the release. Bump `package.json`
+6. **Commit + ship**: commit on `main`, push — CI publishes the release, signed with the `HARBOR_SIGNING_KEY`
+   Actions secret (decision 168, `docs/design/SIGNING.md`; the release job fails without it). Bump `package.json`
    `version` when the change deserves a release (CI tags `v<version>` from it). Never run
    `gh release create` manually; never push with a red local suite.
 

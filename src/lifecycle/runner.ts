@@ -6,8 +6,8 @@ import { HarborError, type ErrorCode } from '../errors.js';
 import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
 import { LABELS } from '../naming.js';
 import { defaultNetworkName, identityFor, ownedVolumeName, volumeLabels, type InstanceIdentity } from '../planner/identity.js';
-import { renderCompose, type ConsumerLink, type ProviderLink } from '../planner/render.js';
-import { linkAlias, linkNetworkLabels, linkValue } from '../planner/links.js';
+import { renderCompose, type ConsumerLink } from '../planner/render.js';
+import { linkAlias, linkAliasesDrift, linkNetworkLabels, linkValue } from '../planner/links.js';
 import type { NetworkInfo } from '../docker/adapter.js';
 import type { LinkRow, PlannedLink } from '../state/repo.js';
 import { checkHostDirectory } from '../storage/host-path.js';
@@ -461,11 +461,12 @@ export class OperationRunner {
   private async renderAndValidate(op: OperationRow, pkg: LoadedPackage, identity: InstanceIdentity, inst: InstanceRow, runtimeDir: string, secretValues: Record<string, string>, primary?: PrimaryExposure, provisioned?: { username: string; password: string } | null): Promise<string> {
     const externalStorage = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'bind').map((r) => [r.role, { hostPath: r.name, readOnly: Boolean(r.metadata?.['readOnly']) }]));
     const builtImages = Object.fromEntries(Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => [svc, b.tag]));
-    // Decision 126: every active link network must exist before Compose attaches to it (Restart re-applies).
+    // Decision 126: every active link network exists before the containers start (Restart re-applies);
+    // decision 171: the runner attaches them, so they are not in the Compose file.
     await this.ensureLinkNetworks(op, inst);
-    const { consumerLinks, providerLinks } = this.linkRenderInputs(inst, pkg);
+    const consumerLinks = this.consumerLinkInputs(inst, pkg);
     const volumeNames = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'volume' && r.role !== '__home__').map((r) => [r.role, r.name]));
-    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: this.ctx.config.lan.enabled ? '0.0.0.0' : '127.0.0.1', provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, providerLinks });
+    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: this.ctx.config.lan.enabled ? '0.0.0.0' : '127.0.0.1', provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks });
     const file = writeRuntimeCompose(runtimeDir, rendered.yaml);
     try {
       await this.ctx.compose.config({ projectDir: runtimeDir, projectName: identity.project, file }, 60_000);
@@ -744,23 +745,22 @@ export class OperationRunner {
     return net.labels[LABELS.installation] === this.ctx.installationId && net.labels[LABELS.instance] === l.consumerInstanceId && net.labels[LABELS.kind] === 'link' && net.labels[LABELS.link] === l.linkId;
   }
 
-  // Render inputs: active links where `inst` is the consumer (bound services join, variables get the
-  // address) and where it is the provider (its endpoint service joins with the alias).
-  private linkRenderInputs(inst: InstanceRow, pkg: LoadedPackage): { consumerLinks: ConsumerLink[]; providerLinks: ProviderLink[] } {
+  // Render inputs: active links where `inst` is the consumer (its bound services' variables get the address).
+  // Which containers sit on the link networks is the runner's job (syncLinkMembers), never Compose's.
+  private consumerLinkInputs(inst: InstanceRow, pkg: LoadedPackage): ConsumerLink[] {
     const { repo } = this.ctx;
     const consumerLinks: ConsumerLink[] = [];
     for (const l of repo.linksOfConsumer(inst.id)) {
       if (l.state !== 'active' || !l.providerInstanceId || !(pkg.manifest.links ?? []).some((c) => c.id === l.linkId)) continue;
       const alloc = repo.instance(l.providerInstanceId)?.endpoints.find((e) => e.id === l.providerEndpoint);
-      if (alloc) consumerLinks.push({ id: l.linkId, network: l.networkName, alias: linkAlias(l.linkId), containerPort: alloc.containerPort });
+      if (alloc) consumerLinks.push({ id: l.linkId, alias: linkAlias(l.linkId), containerPort: alloc.containerPort });
     }
-    const providerLinks: ProviderLink[] = [];
-    for (const l of repo.linksOfProvider(inst.id)) {
-      if (l.state !== 'active') continue;
-      const alloc = inst.endpoints.find((e) => e.id === l.providerEndpoint);
-      if (alloc) providerLinks.push({ network: l.networkName, service: alloc.service, alias: linkAlias(l.linkId) });
-    }
-    return { consumerLinks, providerLinks };
+    return consumerLinks;
+  }
+
+  private hasActiveLinks(inst: InstanceRow): boolean {
+    const { repo } = this.ctx;
+    return [...repo.linksOfConsumer(inst.id), ...repo.linksOfProvider(inst.id)].some((l) => l.state === 'active' && l.providerInstanceId);
   }
 
   // Create (or verify) the network of one active link. Never adopts a network Harbor did not label.
@@ -804,23 +804,36 @@ export class OperationRunner {
     return repo.resources(consumer.id).filter((r) => r.kind === 'container' && services.includes(r.role) && r.dockerId).map((r) => ({ id: r.dockerId!, aliases: [] }));
   }
 
-  // After `inst` started: Compose attached its own side; attach the other side live (no restart for it).
-  private async attachLinkPeers(op: OperationRow, inst: InstanceRow): Promise<void> {
+  // Decision 171: put the link members on their networks with exactly the names Harbor gives (consumer
+  // services none, the provider's endpoint service `<id>-link`). `own`: this instance's side only, before
+  // its containers start; `all`: both sides, the other app attached live (no restart for it). A member that
+  // answers to other names (a service name Compose added before 0.32.0) is detached and attached again:
+  // same container, same address, a moment without the link.
+  private async syncLinkMembers(op: OperationRow, inst: InstanceRow, which: 'own' | 'all'): Promise<void> {
     const { repo, docker } = this.ctx;
     const work: { l: LinkRow; side: 'consumer' | 'provider' }[] = [
-      ...repo.linksOfConsumer(inst.id).map((l) => ({ l, side: 'provider' as const })),
-      ...repo.linksOfProvider(inst.id).map((l) => ({ l, side: 'consumer' as const })),
+      ...repo.linksOfConsumer(inst.id).flatMap((l) => [{ l, side: 'consumer' as const }, ...(which === 'all' ? [{ l, side: 'provider' as const }] : [])]),
+      ...repo.linksOfProvider(inst.id).flatMap((l) => [{ l, side: 'provider' as const }, ...(which === 'all' ? [{ l, side: 'consumer' as const }] : [])]),
     ];
     for (const { l, side } of work) {
       if (l.state !== 'active' || !l.providerInstanceId) continue;
       const net = await docker.inspectNetwork(l.networkId ?? l.networkName);
       if (!net || !this.ownsLinkNetwork(net, l)) continue;
       for (const m of this.linkMembers(l, side)) {
-        if (net.containerIds.includes(m.id)) continue;
         const c = await docker.inspectContainer(m.id);
         if (!c) continue;
+        const as = m.aliases.length ? ` as ${m.aliases.join(', ')} only` : ' under no name of its own';
+        if (c.networkIds.includes(net.id)) {
+          const actual = c.networkAliases?.[net.id];
+          if (!actual || !linkAliasesDrift(actual, m.aliases, c)) continue;
+          await docker.disconnectNetwork(net.id, m.id);
+          await docker.connectNetwork(net.id, m.id, m.aliases);
+          const dropped = actual.filter((a) => !m.aliases.includes(a) && a !== c.name);
+          this.event(op, 'starting', `re-attached ${c.name} to link network ${l.networkName}${as}${dropped.length ? ` (it also answered there to ${dropped.join(', ')})` : ''}`);
+          continue;
+        }
         await docker.connectNetwork(net.id, m.id, m.aliases);
-        this.event(op, 'starting', `attached ${c.name} to link network ${l.networkName}${m.aliases.length ? ` as ${m.aliases.join(', ')}` : ''}`);
+        this.event(op, 'starting', `attached ${c.name} to link network ${l.networkName}${as}`);
       }
     }
   }
@@ -1366,7 +1379,17 @@ export class OperationRunner {
 
   private async upAndRecord(op: OperationRow, inv: { projectDir: string; projectName: string; file: string }, identity: InstanceIdentity, inst: InstanceRow, opts: { forceRecreate?: boolean } = {}): Promise<ContainerInfo[]> {
     try {
-      await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs, opts);
+      if (this.hasActiveLinks(inst)) {
+        // Decision 171: create (or recreate), put this app's link members on their networks, then start,
+        // so a linked service can reach (and be reached) from its first second; `up --wait` would
+        // otherwise wait on a health check that needs the link.
+        await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs, { ...opts, noStart: true });
+        await this.recordProjectResources(op, identity, inst);
+        await this.syncLinkMembers(op, inst, 'own');
+        await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs);
+      } else {
+        await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs, opts);
+      }
     } catch (e) {
       try {
         await this.removeHalfCreated(op, identity, inst);
@@ -1377,7 +1400,7 @@ export class OperationRunner {
       throw e;
     }
     const containers = await this.recordProjectResources(op, identity, inst);
-    await this.attachLinkPeers(op, inst);
+    await this.syncLinkMembers(op, inst, 'all');
     return containers;
   }
 
@@ -1465,9 +1488,10 @@ export class OperationRunner {
     repo.updateInstance(inst.id, { runtime: 'starting' });
     const file = path.join(dirs.runtime, 'compose.yaml');
     await this.ensureLinkNetworks(op, inst);
+    await this.syncLinkMembers(op, inst, 'own');
     await this.ctx.compose.start({ projectDir: dirs.runtime, projectName: identity.project, file }, config.startTimeoutMs);
     const containers = await this.recordProjectResources(op, identity, inst);
-    await this.attachLinkPeers(op, inst);
+    await this.syncLinkMembers(op, inst, 'all');
     await this.checkReadiness(op, pkg, inst, containers);
     repo.updateInstance(inst.id, { installState: 'installed', runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
   }
@@ -1925,9 +1949,10 @@ export class OperationRunner {
     const identity = identityFor(this.ctx.installationId, inst.id);
     repo.updateInstance(inst.id, { runtime: 'starting' });
     await this.ensureLinkNetworks(op, inst);
+    await this.syncLinkMembers(op, inst, 'own');
     await this.ctx.compose.start({ projectDir: dirs.runtime, projectName: identity.project, file: path.join(dirs.runtime, 'compose.yaml') }, config.startTimeoutMs);
     const containers = await this.recordProjectResources(op, identity, inst);
-    await this.attachLinkPeers(op, inst);
+    await this.syncLinkMembers(op, inst, 'all');
     await this.checkReadiness(op, pkg, inst, containers);
     repo.updateInstance(inst.id, { installState: 'installed', runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
     const downtimeMs = Date.now() - started;

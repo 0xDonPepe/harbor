@@ -100,9 +100,11 @@ export class ComposeCli implements ComposeRunner {
     return this.compose(inv, ['pull', '--quiet', '--policy', 'missing'], timeoutMs);
   }
 
-  up(inv: ComposeInvocation, timeoutMs: number, opts: { forceRecreate?: boolean } = {}): Promise<ComposeResult> {
+  up(inv: ComposeInvocation, timeoutMs: number, opts: { forceRecreate?: boolean; noStart?: boolean } = {}): Promise<ComposeResult> {
     // No --remove-orphans, no --renew-anon-volumes: nothing outside this project is touched, and
     // existing data is never discarded. --force-recreate only for Restart (same volumes, new containers).
+    // --no-start (decision 171): create only; the runner attaches link networks, then a plain up starts.
+    if (opts.noStart) return this.compose(inv, ['up', '--no-start', '--no-build', '--pull', 'never', '--quiet-pull', ...(opts.forceRecreate ? ['--force-recreate'] : [])], timeoutMs);
     return this.compose(inv, ['up', '--detach', '--no-build', '--pull', 'never', '--quiet-pull', ...(opts.forceRecreate ? ['--force-recreate'] : []), '--wait', '--wait-timeout', String(Math.max(1, Math.floor(timeoutMs / 1000) - 5))], timeoutMs);
   }
 

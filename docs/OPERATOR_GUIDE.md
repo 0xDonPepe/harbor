@@ -715,7 +715,12 @@ that wants the same one.
   wizard asks which installed app provides it (*Talks privately to*; picked for you when there is only
   one). Harbor creates a private network for just these two — only the app that asked and the one
   service of the other app join it, never its database — with no route to the internet, and hands the
-  app an address like `http://docs-link:3010`. The other app is not restarted. The app's page shows
+  app an address like `http://docs-link:3010`. The other app is not restarted. On that network the
+  app's own services answer to no name and the other app only to that address, so neither can pose as
+  the other's database or services (decision 171). Links made before 0.32.0 switch over by themselves the
+  next time either app is started, restarted, updated, reinstalled or reconfigured: same data, same
+  ports, same address. The first such run may recreate the linked service once (like a Restart), and
+  the other app briefly loses the link while it is attached again. The app's page shows
   its links (*Change*, *Link*, *Unlink* for optional ones) and, on the other app, who reaches it;
   **Settings → Internal networks** lists every link on the machine. If you remove the providing app,
   the link is dropped and the app that used it shows *needs a provider* (bell, Home, its page) until

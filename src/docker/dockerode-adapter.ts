@@ -29,6 +29,7 @@ function fromInspect(c: InspectInfo): ContainerInfo {
     health: health ?? 'none',
     ports,
     networkIds: Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.NetworkID),
+    networkAliases: Object.fromEntries(Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => [n.NetworkID, n.Aliases ?? []])),
   };
 }
 

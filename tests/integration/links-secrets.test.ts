@@ -189,9 +189,10 @@ describe('app links (decision 126)', () => {
     expect(h.fake.aliasesOn(`${projectNameFor(docs.id)}-web-1`, net)).toEqual(['docs-link']);
     expect(h.fake.envOf(`${projectNameFor(gw.id)}-web-1`)?.['DOCS_BASE_URL']).toBe('http://docs-link:3010');
     expect(h.fake.envOf(`${projectNameFor(gw.id)}-sidecar-1`)?.['DOCS_BASE_URL']).toBeUndefined();
-    // the provider's own Compose file carries the link so every later `up` keeps it
-    expect(runtime(docs.id)).toContain(net);
-    expect(runtime(docs.id)).toContain('docs-link');
+    // decision 171: no Compose file carries the link (Compose would name each service there); the runner attaches both sides
+    expect(runtime(docs.id)).not.toContain(net);
+    expect(runtime(gw.id)).not.toContain(net);
+    expect(h.fake.aliasesOn(`${projectNameFor(gw.id)}-web-1`, net)).toEqual([]);
     const links = (await h.api.expect<{ items: LinkDto[] }>(200, 'GET', '/v1/links')).items;
     expect(links).toEqual([expect.objectContaining({ id: 'docs', state: 'active', consumer: { instanceId: gw.id, name: 'gatewayish' }, provider: { instanceId: docs.id, name: 'docsapp', endpointId: 'web' }, network: net, url: 'http://docs-link:3010' })]);
     expect((await byName('docsapp')).linkedBy).toEqual([{ instanceId: gw.id, name: 'gatewayish', linkId: 'docs', state: 'active' }]);

@@ -166,13 +166,27 @@ when the new release does not start or answer. Developer guide: docs/DEVELOPER_P
   Storage, binding, retention and redaction are those of generated secrets. `configure` plans replace
   values later.
 - **`links[]`**: per-link Docker network `<consumer project>_link_<id>`, created by the runner
-  (`internal`, Harbor labels incl. `link` and `provider`, ownership checked before use and removal),
-  declared `external` in both rendered Compose files. Joined by the consumer's bound services and the
-  provider's endpoint service (alias `<id>-link`) only. The consumer's variables get
-  `http://<id>-link:<containerPort>` (`url`/`authority`/`host`/`port`). Relation state in the `links`
-  table (schema v9): `active`, `needs_provider` (provider removed or never chosen), `dormant` (consumer
-  removed; Reinstall revives). Render paths re-create a missing network; after every `up`/`start` the
-  other side is re-attached live.
+  (`internal`, Harbor labels incl. `link` and `provider`, ownership checked before use and removal).
+  Joined by the consumer's bound services and the provider's endpoint service (alias `<id>-link`) only.
+  The consumer's variables get `http://<id>-link:<containerPort>` (`url`/`authority`/`host`/`port`).
+  Relation state in the `links` table (schema v9): `active`, `needs_provider` (provider removed or never
+  chosen), `dormant` (consumer removed; Reinstall revives). Render paths re-create a missing network.
+  **Decision 171: link networks are never in a rendered Compose file.** Compose names every container it
+  attaches after its service on each network, and Docker resolves a name on any network a container sits
+  on (its own network answers first, but while the provider's `db` is stopped its endpoint service
+  resolved `db` to a consumer service called `db`, Docker 29). So the runner attaches both sides with
+  `docker network connect` and explicit aliases only (consumer services none, provider `<id>-link`;
+  Docker adds just the unique container name and short id). A linked app is created with `up --no-start`,
+  its side attached, then started (`up --wait`), so the link is there from the first second; after
+  every `up`/`start` both sides are checked and the other app attached live. A member that answers to
+  any other name (what Compose left before 0.32.0) is detached and attached again: same container, same
+  address (always detach first: Docker accepts a second connect of an attached, stopped container and
+  keeps its old aliases; aliases are read by network name, because Docker leaves `NetworkID` empty on
+  every network of a container that never started). Once per daemon start the observer reads every link
+  that exists then; one whose containers still answer to other names gets a `relink` operation (internal
+  kind, actor `link-guard`, not accepted by the API): both sides attached again live, nothing recreated,
+  both Compose files rewritten without the link network. So an upgrade switches untouched links by
+  itself; `compose start` on a 0.31 file never re-adds the names (Compose attaches networks only on `up`).
 - Not in this round: links to platform tools, several providers per link, cross-machine links, and
   automatic restarts of a consumer when a provider's container port changes (an event says to Restart).
 

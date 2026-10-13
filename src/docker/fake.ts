@@ -18,6 +18,8 @@ interface FakeContainer extends ContainerInfo {
   // network id -> aliases on it (decision 126 link networks)
   aliases?: Record<string, string[]>;
   env?: Record<string, string>;
+  // what Compose's config hash covers: a change recreates the container on the next `up` (decision 171)
+  configHash?: string;
 }
 
 export interface FakeBehaviour {
@@ -64,12 +66,12 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   }
   async listContainers(opts: { all: boolean; labels?: Record<string, string> }): Promise<ContainerInfo[]> {
     this.assertUp();
-    return [...this.containers.values()].filter((c) => (opts.all || c.state === 'running') && matches(c.labels, opts.labels)).map(clone);
+    return [...this.containers.values()].filter((c) => (opts.all || c.state === 'running') && matches(c.labels, opts.labels)).map((c) => clone(c, this.networks));
   }
   async inspectContainer(id: string): Promise<ContainerInfo | null> {
     this.assertUp();
     const c = this.containers.get(id) ?? [...this.containers.values()].find((x) => x.name === id);
-    return c ? clone(c) : null;
+    return c ? clone(c, this.networks) : null;
   }
   async startContainer(id: string): Promise<void> {
     this.assertUp();
@@ -175,6 +177,15 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
     if (c.aliases) delete c.aliases[n.id];
     this.log.push(`network disconnect ${n.name} ${c.name}`);
   }
+  // Test helper: every name that resolves on a network (container names + aliases), as Docker's DNS has them.
+  namesOn(networkName: string): string[] {
+    const n = [...this.networks.values()].find((x) => x.name === networkName);
+    if (!n) return [];
+    return n.containerIds.flatMap((id) => {
+      const c = this.containers.get(id);
+      return c ? [c.name, ...(c.aliases?.[n.id] ?? [])] : [];
+    });
+  }
   // Test helper: the aliases a container answers to on a network (by network name).
   aliasesOn(containerName: string, networkName: string): string[] | null {
     const c = [...this.containers.values()].find((x) => x.name === containerName);
@@ -233,7 +244,10 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
     this.log.push(`pull ${inv.projectName}`);
     return { stdout: '', stderr: '' };
   }
-  async up(inv: ComposeInvocation, _timeoutMs: number, opts: { forceRecreate?: boolean } = {}): Promise<ComposeResult> {
+  // Like Compose: a container whose configuration changed (or every one with forceRecreate) is recreated and so
+  // loses the networks the runner attached; an unchanged one keeps them. Networks Compose attaches carry the
+  // container name and the service name as aliases (decision 171). noStart creates without starting.
+  async up(inv: ComposeInvocation, _timeoutMs: number, opts: { forceRecreate?: boolean; noStart?: boolean } = {}): Promise<ComposeResult> {
     this.assertUp();
     if (this.behaviour.failUp) throw new ComposeError(`docker compose up failed: ${this.behaviour.failUp}`, { command: ['up'], exitCode: 1, stderrTail: this.behaviour.failUp, timedOut: false });
     const text = readFileSync(inv.file, 'utf8').replace(/\$\$/g, '$');
@@ -264,7 +278,9 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
     }
     for (const [service, def] of Object.entries(doc.services)) {
       const name = `${inv.projectName}-${service}-1`;
+      const hash = JSON.stringify(def);
       let c = [...this.containers.values()].find((x) => x.name === name);
+      const recreate = Boolean(c && (opts.forceRecreate || c.configHash !== hash));
       if (!c) {
         c = {
           id: this.id('c'),
@@ -285,7 +301,8 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
         this.containers.set(c.id, c);
         net.containerIds.push(c.id);
       }
-      // Compose recreates a container whose configuration changed; the fake syncs env and networks in place.
+      // Compose recreates a container whose configuration changed; the fake keeps its id and syncs in place.
+      c.configHash = hash;
       c.env = { ...(def.environment ?? {}) };
       const wanted = new Map<string, string[]>([[net.id, []]]);
       const svcNets = Array.isArray(def.networks) ? Object.fromEntries(def.networks.map((k) => [k, null])) : (def.networks ?? { default: null });
@@ -293,28 +310,36 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
         if (key === 'default') continue;
         const decl = doc.networks?.[key];
         const target = [...this.networks.values()].find((x) => x.name === (decl?.name ?? key));
-        if (target) wanted.set(target.id, cfg?.aliases ?? []);
+        if (target) wanted.set(target.id, [name, service, ...(cfg?.aliases ?? [])]);
       }
       for (const n of this.networks.values()) {
         const has = n.containerIds.includes(c.id);
         const want = wanted.has(n.id);
         if (want && !has) n.containerIds.push(c.id);
-        if (!want && has) n.containerIds = n.containerIds.filter((x) => x !== c.id);
+        if (!want && has && recreate) n.containerIds = n.containerIds.filter((x) => x !== c.id);
       }
       c.networkIds = [...this.networks.values()].filter((n) => n.containerIds.includes(c.id)).map((n) => n.id);
       c.aliases ??= {};
       for (const id of Object.keys(c.aliases)) if (!c.networkIds.includes(id)) delete c.aliases[id];
-      for (const [id, al] of wanted) if (id !== net.id) c.aliases[id] = al;
+      for (const [id, al] of wanted) if (id !== net.id && (recreate || !c.aliases[id])) c.aliases[id] = al;
+      if (opts.noStart) {
+        if (recreate && c.state === 'running') {
+          c.state = 'created';
+          c.startedAt = null;
+          await this.unlisten(c.id);
+        }
+        continue;
+      }
       if (c.state !== 'running') {
         c.state = 'running';
         c.startedAt = rfc3339(this.clock.now());
         await this.listen(c);
       }
     }
-    if (opts.forceRecreate) {
+    if (opts.forceRecreate && !opts.noStart) {
       for (const c of this.containers.values()) if (c.project === inv.projectName) c.startedAt = rfc3339(this.clock.now());
     }
-    this.log.push(`up ${inv.projectName}${opts.forceRecreate ? ' --force-recreate' : ''}`);
+    this.log.push(`up ${inv.projectName}${opts.noStart ? ' --no-start' : ''}${opts.forceRecreate ? ' --force-recreate' : ''}`);
     return { stdout: '', stderr: '' };
   }
   async start(inv: ComposeInvocation, _timeoutMs: number): Promise<ComposeResult> {
@@ -397,7 +422,7 @@ function matches(labels: Record<string, string>, want?: Record<string, string>):
   if (!want) return true;
   return Object.entries(want).every(([k, v]) => labels[k] === v);
 }
-function clone(c: FakeContainer): ContainerInfo {
+function clone(c: FakeContainer, networks: Map<string, NetworkInfo>): ContainerInfo {
 
-  return { id: c.id, name: c.name, image: c.image, state: c.state, labels: { ...c.labels }, createdAt: c.createdAt, startedAt: c.startedAt, health: c.health, ports: c.ports.map((p) => ({ ...p })), networkIds: [...c.networkIds] };
+  return { id: c.id, name: c.name, image: c.image, state: c.state, labels: { ...c.labels }, createdAt: c.createdAt, startedAt: c.startedAt, health: c.health, ports: c.ports.map((p) => ({ ...p })), networkIds: [...c.networkIds], networkAliases: Object.fromEntries(c.networkIds.map((n) => [networks.get(n)?.name ?? n, [...(c.aliases?.[n] ?? [])]])) };
 }

@@ -330,6 +330,10 @@ database and other services never join), with no route to the internet. The prov
 `<link-id>-link` on its container port, and your variables receive that address in the chosen `format`.
 
 - The provider is attached live; it is not restarted.
+- On the link network your services answer to **no name** and the provider only to `<link-id>-link`
+  (decision 171): service names never count there, so naming a service `db` or `web` is fine and can
+  neither catch the other app's lookups nor be caught by them. Reach the provider only through the
+  variable Harbor hands you, never by its service name.
 - If the provider is removed or uninstalled, the link is dropped and your app is flagged *needs a
   provider* (it keeps running without the variable after its next restart); the operator picks another
   app on its page or with `harbor configure my-app --link docs=<app>`.

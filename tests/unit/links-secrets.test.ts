@@ -5,7 +5,8 @@ import { validateComposeSource } from '../../src/packages/compose-source.js';
 import { parseRestrictedYaml } from '../../src/packages/yaml.js';
 import { identityFor } from '../../src/planner/identity.js';
 import { renderCompose } from '../../src/planner/render.js';
-import { linkAlias, linkNetworkLabels, linkNetworkName, linkValue } from '../../src/planner/links.js';
+import { linkAlias, linkAliasesDrift, linkExtraNames, linkNetworkLabels, linkNetworkName, linkValue } from '../../src/planner/links.js';
+import { containerInfoFromInspect } from '../../src/docker/dockerode-adapter.js';
 import { checkSubmittedSecrets, operatorValueProblem, plannedSecrets } from '../../src/planner/secrets.js';
 import { HarborError } from '../../src/errors.js';
 import { LABELS } from '../../src/naming.js';
@@ -116,16 +117,20 @@ describe('planner: links', () => {
     expect(labels[LABELS.link]).toBe('docs');
     expect(labels[LABELS.provider]).toBe(provider.instanceId);
   });
-  it('consumer: only bound services join the external link network and get the address', () => {
+  // Decision 171: Compose would give every service it attaches its own service name as a name on the link
+  // network (a consumer service called `db` would answer the provider's own `db` lookups whenever the
+  // provider's db is down). So link networks never appear in a Compose file; the runner attaches them.
+  it('consumer: bound services get the address, but the link network stays out of the Compose file', () => {
     const { manifest, compose } = full(LINKS);
     const net = linkNetworkName(consumer, 'docs');
-    const r = renderCompose({ manifest, compose, identity: consumer, endpoints, secretValues: null, consumerLinks: [{ id: 'docs', network: net, alias: 'docs-link', containerPort: 3010 }] });
+    const r = renderCompose({ manifest, compose, identity: consumer, endpoints, secretValues: null, consumerLinks: [{ id: 'docs', alias: 'docs-link', containerPort: 3010 }] });
     const doc = parseYaml(r.yaml);
-    expect(doc.services.web.networks).toEqual({ default: {}, [net]: {} });
+    expect(doc.services.web.networks).toEqual(['default']);
     expect(doc.services.worker.networks).toEqual(['default']);
     expect(doc.services.web.environment.DOCS_BASE_URL).toBe('http://docs-link:3010');
     expect(doc.services.web.environment.DOCS_HOST).toBe('docs-link');
-    expect(doc.networks[net]).toEqual({ name: net, external: true });
+    expect(Object.keys(doc.networks)).toEqual(['default']);
+    expect(r.yaml).not.toContain(net);
     expect(r.generatedEnv['web']).toContain('DOCS_BASE_URL');
   });
   it('consumer without a provider: no network, no variable', () => {
@@ -135,14 +140,48 @@ describe('planner: links', () => {
     expect(doc.services.web.environment?.DOCS_BASE_URL).toBeUndefined();
     expect(Object.keys(doc.networks)).toEqual(['default']);
   });
-  it('provider: only the endpoint service joins, with the alias; infrastructure never does', () => {
+  it('provider: its Compose file is the same with or without links (the runner attaches the endpoint service)', () => {
     const manifest = validateManifestShape(y(withServices));
     const compose = validateComposeSource(y(COMPOSE));
-    const net = linkNetworkName(consumer, 'docs');
-    const doc = parseYaml(renderCompose({ manifest, compose, identity: provider, endpoints, secretValues: null, providerLinks: [{ network: net, service: 'web', alias: 'docs-link' }] }).yaml);
-    expect(doc.services.web.networks).toEqual({ default: {}, [net]: { aliases: ['docs-link'] } });
+    const doc = parseYaml(renderCompose({ manifest, compose, identity: provider, endpoints, secretValues: null }).yaml);
+    expect(doc.services.web.networks).toEqual(['default']);
     expect(doc.services.worker.networks).toEqual(['default']);
-    expect(doc.networks[net]).toEqual({ name: net, external: true });
+    expect(Object.keys(doc.networks)).toEqual(['default']);
+  });
+  it('alias drift: only the names Harbor gives count; Docker\'s own container name and short id are fine', () => {
+    const c = { id: 'db1f00c0ffee' + '0'.repeat(52), name: 'hb_abc-db-1' };
+    // what the runner makes: consumer services answer to nothing, the provider endpoint to `<id>-link`
+    expect(linkAliasesDrift([], [], c)).toBe(false);
+    expect(linkAliasesDrift(['docs-link'], ['docs-link'], { ...c, name: 'hb_def-web-1' })).toBe(false);
+    // Docker < 25 lists the short id among the aliases; Compose lists the container name
+    expect(linkAliasesDrift([c.id.slice(0, 12), c.name], [], c)).toBe(false);
+    // what Compose made before 0.32.0: the service name too, which can shadow a name of the other app
+    expect(linkAliasesDrift([c.name, 'db'], [], c)).toBe(true);
+    expect(linkAliasesDrift(['hb_def-web-1', 'web', 'docs-link'], ['docs-link'], { ...c, name: 'hb_def-web-1' })).toBe(true);
+    // a short alias that happens to be a prefix of the id is still a name somebody chose
+    expect(linkAliasesDrift(['db'], [], c)).toBe(true);
+    // the wanted alias missing is drift as well
+    expect(linkAliasesDrift([], ['docs-link'], c)).toBe(true);
+  });
+  it('the names a re-attach drops leave out Docker\'s own (container name, short id)', () => {
+    const c = { id: 'db1f00c0ffee' + '0'.repeat(52), name: 'hb_abc-db-1' };
+    expect(linkExtraNames([c.id.slice(0, 12), c.name, 'db', 'docs-link'], ['docs-link'], c)).toEqual(['db']);
+    expect(linkExtraNames([c.id.slice(0, 12), c.name], [], c)).toEqual([]);
+  });
+  it('inspect: aliases are keyed by network name, also for a container never started (Docker leaves its NetworkID empty)', () => {
+    const inspect = (status: string, nid: string) =>
+      ({
+        Id: 'c'.repeat(64),
+        Name: '/hb_abc-db-1',
+        Config: { Image: 'x', Labels: {} },
+        Created: '2026-10-12T00:00:00Z',
+        State: { Status: status, StartedAt: '0001-01-01T00:00:00Z' },
+        NetworkSettings: { Ports: {}, Networks: { hb_abc_link_docs: { NetworkID: nid, Aliases: ['hb_abc-db-1', 'db'] }, hb_abc_default: { NetworkID: nid, Aliases: null } } },
+      }) as never;
+    // checked on Docker 29.2.1: `docker create` + `network connect` lists the network with NetworkID ""
+    const created = containerInfoFromInspect(inspect('created', ''));
+    expect(created.networkAliases).toEqual({ hb_abc_link_docs: ['hb_abc-db-1', 'db'], hb_abc_default: [] });
+    expect(containerInfoFromInspect(inspect('running', 'n'.repeat(64))).networkAliases?.['hb_abc_link_docs']).toEqual(['hb_abc-db-1', 'db']);
   });
 });
 

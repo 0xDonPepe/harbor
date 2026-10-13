@@ -5,6 +5,9 @@ import { instanceLabels, type InstanceIdentity } from './identity.js';
 // App links (decision 126): pure naming and value rules. One Docker network per (consumer, link id),
 // owned by the consumer instance and labelled like every Harbor resource; only the consumer's bound
 // services and the provider's endpoint service join it. The provider answers on it as `<id>-link`.
+// Decision 171: the runner attaches both sides itself, never Compose: Compose names every container it
+// attaches after its service, and a container on several networks resolves a name on any of them, so a
+// consumer service called `db` would answer the provider's own `db` lookups while the provider's db is down.
 
 export function linkAlias(linkId: string): string {
   return `${linkId}-link`;
@@ -30,4 +33,23 @@ export function linkValue(alias: string, containerPort: number, format: LinkForm
     case 'port':
       return String(containerPort);
   }
+}
+
+// Decision 171: does a container answer to other names on a link network than the ones Harbor gives it
+// (the consumer's bound services none, the provider's endpoint service `<id>-link`)? Docker always adds
+// the container's own name and its 12-character short id (older engines list the id among the aliases,
+// Compose lists the name): both are unique and Harbor-made, never a name an app looks up. Anything else
+// (a service name Compose added before 0.32.0) is drift, and so is a wanted alias that is missing.
+export function linkAliasesDrift(actual: readonly string[], wanted: readonly string[], container: { id: string; name: string }): boolean {
+  return linkExtraNames(actual, wanted, container).length > 0 || wanted.some((w) => !actual.includes(w));
+}
+
+// Docker's own names for a container: its name and its 12-character short id.
+export function linkOwnName(alias: string, container: { id: string; name: string }): boolean {
+  return alias === container.name || (alias.length === 12 && container.id.startsWith(alias));
+}
+
+// The names a link member answers to besides the wanted ones and Docker's own (what drift drops).
+export function linkExtraNames(actual: readonly string[], wanted: readonly string[], container: { id: string; name: string }): string[] {
+  return actual.filter((a) => !wanted.includes(a) && !linkOwnName(a, container));
 }

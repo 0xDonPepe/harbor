@@ -1824,6 +1824,7 @@ export class ApplicationService {
     const pkgName = this.packageMeta(inst).name;
     if (req.kind === 'expose' || req.kind === 'unexpose' || req.kind === 'reconfigure') return this.exposurePlan(req, inst, pkgName, actor, now, expiresAt);
     if (req.kind === 'seal') return this.sealPlan(inst, pkgName, actor, now, expiresAt);
+    if (req.kind === 'relink') return this.relinkPlan(inst, pkgName, actor, now, expiresAt);
     if (req.kind === 'move') return this.movePlan(inst, req.location.dir, pkgName, actor, now, expiresAt);
     if (req.kind === 'backup') return this.backupPlan(inst, req.runId, pkgName, actor, now, expiresAt);
     if (req.kind === 'restore') return this.restorePlan(inst, req.runId, req.targetId, pkgName, actor, now, expiresAt);
@@ -2356,6 +2357,35 @@ export class ApplicationService {
       releaseHashes: inst.releaseHashes,
     };
     const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'seal', instanceId: inst.id, proposal, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
+    repo.insertPlan(plan);
+    return this.plan(plan.id);
+  }
+
+  // Decision 171: put an app's links back with only the names Harbor gives. Queued once after an upgrade by
+  // the daemon (actor `link-guard`) for links Compose attached before 0.32.0; no container is recreated.
+  private relinkPlan(inst: InstanceRow, pkgName: string, actor: string, now: Date, expiresAt: string): PlanDto {
+    const { repo, ids } = this.ctx;
+    if (inst.installState !== 'installed') throw new HarborError('INVALID_STATE', `${inst.name} is ${inst.installState}; its links are attached again when it starts`);
+    const links = [...repo.linksOfConsumer(inst.id), ...repo.linksOfProvider(inst.id)].filter((l) => l.state === 'active' && l.providerInstanceId);
+    if (!links.length) throw new HarborError('INVALID_STATE', `${inst.name} has no active link`);
+    const others = [...new Set(links.map((l) => (l.consumerInstanceId === inst.id ? l.providerInstanceId! : l.consumerInstanceId)))].map((id) => repo.instance(id)?.name ?? id);
+    const proposal: PlanProposal = {
+      packageId: inst.packageId,
+      revision: inst.revision,
+      name: inst.name,
+      project: inst.project,
+      endpoints: inst.endpoints,
+      storage: [],
+      location: null,
+      secrets: inst.secrets.map((s) => ({ id: s.id })),
+      changes: [
+        `Attach the private link${links.length === 1 ? '' : 's'} of ${pkgName} ("${inst.name}") with ${others.join(', ')} again, with only the names Harbor gives (no app answers there to its service names any more)`,
+        'Same containers, data, ports and addresses; nothing is recreated',
+      ],
+      warnings: [`The link${links.length === 1 ? '' : 's'} drop${links.length === 1 ? 's' : ''} for a moment while ${links.length === 1 ? 'it is' : 'they are'} attached again.`],
+      releaseHashes: inst.releaseHashes,
+    };
+    const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'relink', instanceId: inst.id, proposal, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
     repo.insertPlan(plan);
     return this.plan(plan.id);
   }

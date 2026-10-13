@@ -7,18 +7,13 @@ import { browserUrlFor } from '../config.js';
 import { defaultNetworkName, instanceLabels, ownedVolumeName, type InstanceIdentity } from './identity.js';
 import { linkValue } from './links.js';
 
-// Decision 126: an active link where this instance is the consumer (its bound services join `network`
-// and get the provider's address) or the provider (its endpoint `service` joins with `alias`).
+// Decision 126: an active link where this instance is the consumer: its bound services get the provider's
+// address. Decision 171: link networks never appear in a Compose file (Compose would add every service
+// name as a name on them); the runner attaches both sides with only the names Harbor chooses.
 export interface ConsumerLink {
   id: string;
-  network: string;
   alias: string;
   containerPort: number;
-}
-export interface ProviderLink {
-  network: string;
-  service: string;
-  alias: string;
 }
 
 export interface RenderInput {
@@ -43,7 +38,6 @@ export interface RenderInput {
   builtImages?: Record<string, string>;
   // decision 126: only links whose network exists (state active); others render nothing
   consumerLinks?: ConsumerLink[];
-  providerLinks?: ProviderLink[];
 }
 
 export interface RenderedCompose {
@@ -96,8 +90,6 @@ export function renderCompose(input: RenderInput): RenderedCompose {
 
   const endpointById = new Map(endpoints.map((e) => [e.id, e]));
   const consumerLinks = input.consumerLinks ?? [];
-  const providerLinks = input.providerLinks ?? [];
-  const linkNetworks = new Set<string>();
 
   for (const service of Object.keys(compose.services).sort()) {
     const src = compose.services[service]!;
@@ -161,17 +153,6 @@ export function renderCompose(input: RenderInput): RenderedCompose {
       labels: { ...labels, [LABELS.service]: service, [LABELS.kind]: manifest.deployment.services[service] ?? 'application' },
       networks: ['default'],
     };
-    // Link networks (decision 126): consumer services bound by an active link, the provider's endpoint service with its alias.
-    const joins: Record<string, Record<string, unknown>> = {};
-    for (const l of manifest.links ?? []) {
-      const active = consumerLinks.find((c) => c.id === l.id);
-      if (active && l.bindings.some((b) => b.service === service)) joins[active.network] = {};
-    }
-    for (const p of providerLinks) if (p.service === service) joins[p.network] = { aliases: [p.alias] };
-    if (Object.keys(joins).length) {
-      def['networks'] = { default: {}, ...Object.fromEntries(Object.keys(joins).sort().map((n) => [n, joins[n]])) };
-      for (const n of Object.keys(joins)) linkNetworks.add(n);
-    }
     if (src.command) def['command'] = src.command.map(escapeCompose);
     // decision 163: the only privileges a package can ask for, rendered from Harbor's fixed table
     const perms = manifest.permissions?.[service] ?? [];
@@ -205,8 +186,6 @@ export function renderCompose(input: RenderInput): RenderedCompose {
     services,
     networks: { default: { name: defaultNetworkName(identity), driver: 'bridge', labels: { ...labels, [LABELS.kind]: 'network' } } },
   };
-  // Harbor creates link networks itself (runner); Compose only attaches to them.
-  for (const n of [...linkNetworks].sort()) (model['networks'] as Record<string, unknown>)[n] = { name: n, external: true };
   if (Object.keys(volumes).length) model['volumes'] = volumes;
 
   const yaml = yamlStringify(model, { lineWidth: 0, defaultStringType: 'QUOTE_DOUBLE', defaultKeyType: 'PLAIN' });

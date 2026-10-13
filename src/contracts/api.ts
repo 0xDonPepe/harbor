@@ -8,7 +8,7 @@ export type Readiness = 'healthy' | 'unhealthy' | 'checking' | 'unknown';
 export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action';
 // configure (decisions 125/126): change an installed app's operator-provided secrets and/or link providers.
 // backup/restore (decisions 151, 153): the cold pass of a backup run, and restoring an app in place.
-export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | 'purge' | 'update' | 'expose' | 'unexpose' | 'reconfigure' | 'restart' | 'configure' | 'seal' | 'move' | 'backup' | 'restore';
+export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | 'purge' | 'update' | 'expose' | 'unexpose' | 'reconfigure' | 'restart' | 'configure' | 'seal' | 'move' | 'backup' | 'restore' | 'relink';
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
 // The address an app treats as its own, chosen at install (decision 116). Omitted = this network
@@ -448,7 +448,10 @@ export type PlanRequest =
   // decision 151: the cold pass of a backup run (normally submitted by the scheduler, actor `scheduler`)
   | { kind: 'backup'; instanceId: string; runId: string }
   // decision 153: put an app back as it was at a restore point (its run), from one place that holds it
-  | { kind: 'restore'; instanceId: string; runId: string; targetId?: string };
+  | { kind: 'restore'; instanceId: string; runId: string; targetId?: string }
+  // decision 171: attach an app's links again with only the names Harbor gives (no container recreated).
+  // Internal: queued by the daemon's one-time check after an upgrade (actor `link-guard`), not by the API.
+  | { kind: 'relink'; instanceId: string };
 
 export interface DomainDto {
   hostname: string;

@@ -78,6 +78,9 @@ export class TerminalSession {
       onData(d);
     });
     this.child.stderr!.on('data', (d: Buffer) => onData(d));
+    // A killed bridge resets its pipes (ECONNRESET/EPIPE on Linux when a session ends the terminal). An 'error'
+    // event without a listener would crash the daemon; the child's own 'close' below already ends the session.
+    for (const io of this.child.stdio) (io as NodeJS.EventEmitter | null)?.on('error', () => {});
     this.child.on('error', (e) => this.finish(null, `could not start the terminal: ${e.message}`));
     this.child.on('close', (code) => this.finish(code, 'the shell exited'));
     if (opts.cols && opts.rows) this.resize(opts.cols, opts.rows);

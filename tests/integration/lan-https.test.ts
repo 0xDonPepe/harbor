@@ -127,6 +127,10 @@ describe('LAN HTTPS (local CA + secure addresses)', () => {
     h.caddy.reject = 'loading certificates: open server.crt: permission denied';
     h.caddy.loadAttempts = 0;
     await h.api.expect<NetworkHttpsDto>(200, 'PUT', '/v1/network/https', { enabled: true });
+    // the observer sends the new config on one of its next ticks (slow CI runners: give it up to 10 s) …
+    for (let t0 = Date.now(); h.caddy.loadAttempts < 1 && Date.now() - t0 < 10_000; ) await new Promise((r) => setTimeout(r, 100));
+    expect(h.caddy.loadAttempts).toBe(1);
+    // … and never again, however many ticks pass
     await new Promise((r) => setTimeout(r, 2_000)); // four observer ticks
     expect(h.caddy.loadAttempts).toBe(1);
     // Caddy kept its last good config (a rejected load rolls back), so turning HTTPS off sends nothing.

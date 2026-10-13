@@ -2374,6 +2374,83 @@
         }
       }
     },
+    "/v1/exposures/tailnet-all": {
+      "get": {
+        "description": "The every-app Tailscale policy: on/off, whether Tailscale can publish right now (status off | waiting | on, with the reason), the apps kept off the tailnet, and where each app stands (published, pending, waiting, failed, excluded).",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "put": {
+        "description": "Turn the every-app Tailscale policy on (each app without a tailnet address gets one through its own expose plan, actor tailnet-policy, one at a time) or off (existing addresses stay; withdraw them per app). Turning it on is refused (UNSUPPORTED_CAPABILITY) while Tailscale is not ready.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/instances/{id}/tailnet-all": {
+      "put": {
+        "description": "The per-app switch of the every-app Tailscale policy: included false keeps this app off the tailnet (its current address, if any, stays until you withdraw it); included true lets the policy publish it again at its next check (and retries a failed attempt).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "included"
+                ],
+                "properties": {
+                  "included": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
     "/v1/platform-tools/{id}": {
       "put": {
         "description": "Bind an already installed tool by its loopback URL without taking ownership.",

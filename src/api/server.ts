@@ -879,6 +879,19 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     await tools.unexposeUi(config.listen.port);
     return reply.status(204).send();
   });
+  // Decision 174: "Give every app a Tailscale address" (opt-in). Turning it on is refused while Tailscale cannot publish
+  // (not installed, not logged in, HTTPS certificates off); turning it off never withdraws an address.
+  app.get('/v1/exposures/tailnet-all', { preHandler: requireAuth, schema: { description: 'The every-app Tailscale policy: on/off, whether Tailscale can publish right now (status off | waiting | on, with the reason), the apps kept off the tailnet, and where each app stands (published, pending, waiting, failed, excluded).' } }, async () => service.tailnetAll.status());
+  app.put(
+    '/v1/exposures/tailnet-all',
+    { preHandler: requireAuth, schema: { description: 'Turn the every-app Tailscale policy on (each app without a tailnet address gets one through its own expose plan, actor tailnet-policy, one at a time) or off (existing addresses stay; withdraw them per app). Turning it on is refused (UNSUPPORTED_CAPABILITY) while Tailscale is not ready.', body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
+    async (req) => service.tailnetAll.setEnabled((req.body as { enabled: boolean }).enabled),
+  );
+  app.put(
+    '/v1/instances/:id/tailnet-all',
+    { preHandler: requireAuth, schema: { description: 'The per-app switch of the every-app Tailscale policy: included false keeps this app off the tailnet (its current address, if any, stays until you withdraw it); included true lets the policy publish it again at its next check (and retries a failed attempt).', params: { type: 'object', properties: { id: { type: 'string', maxLength: 64 } }, required: ['id'] }, body: { type: 'object', additionalProperties: false, required: ['included'], properties: { included: { type: 'boolean' } } } } },
+    async (req) => service.tailnetAll.setIncluded((req.params as { id: string }).id, (req.body as { included: boolean }).included),
+  );
   app.put(
     '/v1/platform-tools/:id',
     {

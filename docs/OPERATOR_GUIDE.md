@@ -615,7 +615,7 @@ The console's **Settings** page covers what a household operator needs after boo
 |---|---|
 | Account | change the administrator password (every other logged-in browser or CLI is signed out); *Remember this browser* (30-day session), the session list, *Log out of other sessions*, *Log out*; *What should Home call you?* sets the greeting name Home shows ("Good evening, Carlos") — the login name stays the credential, clearing it falls back to the login name |
 | Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note. Once a browser trusts the certificate, opening `http://harbor.local/` moves to `https://harbor.local/` by itself (Harbor checks the browser really trusts it first, so an untrusted device stays on http with no warning page). To stay on plain http in one tab anyway, add `?skiphttps` to the address (`http://harbor.local/?skiphttps`); `?skiphttps=false` undoes it. Apps open with the same scheme as the console: from an http console their plain http address, from https their secure one. The certificate can only vouch for this machine's `.local` names, its own name and private addresses — never another website. A certificate from Harbor 0.30 or older could vouch for any site: the card then says so and offers *Replace certificate…* (`harbor network replace-ca`); trust the new one once per device afterwards. Harbor answers its console names only to devices on your own network, even when a public domain is published |
-| Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; log out of the tailnet |
+| Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; **Every app on Tailscale** (give every app its own tailnet address, see §6a); log out of the tailnet |
 | Public addresses | the wizard for publishing on the internet: this machine's public address, your domains with a DNS check (*Points here* / *Points elsewhere* / *No DNS record yet*), which app uses each, re-check and forget; certificates are automatic |
 | Remote access (details) | tailnet addresses, node key expiry, link to the Tailscale admin console; the auth key you used is single-use and is not stored |
 | Storage | disks with free space, removable drives (mount/eject, auto-mount/auto-start toggles), the Harbor data folder (`/srv/harbor`, where Harbor may create folders for you), folders currently used by apps, and a folder browser with *Create folder here* |
@@ -626,7 +626,7 @@ The console's **Settings** page covers what a household operator needs after boo
 | Account (two-factor) | turn on a 6-digit authenticator code at login (QR code or typed key); turn off with the password; lost the app? on the machine: `sudo /opt/harbor/bin/harbor account totp reset --local --config /etc/harbor/harbor.json` |
 | Overview (name) | rename the machine (shown in Settings and the browser tab) |
 
-The same actions exist as commands: `harbor account set-password`, `harbor account name [name]` (show or set the Home greeting name; empty clears it), `harbor tailscale login [--authkey-stdin]`, `harbor tailscale logout`, `harbor network https` / `harbor network https on|off` / `harbor network ca`, `harbor storage`, `harbor domains [add|check|forget]`, `harbor purge`.
+The same actions exist as commands: `harbor account set-password`, `harbor account name [name]` (show or set the Home greeting name; empty clears it), `harbor tailscale login [--authkey-stdin]`, `harbor tailscale logout`, `harbor tailscale every-app [on|off]`, `harbor network https` / `harbor network https on|off` / `harbor network ca`, `harbor storage`, `harbor domains [add|check|forget]`, `harbor purge`.
 
 On a desktop the section list and the section scroll separately. On a phone Settings opens as a list;
 tap a section to open it, and *‹ Settings* goes back.
@@ -903,6 +903,40 @@ Notes:
   own port once after the upgrade (new entry first, old one removed after) and leaves a notification with
   the new address; an app whose main address is the tailnet one should be restarted so its links follow.
 - The Harbor UI is loopback and tailnet only; the API refuses any public exposure of it.
+
+### Every app on Tailscale (since 0.33.0)
+
+Publishing on the tailnet is one app at a time by default: an address on your tailnet can be reached
+from every device on it, including people you share the tailnet with, so Harbor never opens an app wider
+than you asked. When the tailnet is only your own devices, **Settings → Remote access → Every app on
+Tailscale** gives every app its own tailnet address instead (decision 174):
+
+- **Turning it on** shows the apps that will get an address and asks first ("any device on your tailnet
+  can reach it"). It is refused, with the step to take, while Tailscale is not ready (not installed, not
+  logged in, or HTTPS certificates off in the Tailscale admin console).
+- Harbor then publishes each app without a tailnet address, **one at a time**, each through its own
+  ordinary *Publish* operation (you see them in the tray; the actor is `tailnet-policy`). Only an app that
+  is running and answering gets one; a stopped, busy, installing or broken app gets its address once it
+  runs again. Nothing is planned while another operation runs. The main address of an app does not change.
+- **New installs**: the install review says the app also gets a Tailscale address once it runs.
+- **Keep one app off**: switch **On Tailscale** off in its drawer (under its addresses). That only stops
+  Harbor from giving it an address; an address it already has stays until you withdraw it with
+  *Publish… → Withdraw*. Withdrawing an app's tailnet address by hand while the policy is on also keeps
+  that app off from then on (the review says so). Switch it back on to let Harbor publish it again.
+- **If one fails** (no free port, Tailscale refused it), Harbor tries **once per start** of Harbor, shows
+  it as *failed* in Remote access with the reason, and leaves one notification for that app. *Try again*
+  in Remote access retries right away.
+- **Turning it off** never withdraws an address: every app keeps the one it has; withdraw them one by one.
+- Every kind of app counts, API-only ones too (a script on your laptop can use the address as well).
+- Uninstalled apps leave the list of apps kept off; a removed app you may reinstall keeps its choice.
+
+```sh
+harbor tailscale every-app                          # on/off, waiting reason, where each app stands
+harbor tailscale every-app on                       # every app gets a tailnet address
+harbor tailscale every-app --except nextcloud on    # keep this app off the tailnet (its current address stays)
+harbor tailscale every-app --except nextcloud off   # let Harbor publish it again
+harbor tailscale every-app off                      # stop; nothing is withdrawn
+```
 
 ### Publishing on the internet, step by step
 

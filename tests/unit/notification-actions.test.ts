@@ -19,6 +19,9 @@ describe('notification actions', () => {
   it('drives and disks go to Storage; unknown kinds offer nothing', () => {
     expect(notificationActions('device-mount-failed', null)[0]!.route).toBe('#/settings/storage');
     expect(notificationActions('disk-pressure', null)[0]!.route).toBe('#/settings/storage');
+    // decision 174: a failed every-app Tailscale address points at Remote access, where it can be retried
+    expect(notificationLink('tailnet-all-failed')).toBe('#/settings/remote');
+    expect(notificationActions('tailnet-all-failed', 'i1').map((a) => a.label)).toEqual(['Open Remote access', 'Open app']);
     expect(notificationActions('something-new', 'i1')).toEqual([]);
   });
 });

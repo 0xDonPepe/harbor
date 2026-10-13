@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { DomainsDto, HostStorageDto, InstallCandidateDto } from '../../../src/contracts/api';
+import type { DomainsDto, HostStorageDto, InstallCandidateDto, TailnetAllDto } from '../../../src/contracts/api';
 import type { AddressOptionsDto, CatalogItemDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageImportResultDto, PlanDto, PlatformToolDto } from '../../../src/contracts/api';
 import { ApiError, api } from '../api';
 import { AppBackupsPanel } from './pages/Backups';
@@ -1418,6 +1418,18 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
   useEffect(() => setAutoUpdate(inst.autoUpdate), [inst.id, inst.autoUpdate]);
   const [hiddenFromHome, setHiddenFromHome] = useState(inst.hiddenFromHome);
   useEffect(() => setHiddenFromHome(inst.hiddenFromHome), [inst.id, inst.hiddenFromHome]);
+  // decision 174: the app's switch of "every app gets a Tailscale address" (shown only while that policy is on)
+  const [tailnetAll, setTailnetAll] = useState<TailnetAllDto | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.tailnetAll().then(
+      (p) => live && setTailnetAll(p),
+      () => live && setTailnetAll(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [inst.id]);
   useEffect(() => {
     let live = true;
     const load = () => api.instance(inst.id).then((d) => live && (setDetail(d), setAdoptMsg(null)), (e: Error) => live && setError(e.message));
@@ -1681,6 +1693,24 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
                 </li>
               ))}
           </ul>
+          {tailnetAll?.enabled && (
+            <label className="row auto-upd">
+              <input
+                type="checkbox"
+                checked={!tailnetAll.except.includes(inst.id)}
+                onChange={(e) => {
+                  const included = e.target.checked;
+                  setTailnetAll({ ...tailnetAll, except: included ? tailnetAll.except.filter((x) => x !== inst.id) : [...tailnetAll.except, inst.id] }); // optimistic
+                  void api.setTailnetAllIncluded(inst.id, included).then(setTailnetAll, (err: Error) => (setError(err.message), setTailnetAll(tailnetAll)));
+                }}
+                aria-label={`${inst.name} on Tailscale`}
+              />
+              <span className="muted small">
+                On Tailscale: every app gets an address on your tailnet (Settings → Remote access).{' '}
+                {tailnetAll.except.includes(inst.id) ? (primary.urls.tailnet ? 'Kept off from now on; its current address stays until you withdraw it with Publish….' : 'Kept off: Harbor does not give it an address.') : primary.urls.tailnet ? 'Switch off to keep it off from now on (its current address stays until you withdraw it).' : 'It gets its address while it runs.'}
+              </span>
+            </label>
+          )}
         </>
       )}
       {!retained && inst.ports.length > 0 && (

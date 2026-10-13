@@ -1,6 +1,6 @@
 import { Command, Option } from 'commander';
 import { randomUUID } from 'node:crypto';
-import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto } from '../contracts/api.js';
+import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto, TailnetAllDto } from '../contracts/api.js';
 import { defaultInstallLocation } from '../storage/install-location.js';
 import { validatePackageFolder } from '../packages/validate-folder.js';
 import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
@@ -1192,6 +1192,34 @@ tailscaleCmd
   .action(async () => {
     await client().post('/v1/platform-tools/tailscale/logout', {});
     out({ loggedOut: true }, () => 'Logged out of the tailnet.');
+  });
+// Decision 174: "Give every app a Tailscale address" (Settings → Remote access, from the terminal).
+function everyAppText(p: TailnetAllDto): string {
+  const head = p.status === 'off' ? 'Every app on Tailscale: OFF (apps are published one by one). Turn on with: harbor tailscale every-app on' : p.status === 'waiting' ? `Every app on Tailscale: ON, waiting: ${p.reason}.\nNext: ${p.nextAction}` : 'Every app on Tailscale: ON';
+  const rows = p.apps.map((a) => [a.name, a.state, a.url ?? a.note ?? '']);
+  return rows.length ? `${head}\n${table([['APP', 'STATE', 'ADDRESS / NOTE'], ...rows])}` : head;
+}
+tailscaleCmd
+  .command('every-app [on|off]')
+  .description('show (no argument) or turn on/off "every app gets a Tailscale address"; --except <app> on|off keeps one app off the tailnet (on) or lets the policy publish it again (off)')
+  .option('--except <app>', 'the app whose exception to set (on = keep it off the tailnet; its current address stays until you withdraw it)')
+  .action(async (state: string | undefined, opts: { except?: string }) => {
+    if (state !== undefined && state !== 'on' && state !== 'off') throw new HarborError('INVALID_REQUEST', 'expected "on" or "off"');
+    const api = client();
+    if (opts.except) {
+      if (state === undefined) throw new HarborError('INVALID_REQUEST', 'say on (keep it off the tailnet) or off (let the policy publish it)', { nextAction: `harbor tailscale every-app --except ${opts.except} on` });
+      const inst = await resolveInstance(api, opts.except);
+      const p = await api.post<TailnetAllDto>(`/v1/instances/${inst.id}/tailnet-all`, { included: state === 'off' }, {}, 'PUT');
+      out(p, () => (state === 'on' ? `${inst.name} stays off the tailnet.${inst.endpoints.some((e) => e.urls.tailnet) ? ` It keeps its current address until you withdraw it: harbor unexpose ${inst.name} --via tailnet` : ''}` : `${inst.name} is on Tailscale again: it gets its address at the next check.`) + '\n' + everyAppText(p));
+      return;
+    }
+    if (state === undefined) {
+      const p = await api.get<TailnetAllDto>('/v1/exposures/tailnet-all');
+      out(p, () => everyAppText(p));
+      return;
+    }
+    const p = await api.post<TailnetAllDto>('/v1/exposures/tailnet-all', { enabled: state === 'on' }, {}, 'PUT');
+    out(p, () => (state === 'on' ? 'Every app gets an address on your tailnet: any device on your tailnet can reach it. Harbor publishes them one at a time.\n' : 'Turned off. Apps keep the addresses they have; withdraw one with: harbor unexpose <app> --via tailnet\n') + everyAppText(p));
   });
 
 // --- network: secure addresses on the home network (Settings → Network, from the terminal)

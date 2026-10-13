@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import QRCode from 'qrcode';
 import { Terminal } from '../Terminal';
 import type { LinkDto } from '../../../../src/contracts/api';
-import type { AppearanceDto, DomainsDto, FoundAppDto, HostStorageDto, InstanceLogsDto, LogsDto, NotificationChannelDto, PlatformToolDto, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, StorageUsageDto, SystemHostDto, WallpaperSource } from '../../../../src/contracts/api';
+import type { AppearanceDto, DomainsDto, FoundAppDto, HostStorageDto, InstanceLogsDto, LogsDto, NotificationChannelDto, PlatformToolDto, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, StorageUsageDto, SystemHostDto, TailnetAllDto, WallpaperSource } from '../../../../src/contracts/api';
 import { ApiError, api } from '../../api';
 import { Copy, Dialog, FolderPicker, InstanceIcon, Pill, RecoveryCard, appLabel } from '../components';
 import { Network } from './Network';
@@ -1050,7 +1050,8 @@ function RemoteAccess({ c }: { c: Console }) {
                 Expose Harbor UI on tailnet
               </button>
             )}
-            <p className="muted small">Apps are published individually from the Publishing page. Harbor is never published on the public internet.</p>
+            <EveryAppOnTailscale c={c} />
+            <p className="muted small">Without it, apps are published one by one from the Publishing page. Harbor is never published on the public internet.</p>
             <details>
               <summary className="muted small">Disconnect</summary>
               <p className="muted small">Logs this machine out of the tailnet and withdraws all tailnet addresses. Apps keep running locally.</p>
@@ -1067,6 +1068,136 @@ function RemoteAccess({ c }: { c: Console }) {
         )}
       </section>
     </>
+  );
+}
+
+// Decision 174: "Give every app a Tailscale address" — opt-in; turning it on is reviewed in a dialog that lists the
+// apps, turning it off withdraws nothing. Each address is still its own plan (actor tailnet-policy), one at a time.
+const TAILNET_STATE: Record<TailnetAllDto['apps'][number]['state'], { label: string; tone: 'ok' | 'warn' | 'bad' | 'muted' | 'busy' }> = {
+  published: { label: 'on Tailscale', tone: 'ok' },
+  pending: { label: 'next', tone: 'busy' },
+  waiting: { label: 'later', tone: 'muted' },
+  failed: { label: 'failed', tone: 'bad' },
+  excluded: { label: 'kept off', tone: 'muted' },
+};
+function EveryAppOnTailscale({ c }: { c: Console }) {
+  const [p, setP] = useState<TailnetAllDto | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = useCallback(() => api.tailnetAll().then(setP, () => setP(null)), []);
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 5000);
+    return () => clearInterval(t);
+  }, [load]);
+  const set = async (fn: () => Promise<TailnetAllDto>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setP(await fn());
+      await c.refresh();
+    } catch (e) {
+      setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!p) return null;
+  const toGet = p.apps.filter((a) => a.state !== 'published' && a.state !== 'excluded');
+  const keptOff = p.apps.filter((a) => a.state === 'excluded');
+  return (
+    <div className="stack">
+      <div className="row between wrap">
+        <div>
+          <h3 id="ra-all-h">Every app on Tailscale</h3>
+          <p className="muted small">Give every app its own address on your tailnet, new installs included. Any device on your tailnet can reach them. Keep one off with the On Tailscale switch in its drawer.</p>
+        </div>
+        <label className="row">
+          <input
+            type="checkbox"
+            checked={p.enabled}
+            disabled={busy}
+            onChange={(e) => {
+              if (!e.target.checked) void set(() => api.setTailnetAll(false));
+              else if (p.reason) setMsg(`Every app cannot get a Tailscale address yet: ${p.reason}. ${p.nextAction ?? ''}`);
+              else setConfirm(true);
+            }}
+            aria-label="Give every app a Tailscale address"
+          />
+          <span className="small">{p.enabled ? 'On' : 'Off'}</span>
+        </label>
+      </div>
+      {p.status === 'waiting' && (
+        <p className="warn small" role="status">
+          Waiting: {p.reason}. {p.nextAction}
+        </p>
+      )}
+      {p.enabled && p.apps.length > 0 && (
+        <ul className="addresses" aria-label="Apps on Tailscale">
+          {p.apps.map((a) => (
+            <li key={a.instanceId}>
+              <Pill tone={TAILNET_STATE[a.state].tone}>{TAILNET_STATE[a.state].label}</Pill> <strong>{a.name}</strong>{' '}
+              {a.url ? (
+                <a href={a.url} target="_blank" rel="noopener noreferrer">
+                  {a.url}
+                </a>
+              ) : (
+                <span className="muted small">{a.note}</span>
+              )}
+              {a.state === 'failed' && (
+                <button className="btn small" disabled={busy} onClick={() => void set(() => api.setTailnetAllIncluded(a.instanceId, true))} aria-label={`Try the Tailscale address of ${a.name} again`}>
+                  Try again
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {p.enabled && <p className="muted small">Turning this off keeps every address it gave. To take one app off the tailnet, withdraw its address from its Publish dialog.</p>}
+      {confirm && (
+        <Dialog title="Give every app a Tailscale address?" onClose={() => setConfirm(false)}>
+          <p>Every app gets an address on your tailnet: any device on your tailnet can reach it.</p>
+          {toGet.length > 0 ? (
+            <>
+              <p className="muted small">These apps get one, one at a time, each as its own operation in the tray:</p>
+              <ul aria-label="Apps that get a Tailscale address">
+                {toGet.map((a) => (
+                  <li key={a.instanceId}>
+                    {a.name}
+                    {a.state === 'waiting' && a.note ? <span className="muted small"> · {a.note}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="muted small">Every app already has one.</p>
+          )}
+          {keptOff.length > 0 && <p className="muted small">Kept off: {keptOff.map((a) => a.name).join(', ')}.</p>}
+          <p className="muted small">New installs get theirs once they run. Their main address does not change. Turning this off later never withdraws an address.</p>
+          <div className="row end">
+            <button className="btn" onClick={() => setConfirm(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn primary"
+              disabled={busy}
+              onClick={() => {
+                setConfirm(false);
+                void set(() => api.setTailnetAll(true));
+              }}
+            >
+              Give every app an address
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {msg && (
+        <p className="error" role="alert">
+          {msg}
+        </p>
+      )}
+    </div>
   );
 }
 

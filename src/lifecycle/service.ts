@@ -45,6 +45,7 @@ import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
 import { retainedExposures } from './retained-exposures.js';
 import { instanceDir, loadReleaseSnapshot, secretExists } from './instance-dir.js';
+import { TAILNET_POLICY_ACTOR, TailnetAllPolicy } from './tailnet-all.js';
 
 export interface SubmitResult {
   operation: OperationRow;
@@ -63,7 +64,12 @@ export class ApplicationService {
   // docker system df is expensive: cache the grouped result for 60 s.
   private storageUsageCache: { at: number; value: StorageUsageDto } | null = null;
 
-  constructor(readonly ctx: Ctx) {}
+  // decision 174: "every app gets a Tailscale address" (the observer drives it; routes read and set it)
+  readonly tailnetAll: TailnetAllPolicy;
+
+  constructor(readonly ctx: Ctx) {
+    this.tailnetAll = new TailnetAllPolicy(ctx, this);
+  }
 
   onSubmit(wake: () => void): void {
     this.wake = wake;
@@ -807,6 +813,11 @@ export class ApplicationService {
     // decision 170: each item carries the name its next install gets by default (the planner's own rule)
     const taken = new Set(this.ctx.repo.listInstances().map((i) => i.name));
     return this.ctx.packages.list().map((item) => ({ ...item, proposedName: proposeName(item.id, taken).name }));
+  }
+
+  // The endpoint an app opens at (its manifest's ui.primaryEndpoint), for the tailnet policy (decision 174).
+  primaryEndpointOf(i: InstanceRow): string {
+    return this.packageMeta(i).primaryEndpoint;
   }
 
   private packageMeta(i: InstanceRow): { name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
@@ -1796,6 +1807,7 @@ export class ApplicationService {
       } else if (requiresHttps(pkg) && this.ctx.config.lan.enabled && !this.httpsEnabled()) {
         throw new HarborError('INVALID_STATE', `${pkg.manifest.metadata.name} needs HTTPS: browsers block what it needs on a plain http:// address`, { nextAction: 'Turn on secure addresses in Settings → Network, or install it with Tailscale or one of your domains as its main address.' });
       }
+      const tailnetNote = await this.tailnetAll.installNote();
       const proposal: PlanProposal = {
         packageId: pkg.id,
         revision: pkg.revision,
@@ -1847,6 +1859,8 @@ export class ApplicationService {
               ]
             : []),
           ...(pkg.manifest.setup ? [`After install you'll create your ${pkg.manifest.metadata.name} account; Harbor does not create it.`] : []),
+          // decision 174: the every-app Tailscale policy publishes it after it starts (through its own plan)
+          ...(mainExposure?.via === 'tailnet' ? [] : [tailnetNote].filter((n): n is string => n !== null)),
         ],
         releaseHashes: pkg.hashes,
         ...(mainExposure ? { exposure: mainExposure } : {}),
@@ -2528,6 +2542,8 @@ export class ApplicationService {
         base.changes.push(hasBaseUrlBindings ? 'It is the primary address: switch back to loopback and recreate containers with the loopback base URL' : 'It is the primary address: switch back to loopback');
       }
       if (e.protection === 'basic') base.changes.push('Retain the generated basic-auth credentials (instance secret) for a later re-exposure');
+      // decision 174: withdrawing it by hand keeps the every-app policy from publishing it again
+      if (e.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR && this.tailnetAll.setting().enabled) base.notes = ['Every app gets a Tailscale address is on: withdrawing this one keeps it off the tailnet from now on (turn its "On Tailscale" switch back on in its drawer to undo).'];
       const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'unexpose', instanceId: inst.id, proposal: base, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
       repo.insertPlan(plan);
       return this.plan(plan.id);
@@ -2784,6 +2800,11 @@ export class ApplicationService {
       return { operation: repo.operation(operationId)!, created: true };
     });
     if (result.created && checked) this.operatorValues.set(planId, checked);
+    if (result.created) {
+      // decision 174: the operator withdrew a tailnet address while every app gets one: that app stays off
+      const plan = repo.plan(planId);
+      if (plan?.kind === 'unexpose' && plan.proposal.exposure?.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR) this.tailnetAll.operatorWithdrew(plan.instanceId);
+    }
     if (result.created) this.wake();
     return result;
   }
@@ -2807,6 +2828,7 @@ export function notificationLink(kind: string): string | null {
   if (kind.startsWith('backup-')) return '#/settings/backups';
   if (kind === 'disk-pressure') return '#/settings/storage';
   if (kind === 'exposure-degraded') return '#/publishing';
+  if (kind === 'tailnet-all-failed') return '#/settings/remote';
   if (kind === 'delivery-failed') return '#/settings/notifications';
   if (kind === 'harbor-update') return '#/settings';
   return null;
@@ -2839,6 +2861,8 @@ export function notificationActions(kind: string, instanceId: string | null): No
       return [route('Open Backups', '#/settings/backups')];
     case 'exposure-degraded':
       return [...app('Open app', 'open-app'), route('Open Publishing', '#/publishing')];
+    case 'tailnet-all-failed':
+      return [route('Open Remote access', '#/settings/remote'), ...app('Open app', 'open-app')];
     case 'delivery-failed':
       return [route('Check channels', '#/settings/notifications')];
     case 'disk-pressure':

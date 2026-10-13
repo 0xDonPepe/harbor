@@ -22,6 +22,7 @@ import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapsho
 import { waitReady } from './readiness.js';
 import { appAuthorities, exposureCheck, exposureUrl, primaryUrlFor } from '../exposure/urls.js';
 import { retainedExposures, setRetainedExposures, toRetained } from './retained-exposures.js';
+import { TAILNET_POLICY_ACTOR } from './tailnet-all.js';
 import type { VolumeImport } from '../storage/fscrypt.js';
 import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type CaddyRoute } from '../exposure/caddy.js';
 import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
@@ -187,6 +188,8 @@ export class OperationRunner {
       // A backup whose app runs again is reported by the backup worker itself (one row per app, resolved by the next success).
       // A stale plan is not an app problem: the operation says so, and auto-update plans the new revision on its next pass.
       if ((op.kind === 'backup' && rolledBack) || stale) return;
+      // decision 174: the every-app Tailscale policy reports its own failures, one row per app
+      if (plan.actor === TAILNET_POLICY_ACTOR) return;
       this.ctx.notifier.notify({
         kind: 'operation-failed',
         severity: 'error',
@@ -632,7 +635,13 @@ export class OperationRunner {
       // Decision 118: the operator's proxy terminates TLS and forwards here; Harbor runs nothing for it.
       this.event(op, 'publishing', `your proxy at ${x.proxyFrom} forwards https://${x.hostname}/ to this machine's port ${alloc.hostPort}`);
     } else if (x.via === 'tailnet') {
-      await this.ctx.tailscale.serve(x.port, `http://127.0.0.1:${alloc.hostPort}`);
+      try {
+        await this.ctx.tailscale.serve(x.port, `http://127.0.0.1:${alloc.hostPort}`);
+      } catch (e) {
+        // nothing serves it: no record either, or the app would look published (decision 174 reads that record)
+        repo.deleteExposure(exposureId);
+        throw e;
+      }
       this.event(op, 'publishing', `tailscale serve --https=${x.port} -> 127.0.0.1:${alloc.hostPort}`);
     } else {
       await this.reconcileCaddy(op, sink);

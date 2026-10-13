@@ -1,5 +1,5 @@
 import type { AppBackupsDto, BackupAppPolicyDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto } from '../../src/contracts/api';
-import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto } from '../../src/contracts/api';
+import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailnetAllDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto } from '../../src/contracts/api';
 import { isMockUi, mockApi } from './mock/api';
 
 export class ApiError extends Error {
@@ -130,6 +130,10 @@ const realApi = {
   exposures: () => call<{ items: ExposureDto[]; ui: UiExposureDto | null }>('GET', '/v1/exposures'),
   exposeUi: () => call<UiExposureDto>('PUT', '/v1/ui-exposure', { via: 'tailnet' }),
   unexposeUi: () => call<void>('DELETE', '/v1/ui-exposure'),
+  // decision 177: "Give every app a Tailscale address"
+  tailnetAll: () => call<TailnetAllDto>('GET', '/v1/exposures/tailnet-all'),
+  setTailnetAll: (enabled: boolean) => call<TailnetAllDto>('PUT', '/v1/exposures/tailnet-all', { enabled }),
+  setTailnetAllIncluded: (id: string, included: boolean) => call<TailnetAllDto>('PUT', `/v1/instances/${id}/tailnet-all`, { included }),
   plan: (req: PlanRequest) => call<PlanDto>('POST', '/v1/plans', req),
   // Decision 125: operator-provided secret values travel only here, never in a plan.
   // Decision 163: acceptPermissions only when the person approving ticked the box.

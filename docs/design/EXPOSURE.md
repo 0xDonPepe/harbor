@@ -98,6 +98,53 @@ public address, provider, protection, and DNS/firewall prerequisites as `changes
 - The daemon's Host/Origin allow-list is extended with the tailnet hostname while the UI exposure
   exists. Funnel (Tailscale's public path) is **not** used in this iteration.
 
+### 4.1a Every app on Tailscale (decision 177, 0.33.0)
+
+An opt-in policy in the `settings` table (`exposure.tailnetAll = { enabled, except: [instanceId] }`, no
+migration). The observer (`src/lifecycle/tailnet-all.ts`, driven like the drive and lock guards, only on a
+tick that saw Docker) never calls Docker or tailscale itself: for an app that needs an address it creates an
+ordinary `expose` plan `{ via: 'tailnet', makePrimary: false }` with actor `tailnet-policy` and submits it.
+
+- Eligible (pure `tailnetAllCandidates`): not removed, `installed`, no active operation, no plan open for
+  review by someone else (an approve after the policy's operation would fail with `STATE_CHANGED`), running
+  and healthy, its primary endpoint allocated, no tailnet exposure on its primary endpoint, not in
+  `except`, not attempted since the daemon started. Every endpoint kind counts (an API is as useful on a
+  laptop); other endpoints are out of scope.
+- One plan at a time, and only while no instance has an active operation. `tailnetPort` (and app-port
+  allocation) skip the ports held by open plans (not submitted, not expired: their tailnet address, and an
+  install plan's app ports), so a background plan never takes the number a reviewed plan shows. The
+  setting is read again after planning (which awaits tailscale and Docker): off or excluded meanwhile means
+  the plan is never submitted.
+- Readiness gate: `tailscale status` Running, online, with a DNS name and HTTPS certificates. Turning the
+  policy on is refused (`UNSUPPORTED_CAPABILITY` + next action) otherwise; while on and not ready the
+  status is `waiting` with the reason, and nothing is planned.
+- One attempt per (instance, daemon start); a success clears it (attempts only stop failure loops). A
+  submit refusal that only means "not now" (`BUSY`, `STATE_CHANGED`, `PLAN_EXPIRED`, `DOCKER_UNAVAILABLE`)
+  is no attempt. A failed plan or operation is kept in memory, shown as `failed` with the reason and raised
+  as one `tailnet-all-failed` notification per app (`tailnet-all:<id>`; the runner skips its generic
+  `operation-failed` row for this actor); an operation that failed after its address was recorded (a
+  later hook) counts as published. Including the app again (`PUT /v1/instances/:id/tailnet-all
+  {included: true}`) clears the attempt; the plan comes at the next check. A tailnet expose whose
+  `tailscale serve` fails runs a best-effort `serve … off` and deletes the exposure row it inserted (no
+  `pending` row, no orphan serve entry). A daemon restart in the middle of an expose, unexpose or
+  reconfigure leaves the app's `installState` as it was (the operation alone is `needs_action`), as a
+  failure of those kinds already did.
+- Exceptions: the drawer switch sets/clears one (shown while the policy is on, or while Tailscale is ready);
+  it never withdraws an address. An `unexpose` of the primary endpoint's tailnet address submitted by
+  anyone but `tailnet-policy`, with the policy on or off, adds the app (its plan says so). Purged instances
+  are dropped from `except` (when the observer's check or a write next runs; reads filter them); a retained
+  one keeps its entry so Reinstall honours it.
+- Off never withdraws anything. Install plans carry a note while the policy is on, and a warning when the
+  app has `setup` or `defaultCredentials` (its first-run page is reachable from the tailnet as soon as it
+  answers; Harbor cannot tell when setup is done).
+- Not isolated: every tailnet address shares the node's one name, and `tailscale serve` targets the app
+  port, not the LAN HTTPS relay, so the decision-167 cookie firewall and cross-app Origin checks do not
+  apply (§6). The confirm dialog, the CLI and the guide say so; routing tailnet serves through the relay is
+  a follow-up.
+- API: `GET`/`PUT /v1/exposures/tailnet-all` (`TailnetAllDto`: enabled, status off|waiting|on, reason,
+  nextAction, except, apps[] with published|pending|waiting|failed|excluded; GET writes nothing), `PUT
+  /v1/instances/:id/tailnet-all`. CLI: `harbor tailscale every-app [on|off] [--app <app>] [--yes]`.
+
 ### 4.2 Caddy (`--with-public-proxy`)
 
 - Bootstrap installs `caddy` from Caddy's signed apt repo, keeps the admin API on 127.0.0.1:2019,

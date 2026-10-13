@@ -50,6 +50,7 @@ import { packageVersionOf } from '../packages/version.js';
 // Decision 176: an automatic update waits for its backup this long, and after a failed backup tries again this much later.
 const AUTO_UPDATE_BACKUP_DEADLINE_MS = 6 * 60 * 60_000;
 const AUTO_UPDATE_BACKUP_RETRY_MS = 4 * 60 * 60_000;
+import { TAILNET_POLICY_ACTOR, TailnetAllPolicy } from './tailnet-all.js';
 
 export interface SubmitResult {
   operation: OperationRow;
@@ -68,7 +69,12 @@ export class ApplicationService {
   // docker system df is expensive: cache the grouped result for 60 s.
   private storageUsageCache: { at: number; value: StorageUsageDto } | null = null;
 
-  constructor(readonly ctx: Ctx) {}
+  // decision 177: "every app gets a Tailscale address" (the observer drives it; routes read and set it)
+  readonly tailnetAll: TailnetAllPolicy;
+
+  constructor(readonly ctx: Ctx) {
+    this.tailnetAll = new TailnetAllPolicy(ctx, this);
+  }
 
   onSubmit(wake: () => void): void {
     this.wake = wake;
@@ -856,6 +862,11 @@ export class ApplicationService {
     // decision 170: each item carries the name its next install gets by default (the planner's own rule)
     const taken = new Set(this.ctx.repo.listInstances().map((i) => i.name));
     return this.ctx.packages.list().map((item) => ({ ...item, proposedName: proposeName(item.id, taken).name }));
+  }
+
+  // The endpoint an app opens at (its manifest's ui.primaryEndpoint), for the tailnet policy (decision 177).
+  primaryEndpointOf(i: InstanceRow): string {
+    return this.packageMeta(i).primaryEndpoint;
   }
 
   private packageMeta(i: InstanceRow): { version: string | null; name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
@@ -1845,6 +1856,7 @@ export class ApplicationService {
       } else if (requiresHttps(pkg) && this.ctx.config.lan.enabled && !this.httpsEnabled()) {
         throw new HarborError('INVALID_STATE', `${pkg.manifest.metadata.name} needs HTTPS: browsers block what it needs on a plain http:// address`, { nextAction: 'Turn on secure addresses in Settings → Network, or install it with Tailscale or one of your domains as its main address.' });
       }
+      const tailnetNote = await this.tailnetAll.installNote();
       const proposal: PlanProposal = {
         packageId: pkg.id,
         revision: pkg.revision,
@@ -1884,6 +1896,8 @@ export class ApplicationService {
           // a passphrase of its own is the one way the data can be lost for good: that stays a warning
           ...(location && !location.defaultKey ? ['Lose both its passphrase and your Harbor recovery key and the data is gone.'] : []),
           ...(location ? [] : [NOT_ENCRYPTED_WARNING]),
+          // decision 177: the policy publishes it as soon as it answers, before anyone has created its account
+          ...(tailnetNote && mainExposure?.via !== 'tailnet' && (pkg.manifest.setup || pkg.manifest.defaultCredentials) ? [`Every app on Tailscale is on: ${pkg.manifest.metadata.name}'s ${pkg.manifest.setup ? 'first-run page (the first visitor creates the account)' : 'default login'} is reachable from every device on your tailnet once it runs. ${pkg.manifest.setup ? 'Create its account' : 'Change that login'} right after install, or switch its On Tailscale off in its drawer while it installs.`] : []),
         ],
         // decision 157: the plain facts (how it opens, what happens next) read as notes, not amber warnings
         notes: [
@@ -1896,6 +1910,8 @@ export class ApplicationService {
               ]
             : []),
           ...(pkg.manifest.setup ? [`After install you'll create your ${pkg.manifest.metadata.name} account; Harbor does not create it.`] : []),
+          // decision 177: the every-app Tailscale policy publishes it after it starts (through its own plan)
+          ...(mainExposure?.via === 'tailnet' ? [] : [tailnetNote].filter((n): n is string => n !== null)),
         ],
         releaseHashes: pkg.hashes,
         ...(mainExposure ? { exposure: mainExposure } : {}),
@@ -2579,6 +2595,11 @@ export class ApplicationService {
         base.changes.push(hasBaseUrlBindings ? 'It is the primary address: switch back to loopback and recreate containers with the loopback base URL' : 'It is the primary address: switch back to loopback');
       }
       if (e.protection === 'basic') base.changes.push('Retain the generated basic-auth credentials (instance secret) for a later re-exposure');
+      // decision 177: withdrawing it by hand keeps the every-app policy from publishing it again
+      // (on or off: a withdrawal by hand is remembered, so turning the policy on later does not undo it)
+      if (e.via === 'tailnet' && endpointId === meta.primaryEndpoint && actor !== TAILNET_POLICY_ACTOR) {
+        base.notes = [this.tailnetAll.setting().enabled ? 'Every app on Tailscale is on: withdrawing this one keeps it off the tailnet from now on (turn its "On Tailscale" switch back on in its drawer to undo).' : 'Withdrawing it by hand also keeps it off the tailnet if you turn on Every app on Tailscale later (its "On Tailscale" switch in its drawer undoes that).'];
+      }
       const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'unexpose', instanceId: inst.id, proposal: base, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
       repo.insertPlan(plan);
       return this.plan(plan.id);
@@ -2621,7 +2642,9 @@ export class ApplicationService {
   // with any listener on it right now (the probe also sees wildcard 0.0.0.0 listeners).
   async tailnetPort(reserved: number[] = []): Promise<number> {
     const { repo, docker, ports, config } = this.ctx;
-    const taken = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...reserved]);
+    // decision 177: also the ports of plans still open for review (a tailnet address or an install's app ports),
+    // or a background plan (the every-app policy) could take the number a reviewed plan was shown
+    const taken = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...this.openPlanPorts(true), ...reserved]);
     try {
       for (const p of await docker.publishedHostPorts()) taken.add(p);
     } catch (e) {
@@ -2634,10 +2657,22 @@ export class ApplicationService {
     throw new HarborError('PORT_CONFLICT', `no free port left in ${config.appPortRange.from}-${config.appPortRange.to} for a tailnet address`, { nextAction: 'Withdraw an address or remove an app you no longer use, then try again.' });
   }
 
+  // Ports held by plans still open for review: their tailnet address (decision 133), plus, with endpoints, the app
+  // ports an install plan allocated (not claimed until it is submitted).
+  private openPlanPorts(endpoints: boolean): number[] {
+    const out: number[] = [];
+    for (const p of this.ctx.repo.openPlans(rfc3339(this.ctx.clock.now()))) {
+      if (p.proposal.exposure?.via === 'tailnet') out.push(p.proposal.exposure.port);
+      if (endpoints && p.kind === 'install') out.push(...(p.proposal.endpoints ?? []).map((e) => e.hostPort));
+    }
+    return out;
+  }
+
   private async allocatePorts(pkg: LoadedPackage, alsoUnavailable: Set<number> = new Set()) {
     const { repo, docker, ports, config } = this.ctx;
-    // tailnet addresses hold their own ports (decision 133): an app port there would clash again
-    const unavailable = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...alsoUnavailable]);
+    // tailnet addresses hold their own ports (decision 133): an app port there would clash again (so do the
+    // tailnet ports of plans still open for review, decision 177)
+    const unavailable = new Set<number>([config.listen.port, ...repo.claimedPorts().map((c) => c.port), ...repo.exposures().filter((e) => e.via === 'tailnet').map((e) => e.port), ...this.openPlanPorts(false), ...alsoUnavailable]);
     try {
       for (const p of await docker.publishedHostPorts()) unavailable.add(p);
     } catch (e) {
@@ -2835,6 +2870,20 @@ export class ApplicationService {
       return { operation: repo.operation(operationId)!, created: true };
     });
     if (result.created && checked) this.operatorValues.set(planId, checked);
+    if (result.created) {
+      // decision 177: the operator withdrew an app's tailnet address: the every-app policy leaves it off (now or later)
+      const plan = repo.plan(planId);
+      if (plan?.kind === 'unexpose' && plan.proposal.exposure?.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR) {
+        const inst = repo.instance(plan.instanceId);
+        let primary: string | null;
+        try {
+          primary = inst ? this.primaryEndpointOf(inst) : null;
+        } catch {
+          primary = null;
+        }
+        if (plan.proposal.exposure.endpointId === primary) this.tailnetAll.operatorWithdrew(plan.instanceId);
+      }
+    }
     if (result.created) this.wake();
     return result;
   }
@@ -2858,6 +2907,7 @@ export function notificationLink(kind: string): string | null {
   if (kind.startsWith('backup-')) return '#/settings/backups';
   if (kind === 'disk-pressure') return '#/settings/storage';
   if (kind === 'exposure-degraded') return '#/publishing';
+  if (kind === 'tailnet-all-failed') return '#/settings/remote';
   if (kind === 'delivery-failed') return '#/settings/notifications';
   if (kind === 'harbor-update') return '#/settings';
   return null;
@@ -2893,6 +2943,8 @@ export function notificationActions(kind: string, instanceId: string | null): No
       return [route('Open Backups', '#/settings/backups')];
     case 'exposure-degraded':
       return [...app('Open app', 'open-app'), route('Open Publishing', '#/publishing')];
+    case 'tailnet-all-failed':
+      return [route('Open Remote access', '#/settings/remote'), ...app('Open app', 'open-app')];
     case 'delivery-failed':
       return [route('Check channels', '#/settings/notifications')];
     case 'disk-pressure':

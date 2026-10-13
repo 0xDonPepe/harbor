@@ -249,8 +249,9 @@ ui:
     const docsPlain = docs.endpoints[0]!.hostPort;
     const gwPlain = gw.endpoints[0]!.hostPort;
     const [docsSecure, gwSecure] = [lanHttpsPort(docsPlain), lanHttpsPort(gwPlain)];
-    await new Promise((r) => setTimeout(r, 1_200)); // an observer tick reconciles the relays
+    // an observer tick reconciles the relays; on a slow CI runner one tick is not always enough (seen 2026-10-13)
     const relay = h.daemon.ctx.lanHttps!;
+    for (let t = Date.now(); Date.now() - t < 15_000 && !(relay.ports().includes(docsSecure) && relay.ports().includes(gwSecure)); ) await new Promise((r) => setTimeout(r, 200));
     expect(relay.ports()).toEqual(expect.arrayContaining([docsSecure, gwSecure]));
     const d = relay.policy(docsSecure)!;
     const g = relay.policy(gwSecure)!;

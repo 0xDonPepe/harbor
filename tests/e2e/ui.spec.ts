@@ -1507,3 +1507,40 @@ test('decision 164: a notification brings its own button — Harbor X is availab
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.unroute('**/v1/notifications');
 });
+
+// Last on purpose: with the policy on, the daemon publishes apps on the tailnet in the background.
+test('decision 177: every app on Tailscale — the switch asks first, lists the apps; the drawer keeps one off; off withdraws nothing', async ({ page }) => {
+  await login(page);
+  await installFromStore(page, 'Excalidraw'); // at least one app, whatever ran before
+  await approve(page, 'Install');
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Remote access/ }).click();
+  await expect(page.getByRole('heading', { name: 'Every app on Tailscale' })).toBeVisible();
+  const toggle = page.getByRole('checkbox', { name: 'Give every app a Tailscale address', exact: true });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click(); // opens the review first; the box stays unticked until it is confirmed
+  const dlg = page.getByRole('dialog');
+  await expect(dlg).toContainText('Every app gets an address on your tailnet: any device on your tailnet can reach it.');
+  await expect(dlg).toContainText('never withdraws an address');
+  await expect(dlg.getByRole('list', { name: 'Apps that get a Tailscale address' })).toContainText('excalidraw');
+  await dlg.getByRole('button', { name: 'Give every app an address', exact: true }).click();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByText('Turning this off keeps every address it gave.', { exact: false })).toBeVisible();
+  // the drawer's own switch: off keeps that app off the tailnet
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: /^Details of / }).first().click();
+  const sw = page.getByRole('dialog').getByRole('checkbox', { name: /on Tailscale$/ });
+  await expect(sw).toBeChecked();
+  await sw.uncheck();
+  await expect(page.getByRole('dialog')).toContainText('Kept off');
+  await sw.check();
+  await expect(sw).toBeChecked();
+  await page.keyboard.press('Escape');
+  // turning it off asks nothing and withdraws nothing
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Remote access/ }).click();
+  await page.getByRole('checkbox', { name: 'Give every app a Tailscale address', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Give every app a Tailscale address', exact: true })).not.toBeChecked();
+});

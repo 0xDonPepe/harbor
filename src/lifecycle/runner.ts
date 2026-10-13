@@ -22,6 +22,7 @@ import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapsho
 import { waitReady } from './readiness.js';
 import { appAuthorities, exposureCheck, exposureUrl, primaryUrlFor } from '../exposure/urls.js';
 import { retainedExposures, setRetainedExposures, toRetained } from './retained-exposures.js';
+import { TAILNET_POLICY_ACTOR } from './tailnet-all.js';
 import type { VolumeImport } from '../storage/fscrypt.js';
 import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type CaddyRoute } from '../exposure/caddy.js';
 import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
@@ -68,7 +69,11 @@ export class OperationRunner {
         repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'needs_action', message: 'daemon restarted while the operation was in flight' });
         const inst = repo.instance(op.instanceId);
         if (inst) {
-          repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id, installState: 'needs_action', runtime: 'unknown', readiness: 'unknown' });
+          // An address change (expose, unexpose, reconfigure) keeps the app's state, as when it fails (decision 177:
+          // a background tailnet publish cut short by a restart must not leave the app to repair). The operation
+          // itself still says needs_action and is never replayed; the exposure checks settle its address row.
+          const keep = op.kind === 'expose' || op.kind === 'unexpose' || op.kind === 'reconfigure';
+          repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id, installState: keep ? inst.installState : 'needs_action', runtime: 'unknown', readiness: 'unknown' });
           repo.bumpGeneration(inst.id);
         }
       });
@@ -195,6 +200,8 @@ export class OperationRunner {
       // A backup whose app runs again is reported by the backup worker itself (one row per app, resolved by the next success).
       // A stale plan is not an app problem: the operation says so, and auto-update plans the new revision on its next pass.
       if ((op.kind === 'backup' && rolledBack) || stale) return;
+      // decision 177: the every-app Tailscale policy reports its own failures, one row per app
+      if (plan.actor === TAILNET_POLICY_ACTOR) return;
       this.ctx.notifier.notify({
         kind: 'operation-failed',
         severity: 'error',
@@ -640,7 +647,17 @@ export class OperationRunner {
       // Decision 118: the operator's proxy terminates TLS and forwards here; Harbor runs nothing for it.
       this.event(op, 'publishing', `your proxy at ${x.proxyFrom} forwards https://${x.hostname}/ to this machine's port ${alloc.hostPort}`);
     } else if (x.via === 'tailnet') {
-      await this.ctx.tailscale.serve(x.port, `http://127.0.0.1:${alloc.hostPort}`);
+      const target = `http://127.0.0.1:${alloc.hostPort}`;
+      try {
+        await this.ctx.tailscale.serve(x.port, target);
+      } catch (e) {
+        // nothing serves it: no record either, or the app would look published (decision 177 reads that record).
+        // A serve that failed after it wrote its config (a timeout, a late non-zero exit) would leave an entry
+        // Harbor no longer knows: take it down first (best effort; "not found" is the usual answer).
+        await this.ctx.tailscale.unserve(x.port, target).catch((u: Error) => this.ctx.log.warn(`tailscale serve off after a failed serve: ${u.message}`, { instanceId: inst.id }));
+        repo.deleteExposure(exposureId);
+        throw e;
+      }
       this.event(op, 'publishing', `tailscale serve --https=${x.port} -> 127.0.0.1:${alloc.hostPort}`);
     } else {
       await this.reconcileCaddy(op, sink);

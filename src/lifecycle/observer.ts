@@ -126,6 +126,7 @@ export class Observer {
         this.autoStartRecovered(runningByInstance);
         this.autoStartUnlocked(runningByInstance);
         await this.checkLinkNames();
+        await this.everyAppOnTailnet();
       }
       await this.reconcileLanHttps();
       if (Date.now() - this.lastSourceCheck >= this.sourceCheckMs) {
@@ -469,6 +470,17 @@ export class Observer {
       }
     } catch (e) {
       this.ctx.log.warn(`link-guard check failed: ${(e as Error).message}`);
+    }
+  }
+
+  // Decision 177: with "every app gets a Tailscale address" on, an app without a tailnet address gets an expose
+  // plan (actor tailnet-policy) through the serial queue: one at a time, once per app and daemon start, never
+  // while another operation runs. Only on a tick that saw Docker, like the guards above.
+  private async everyAppOnTailnet(): Promise<void> {
+    try {
+      await this.service.tailnetAll.reconcile();
+    } catch (e) {
+      this.ctx.log.warn(`tailnet-policy check failed: ${(e as Error).message}`);
     }
   }
 

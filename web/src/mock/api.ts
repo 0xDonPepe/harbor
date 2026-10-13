@@ -17,6 +17,7 @@ import type {
   SystemHostDto,
   SystemMetricsDto,
   UiExposureDto,
+  TailnetAllDto,
   LinkDto,
   AppBackupsDto,
   BackupAppPolicyDto,
@@ -61,6 +62,19 @@ export const isMockUi = (): boolean => {
 const beat = (ms = 350) => new Promise((r) => setTimeout(r, ms));
 
 let instances = mockInstances();
+// decision 177: the every-app Tailscale policy, derived from the mock instances and exposures
+let tailnetAll: { enabled: boolean; except: string[] } = { enabled: false, except: [] };
+function mockTailnetAll(): TailnetAllDto {
+  const tn = mockExposures().items.filter((e) => e.via === 'tailnet');
+  const apps = instances
+    .filter((i) => i.installState !== 'retained')
+    .map((i) => {
+      const ex = tn.find((e) => e.instanceId === i.id);
+      const state: TailnetAllDto['apps'][number]['state'] = ex ? 'published' : tailnetAll.except.includes(i.id) ? 'excluded' : i.runtime === 'running' ? 'pending' : 'waiting';
+      return { instanceId: i.id, name: i.displayName ?? i.name, state, url: ex?.url ?? null, note: state === 'waiting' ? 'stopped; it gets its address when it runs' : state === 'pending' ? 'gets its address at the next check' : null };
+    });
+  return { enabled: tailnetAll.enabled, status: tailnetAll.enabled ? 'on' : 'off', reason: null, nextAction: null, except: tailnetAll.except, apps };
+}
 let notifications = mockNotifications();
 let channels = mockChannels();
 let storage = mockStorage();
@@ -254,6 +268,17 @@ export const mockApi = {
   exposeUi: async (): Promise<UiExposureDto> => mockExposures().ui!,
   unexposeUi: async (): Promise<void> => {
     await beat();
+  },
+  tailnetAll: async (): Promise<TailnetAllDto> => mockTailnetAll(),
+  setTailnetAll: async (enabled: boolean): Promise<TailnetAllDto> => {
+    await beat();
+    tailnetAll = { ...tailnetAll, enabled };
+    return mockTailnetAll();
+  },
+  setTailnetAllIncluded: async (id: string, included: boolean): Promise<TailnetAllDto> => {
+    await beat();
+    tailnetAll = { ...tailnetAll, except: included ? tailnetAll.except.filter((x) => x !== id) : [...new Set([...tailnetAll.except, id])] };
+    return mockTailnetAll();
   },
   plan: async (req: { kind: PlanDto['kind']; packageId?: string; instanceId?: string; name?: string; location?: { dir: string } }): Promise<PlanDto> => {
     await beat();

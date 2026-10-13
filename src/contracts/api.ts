@@ -546,6 +546,28 @@ export interface UiExposureDto {
   note: string | null;
 }
 
+// Decision 177: "Give every app a Tailscale address" (opt-in). published = it has a tailnet address; pending = it
+// gets one at the next check (or its plan runs now); waiting = not now (stopped, busy, installing…; see note);
+// failed = the one attempt since Harbor started failed (note says why); excluded = the operator keeps it off.
+export type TailnetAllAppState = 'published' | 'pending' | 'waiting' | 'failed' | 'excluded';
+export interface TailnetAllAppDto {
+  instanceId: string;
+  name: string; // the app's label (display name or instance name)
+  state: TailnetAllAppState;
+  url: string | null; // its tailnet address when published
+  note: string | null;
+}
+export interface TailnetAllDto {
+  enabled: boolean;
+  // off = policy off; waiting = on, but Tailscale cannot publish now (reason + nextAction); on = publishing
+  status: 'off' | 'waiting' | 'on';
+  // why Tailscale cannot publish right now (set whether the policy is on or off; null when it can)
+  reason: string | null;
+  nextAction: string | null;
+  except: string[]; // instance ids kept off the tailnet
+  apps: TailnetAllAppDto[]; // every app that is not removed, whatever the policy says (the confirm dialog lists them)
+}
+
 // ---- appearance: wallpaper (uploaded or rotating from a public source), launcher layout
 export type WallpaperSource = 'reddit' | 'bing' | 'wikimedia';
 export interface WallpaperPictureDto {

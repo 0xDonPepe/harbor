@@ -1,0 +1,356 @@
+{
+  "harborVersion": "0.22.1",
+  "root": "/private/tmp/harbor-fixture-v0.22.1",
+  "admin": {
+    "username": "admin",
+    "password": "upgrade-FIXTURE-password"
+  },
+  "listenPort": 47300,
+  "appPortRange": {
+    "from": 47310,
+    "to": 47349
+  },
+  "sealedHomes": [
+    "/private/tmp/harbor-fixture-v0.22.1/data/harbor-apps/memos/memos"
+  ],
+  "instances": [
+    {
+      "id": "d8d0591b-a0ac-4ef4-bb59-7f50e635c6d7",
+      "name": "excalidraw",
+      "packageId": "excalidraw",
+      "revision": "1",
+      "runtime": "running",
+      "desired": "running",
+      "endpoints": [
+        {
+          "id": "web",
+          "hostPort": 47310
+        }
+      ]
+    },
+    {
+      "id": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+      "name": "memos",
+      "packageId": "memos",
+      "revision": "1",
+      "runtime": "running",
+      "desired": "running",
+      "endpoints": [
+        {
+          "id": "web",
+          "hostPort": 47311
+        }
+      ]
+    },
+    {
+      "id": "842567ee-29e4-46e3-aaf3-474be2103542",
+      "name": "bentopdf",
+      "packageId": "bentopdf",
+      "revision": "1",
+      "runtime": "unknown",
+      "desired": "running",
+      "endpoints": [
+        {
+          "id": "web",
+          "hostPort": 47313
+        }
+      ]
+    },
+    {
+      "id": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+      "name": "n8n",
+      "packageId": "n8n",
+      "revision": "1",
+      "runtime": "stopped",
+      "desired": "stopped",
+      "endpoints": [
+        {
+          "id": "web",
+          "hostPort": 47312
+        }
+      ]
+    }
+  ],
+  "exposures": [
+    {
+      "id": "779f1112-0f04-418a-ae0e-b49c39da1d61",
+      "instanceId": "d8d0591b-a0ac-4ef4-bb59-7f50e635c6d7",
+      "instanceName": "excalidraw",
+      "endpointId": "web",
+      "via": "tailnet",
+      "url": "https://harbor-test.tail1234.ts.net:47310/",
+      "hostname": "harbor-test.tail1234.ts.net",
+      "port": 47310,
+      "protection": "none",
+      "state": "active",
+      "observedAt": "2026-10-13T04:05:08Z",
+      "note": "answered HTTP 200",
+      "isPrimary": false
+    },
+    {
+      "id": "67ce591d-cdb2-4fd7-a03b-199d623be50a",
+      "instanceId": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+      "instanceName": "memos",
+      "endpointId": "web",
+      "via": "public",
+      "url": "https://notes.example.com/",
+      "hostname": "notes.example.com",
+      "port": 443,
+      "protection": "none",
+      "state": "active",
+      "observedAt": "2026-10-13T04:05:08Z",
+      "note": "answered HTTP 200",
+      "isPrimary": false
+    }
+  ],
+  "notificationKinds": [
+    "disk-pressure",
+    "operation-failed"
+  ],
+  "emptyDirs": [
+    "state/instances/0fc67a33-38e0-475e-9657-fb2e6775ee80/secrets",
+    "state/instances/842567ee-29e4-46e3-aaf3-474be2103542/secrets",
+    "state/instances/d8d0591b-a0ac-4ef4-bb59-7f50e635c6d7/secrets",
+    "state/platform",
+    "state/scratch",
+    "data/harbor-apps/memos/memos/vault",
+    "data/harbor-apps/memos/memos/volumes/data"
+  ],
+  "docker": {
+    "containers": [
+      {
+        "id": "c591e1fbf0d1acbf91abed6874a8315aa9cf73aecbe17918e8efbe66b0002",
+        "name": "hb_d8d0591ba0ac4ef4bb597f50e635c6d7-web-1",
+        "image": "excalidraw/excalidraw@sha256:f7ee194addd607bf831d2af0f0a34463dd4225e426cf35199ef0b12a803398e9",
+        "state": "running",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "d8d0591b-a0ac-4ef4-bb59-7f50e635c6d7",
+          "io.harbor.preview/service": "web",
+          "io.harbor.preview/kind": "application",
+          "com.docker.compose.project": "hb_d8d0591ba0ac4ef4bb597f50e635c6d7",
+          "com.docker.compose.service": "web"
+        },
+        "createdAt": "2026-10-13T04:05:07Z",
+        "startedAt": "2026-10-13T04:05:07Z",
+        "health": "none",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 47310,
+            "containerPort": 80
+          }
+        ],
+        "networkIds": [
+          "n18324c30b171183dd54e43cb2b78a59339bb4198e3fec6b9fa5b505a0001"
+        ],
+        "project": "hb_d8d0591ba0ac4ef4bb597f50e635c6d7",
+        "service": "web",
+        "aliases": {},
+        "env": {}
+      },
+      {
+        "id": "cc39343ed31715078e9cf357f1f2f5de795b04d8656aa494297c3f0250004",
+        "name": "hb_0fc67a3338e0475e9657fb2e6775ee80-web-1",
+        "image": "neosmemo/memos@sha256:71a5b4738d1bed96e92112004054f0888e92791b64eb78afd79077c96e6f9327",
+        "state": "running",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+          "io.harbor.preview/service": "web",
+          "io.harbor.preview/kind": "application",
+          "com.docker.compose.project": "hb_0fc67a3338e0475e9657fb2e6775ee80",
+          "com.docker.compose.service": "web"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "startedAt": "2026-10-13T04:05:08Z",
+        "health": "none",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 47311,
+            "containerPort": 5230
+          }
+        ],
+        "networkIds": [
+          "nf8e93f9fccbc3b276fc80d3bbc28a342357c5abecc8b1e2e701ba0330003"
+        ],
+        "project": "hb_0fc67a3338e0475e9657fb2e6775ee80",
+        "service": "web",
+        "aliases": {},
+        "env": {
+          "MEMOS_MODE": "prod",
+          "MEMOS_PORT": "5230"
+        }
+      },
+      {
+        "id": "cee5dba2572a6c66d45efd774da0b0e660498edfa104c60cafed629ce0006",
+        "name": "hb_2b9b5d7fa3734cb983335f82acb57cea-postgres-1",
+        "image": "postgres@sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94",
+        "state": "exited",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+          "io.harbor.preview/service": "postgres",
+          "io.harbor.preview/kind": "infrastructure",
+          "com.docker.compose.project": "hb_2b9b5d7fa3734cb983335f82acb57cea",
+          "com.docker.compose.service": "postgres"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "startedAt": "2026-10-13T04:05:08Z",
+        "health": "none",
+        "ports": [],
+        "networkIds": [
+          "nc526ddabb031e2e2348b968897ba5f1b68d30767c2ba8516605445a60005"
+        ],
+        "project": "hb_2b9b5d7fa3734cb983335f82acb57cea",
+        "service": "postgres",
+        "aliases": {},
+        "env": {
+          "POSTGRES_DB": "n8n",
+          "POSTGRES_USER": "n8n",
+          "POSTGRES_PASSWORD": "fefefefefefefefefefefefefefefefefefefefefefefefefefefefe00000006"
+        }
+      },
+      {
+        "id": "cbcb494b96a22f12616dd4fed0e5203eb0b5b3193d7230dfa105c5f4c0007",
+        "name": "hb_2b9b5d7fa3734cb983335f82acb57cea-web-1",
+        "image": "n8nio/n8n@sha256:a8c95f75c6fdf65f5f2b7a7b354744eaa1c62bb911b5c00af6499c3f38e4cd32",
+        "state": "exited",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+          "io.harbor.preview/service": "web",
+          "io.harbor.preview/kind": "application",
+          "com.docker.compose.project": "hb_2b9b5d7fa3734cb983335f82acb57cea",
+          "com.docker.compose.service": "web"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "startedAt": "2026-10-13T04:05:08Z",
+        "health": "none",
+        "ports": [
+          {
+            "hostIp": "127.0.0.1",
+            "hostPort": 47312,
+            "containerPort": 5678
+          }
+        ],
+        "networkIds": [
+          "nc526ddabb031e2e2348b968897ba5f1b68d30767c2ba8516605445a60005"
+        ],
+        "project": "hb_2b9b5d7fa3734cb983335f82acb57cea",
+        "service": "web",
+        "aliases": {},
+        "env": {
+          "DB_POSTGRESDB_DATABASE": "n8n",
+          "DB_POSTGRESDB_HOST": "postgres",
+          "DB_POSTGRESDB_PORT": "5432",
+          "DB_POSTGRESDB_SCHEMA": "public",
+          "DB_POSTGRESDB_USER": "n8n",
+          "DB_TYPE": "postgresdb",
+          "GENERIC_TIMEZONE": "UTC",
+          "N8N_DIAGNOSTICS_ENABLED": "false",
+          "N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS": "true",
+          "N8N_VERSION_NOTIFICATIONS_ENABLED": "false",
+          "TZ": "UTC",
+          "DB_POSTGRESDB_PASSWORD": "fefefefefefefefefefefefefefefefefefefefefefefefefefefefe00000006",
+          "N8N_ENCRYPTION_KEY": "fefefefefefefefefefefefefefefefefefefefefefefefefefefefe00000007",
+          "N8N_EDITOR_BASE_URL": "http://localhost:47312/",
+          "WEBHOOK_URL": "http://localhost:47312/"
+        }
+      }
+    ],
+    "volumes": [
+      {
+        "name": "hb_0fc67a3338e0475e9657fb2e6775ee80_data",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+          "io.harbor.preview/kind": "volume",
+          "io.harbor.preview/token": "fefefefefefefefefefefefe00000003",
+          "io.harbor.preview/service": "data"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "driver": "local"
+      },
+      {
+        "name": "hb_2b9b5d7fa3734cb983335f82acb57cea_database",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+          "io.harbor.preview/kind": "volume",
+          "io.harbor.preview/token": "fefefefefefefefefefefefe00000004",
+          "io.harbor.preview/service": "database"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "driver": "local"
+      },
+      {
+        "name": "hb_2b9b5d7fa3734cb983335f82acb57cea_app-state",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+          "io.harbor.preview/kind": "volume",
+          "io.harbor.preview/token": "fefefefefefefefefefefefe00000005",
+          "io.harbor.preview/service": "app-state"
+        },
+        "createdAt": "2026-10-13T04:05:08Z",
+        "driver": "local"
+      }
+    ],
+    "networks": [
+      {
+        "id": "n18324c30b171183dd54e43cb2b78a59339bb4198e3fec6b9fa5b505a0001",
+        "name": "hb_d8d0591ba0ac4ef4bb597f50e635c6d7_default",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "d8d0591b-a0ac-4ef4-bb59-7f50e635c6d7",
+          "io.harbor.preview/kind": "network",
+          "com.docker.compose.project": "hb_d8d0591ba0ac4ef4bb597f50e635c6d7",
+          "com.docker.compose.network": "default"
+        },
+        "containerIds": [
+          "c591e1fbf0d1acbf91abed6874a8315aa9cf73aecbe17918e8efbe66b0002"
+        ],
+        "gateways": [
+          "172.30.0.1"
+        ]
+      },
+      {
+        "id": "nf8e93f9fccbc3b276fc80d3bbc28a342357c5abecc8b1e2e701ba0330003",
+        "name": "hb_0fc67a3338e0475e9657fb2e6775ee80_default",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+          "io.harbor.preview/kind": "network",
+          "com.docker.compose.project": "hb_0fc67a3338e0475e9657fb2e6775ee80",
+          "com.docker.compose.network": "default"
+        },
+        "containerIds": [
+          "cc39343ed31715078e9cf357f1f2f5de795b04d8656aa494297c3f0250004"
+        ],
+        "gateways": [
+          "172.30.1.1"
+        ]
+      },
+      {
+        "id": "nc526ddabb031e2e2348b968897ba5f1b68d30767c2ba8516605445a60005",
+        "name": "hb_2b9b5d7fa3734cb983335f82acb57cea_default",
+        "labels": {
+          "io.harbor.preview/installation": "4544f0e1-3858-489b-a5ee-ae4b057b4974",
+          "io.harbor.preview/instance": "2b9b5d7f-a373-4cb9-8333-5f82acb57cea",
+          "io.harbor.preview/kind": "network",
+          "com.docker.compose.project": "hb_2b9b5d7fa3734cb983335f82acb57cea",
+          "com.docker.compose.network": "default"
+        },
+        "containerIds": [
+          "cee5dba2572a6c66d45efd774da0b0e660498edfa104c60cafed629ce0006",
+          "cbcb494b96a22f12616dd4fed0e5203eb0b5b3193d7230dfa105c5f4c0007"
+        ],
+        "gateways": [
+          "172.30.2.1"
+        ]
+      }
+    ]
+  }
+}

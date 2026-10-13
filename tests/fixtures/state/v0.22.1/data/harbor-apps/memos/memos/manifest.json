@@ -1,0 +1,34 @@
+{
+  "format": 2,
+  "instanceId": "0fc67a33-38e0-475e-9657-fb2e6775ee80",
+  "packageId": "memos",
+  "packageRevision": "1",
+  "displayName": "Memos",
+  "createdAt": "2026-10-13T04:05:07Z",
+  "harborVersion": "0.22.1",
+  "driveId": "7a2d42ae393941aaf7789ce328ca2a0f",
+  "vault": "vault",
+  "encryption": {
+    "algorithm": "aes-256-gcm",
+    "passphrase": {
+      "N": 131072,
+      "r": 8,
+      "p": 1,
+      "keylen": 32,
+      "salt": "a371f3f3d267e5a77f8d4badf0b3281c",
+      "nonce": "8c3e5d9bfa149ff1563b8995",
+      "wrappedKey": "55fb1c780f6831ea0b6586612d093877f6af07bf3e20289e97b98229a8bd96b0",
+      "tag": "cc2bdcc13c50d576b7bf44e638deecbd"
+    },
+    "installation": {
+      "N": 131072,
+      "r": 8,
+      "p": 1,
+      "keylen": 32,
+      "salt": "2e93b991d113ffc8649faede03a33398",
+      "nonce": "6550e4ea40aae51520959243",
+      "wrappedKey": "78b5cae76a7de9d0bfea1f689981561e3ac3c21dfe3c5994b92ab24073839263",
+      "tag": "7aad04bc94e70d5450643c68407d1462"
+    }
+  }
+}

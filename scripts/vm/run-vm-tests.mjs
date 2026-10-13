@@ -1036,18 +1036,20 @@ const B09 = step('B09', 'Reconfigure primary back to loopback; n8n works locally
     if (r.state !== 'succeeded') throw new Error(`unexpose ${name} ${r.state}`);
   }
   const routesAfter = (JSON.parse(ssh('curl -s http://127.0.0.1:2019/config/'))?.apps?.http?.servers?.harbor?.routes?.length ?? 0);
-  if (!env.includes('localhost:') || result.executionStatus !== 'success' || routesAfter !== 0) throw new Error(`reconfigure/unexpose wrong: ${env} ${result.executionStatus} routes ${routesBefore}->${routesAfter}`);
+  if (!(env.includes('localhost:') || /\.local:/.test(env)) || result.executionStatus !== 'success' || routesAfter !== 0) throw new Error(`reconfigure/unexpose wrong: ${env} ${result.executionStatus} routes ${routesBefore}->${routesAfter}`);
   return { details: { baseUrlEnv: env, workflow: result, caddyRoutes: { before: routesBefore, after: routesAfter } }, notes: ['primary back to loopback: base URL env re-rendered, workflow ran locally', `unexpose removed Caddy routes (${routesBefore} -> ${routesAfter})`] };
 });
 
-const B10 = step('B10', 'Negative: invalid hostname, duplicate hostname, unknown provider state → clear errors, no partial config', async () => {
+const B10 = step('B10', 'Negative: invalid hostname, duplicate hostname → clear errors, no partial config; a second name for the same app is a second route (decision 127)', async () => {
   // Use instances that have no public address at this point (B04/B05 published n8n and bentopdf).
   const b = byName('excalidraw');
   const other = byName('excalidraw-2');
   const otherWasStopped = other.desired === 'stopped';
   if (otherWasStopped) cliOk(target, ['start', other.id, '--yes'], { timeoutMs: 300_000 });
   // A09 relies on excalidraw-2 staying intentionally stopped: put it back even when a check below throws.
+  const published = [];
   const restore = () => {
+    for (const h of published) cli(target, ['unexpose', b.id, '--via', 'public', '--host', h, '--yes'], { timeoutMs: 300_000 });
     if (otherWasStopped) cliOk(target, ['stop', other.id, '--yes'], { timeoutMs: 300_000 });
   };
   let bad, first, dup, again, routes0, routes1;
@@ -1057,17 +1059,20 @@ const B10 = step('B10', 'Negative: invalid hostname, duplicate hostname, unknown
   const host = publicHost('dup');
   dnsSet(host);
   first = cliOk(target, ['expose', b.id, '--via', 'public', '--host', host, '--protect', 'none', '--yes'], { timeoutMs: 600_000 });
+  published.push(host);
   dup = cli(target, ['expose', other.id, '--via', 'public', '--host', host, '--yes']);
-  again = cli(target, ['expose', b.id, '--via', 'public', '--host', `x-${host}`, '--yes']);
+  // decision 127: a second public name for the same endpoint is allowed and adds its own route
+  dnsSet(`x-${host}`);
+  again = cli(target, ['expose', b.id, '--via', 'public', '--host', `x-${host}`, '--protect', 'none', '--yes'], { timeoutMs: 600_000 });
+  if (again.code === 0) published.push(`x-${host}`);
   routes1 = (JSON.parse(ssh('curl -s http://127.0.0.1:2019/config/'))?.apps?.http?.servers?.harbor?.routes?.length ?? 0);
-  cliOk(target, ['unexpose', b.id, '--via', 'public', '--yes'], { timeoutMs: 300_000 });
   } finally {
     restore();
   }
-  if (bad.code === 0 || bad.json?.error?.code !== 'INVALID_REQUEST' || first.state !== 'succeeded' || dup.json?.error?.code !== 'NAME_CONFLICT' || again.json?.error?.code !== 'INVALID_STATE' || routes1 !== routes0 + 1) {
+  if (bad.code === 0 || bad.json?.error?.code !== 'INVALID_REQUEST' || first.state !== 'succeeded' || dup.json?.error?.code !== 'NAME_CONFLICT' || again.code !== 0 || routes1 !== routes0 + 2) {
     throw new Error(`negative cases wrong: ${JSON.stringify({ bad: bad.json?.error?.code, dup: dup.json?.error?.code, again: again.json?.error?.code, routes0, routes1 })}`);
   }
-  return { details: { invalidHostname: bad.json?.error, duplicate: dup.json?.error, alreadyExposed: again.json?.error }, notes: ['invalid hostname -> INVALID_REQUEST; duplicate hostname -> NAME_CONFLICT; second public exposure of the same endpoint -> INVALID_STATE; exactly one route was added'] };
+  return { details: { invalidHostname: bad.json?.error, duplicate: dup.json?.error, secondName: again.json?.state ?? again.code }, notes: ['invalid hostname -> INVALID_REQUEST; duplicate hostname -> NAME_CONFLICT; a second public name for the same endpoint -> its own route (decision 127); both withdrawn again'] };
 });
 
 // Decision 165 (found 2026-10-12, live on a real box): with LAN mode and the public proxy both on, anyone on the

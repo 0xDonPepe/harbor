@@ -19,6 +19,8 @@ export default defineConfig({
           testTimeout: 120_000,
           hookTimeout: 120_000,
           fileParallelism: false,
+          // the terminal tests run a plain shell, never the developer's own login shell and its dotfiles
+          env: { HARBOR_DEV_SHELL: '/bin/sh' },
         },
       },
     ],

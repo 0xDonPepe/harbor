@@ -32,6 +32,7 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         ...process.env,
+        HARBOR_DEV_SHELL: '/bin/sh', // a plain shell, never the developer's own login shell and its dotfiles
         HARBOR_DEV_ROOT: root,
         HARBOR_DEV_PORT: String(PORT),
         HARBOR_DEV_PORT_FROM: String(PORT + 80),
@@ -60,6 +61,7 @@ export default defineConfig({
       timeout: 60_000,
       env: {
         ...process.env,
+        HARBOR_DEV_SHELL: '/bin/sh', // a plain shell, never the developer's own login shell and its dotfiles
         HARBOR_DEV_ROOT: setupRoot,
         HARBOR_DEV_PORT: String(SETUP_PORT),
         HARBOR_DEV_PORT_FROM: String(SETUP_PORT + 80),

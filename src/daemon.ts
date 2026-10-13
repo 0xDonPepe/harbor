@@ -224,7 +224,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     machineKey.onLogin((password) => void service.onLogin(password).catch((e: Error) => log.warn(`login-time app unlock failed: ${e.message}`)));
     const appearance = new AppearanceService(repo, config.stateDir, fetcher, clock, log);
     // the console's terminal: the harbor service account's shell on a real host; the developer's shell in fake mode
-    const terminals = new TerminalService(log, fakeMode ? { shell: [process.env['SHELL'] ?? '/bin/bash', '-il'], env: { HOME: process.env['HOME'] ?? config.stateDir, USER: process.env['USER'] ?? 'harbor' }, cwd: config.stateDir } : { shell: ['/bin/bash', '-il'], env: { HOME: config.stateDir, USER: 'harbor', LOGNAME: 'harbor' }, cwd: config.stateDir });
+    const terminals = new TerminalService(log, fakeMode ? { shell: process.env['HARBOR_DEV_SHELL'] ? [process.env['HARBOR_DEV_SHELL']] : [process.env['SHELL'] ?? '/bin/bash', '-il'], env: { HOME: process.env['HOME'] ?? config.stateDir, USER: process.env['USER'] ?? 'harbor' }, cwd: config.stateDir } : { shell: ['/bin/bash', '-il'], env: { HOME: config.stateDir, USER: 'harbor', LOGNAME: 'harbor' }, cwd: config.stateDir });
     service.onSubmit(() => runner.wake());
 
     const recovered = runner.recoverOnStartup();

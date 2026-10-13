@@ -59,7 +59,7 @@ endpoints:
                                  # isolated (default) = over the secure LAN address Harbor's relay renames and
                                  # signs this endpoint's HttpOnly cookies, so other apps on the same machine never
                                  # receive them. shared = its own cookies pass unchanged (it still never receives
-                                 # another app's isolated cookies). Only for an app that must hand its cookie to
+                                 # another app's isolated cookies, and may not set a name shaped like one). Only for an app that must hand its cookie to
                                  # something else on harbor.local; most apps never need it.
 ports:                           # optional (Harbor 0.29.0, decision 163; set release.minHarbor: "0.29.0"):
   wireguard:                     # a fixed host port published on EVERY network of the machine, no proxy, no URL

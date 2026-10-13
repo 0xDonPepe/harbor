@@ -1,9 +1,9 @@
 // Cookie firewall (decision 167): the pure rewrite of Set-Cookie and the Cookie filter the LAN HTTPS relay applies.
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { cookieTag, filterCookieHeader, isCrossAppRequest, loadCookieKey, rewriteSetCookies, taggedName } from '../../src/system/cookie-firewall.js';
+import { cookieTag, filterCookieHeader, isCrossAppRequest, loadCookieKey, rewriteSetCookies, sharedSetCookies, taggedName } from '../../src/system/cookie-firewall.js';
 
 const KEY = Buffer.alloc(32, 7);
 const OTHER_KEY = Buffer.alloc(32, 9);
@@ -139,5 +139,68 @@ describe('cross-app requests', () => {
     expect(isCrossAppRequest({ method: 'POST', origin: 'https://other.local:38090', host: 'harbor.local:38080' }, A, ports)).toBe(false);
     expect(isCrossAppRequest({ method: 'GET', origin: 'https://harbor.local:38090', host: 'harbor.local:38080' }, A, ports)).toBe(false);
     expect(isCrossAppRequest({ method: 'POST', origin: 'https://harbor.local:9999', host: 'harbor.local:38080' }, A, ports)).toBe(false);
+  });
+});
+
+// Review fixes (decision 167): prefixes are case-insensitive, tagged names are never let through from an app,
+// an older untagged session is cleared the first time the app sets its tagged one, and `Origin: null` from a
+// same-site page is another app's.
+describe('cookie firewall, review fixes', () => {
+  it('keeps a lowercase __host- / __secure- prefix in front (browsers match prefixes case-insensitively)', () => {
+    expect(taggedName('1a2b3c4d', '__host-sid')).toBe('__host-hb_1a2b3c4d__sid');
+    expect(taggedName('1a2b3c4d', '__SECURE-sid')).toBe('__SECURE-hb_1a2b3c4d__sid');
+    const set = rewriteSetCookies('__host-sid=v; Path=/; Secure; HttpOnly', { tag: A, key: KEY });
+    expect(set.headers[0]).toMatch(new RegExp(`^__host-hb_${A}__sid=v\\.`));
+    expect(filterCookieHeader(jar(set.headers), { tag: A, key: KEY }).cookie).toBe('__host-sid=v');
+    expect(filterCookieHeader(jar(set.headers), { tag: B, key: KEY }).cookie).toBeUndefined();
+  });
+  it('drops every Set-Cookie named like a tagged cookie, HttpOnly or not, also when it is too large to tag', () => {
+    const big = `hb_${A}__sid=${'x'.repeat(4062)}; HttpOnly; Path=/`;
+    const r = rewriteSetCookies([big, `hb_${A}__sid=y; HttpOnly; Path=/`, `__Secure-hb_${A}__sid=; HttpOnly; Max-Age=0`, 'ok=1; HttpOnly'], { tag: B, key: KEY });
+    expect(r.headers).toHaveLength(1);
+    expect(r.headers[0]).toMatch(new RegExp(`^hb_${B}__ok=1\\.`));
+    expect(r.refused).toEqual([`hb_${A}__sid`, `hb_${A}__sid`, `__Secure-hb_${A}__sid`]);
+    expect(r.oversize).toEqual([]);
+  });
+  it("a shared endpoint's Set-Cookie passes unchanged except names like a tagged cookie", () => {
+    const r = sharedSetCookies(['sid=1; HttpOnly', `hb_${A}__sid=x; HttpOnly`, `__host-hb_${A}__k=; Max-Age=0`, 'theme=dark']);
+    expect(r.headers).toEqual(['sid=1; HttpOnly', 'theme=dark']);
+    expect(r.refused).toEqual([`hb_${A}__sid`, `__host-hb_${A}__k`]);
+  });
+  it('clears an older untagged cookie of that name when the request carried one, with the same Path and Domain', () => {
+    const r = rewriteSetCookies('sid=new; Path=/app; Domain=harbor.local; HttpOnly; SameSite=Lax', { tag: A, key: KEY, untaggedInRequest: new Set(['sid']) });
+    expect(r.headers).toHaveLength(2);
+    expect(r.headers[0]).toBe('sid=; Path=/app; Domain=harbor.local; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure');
+    expect(r.headers[1]).toMatch(new RegExp(`^hb_${A}__sid=new\\.`));
+    // nothing to clear: the request had no untagged cookie of that name (no extra header on every refresh)
+    expect(rewriteSetCookies('sid=new; Path=/; HttpOnly', { tag: A, key: KEY, untaggedInRequest: new Set(['theme']) }).headers).toHaveLength(1);
+  });
+  it('reports the untagged cookie names a request carried (names only)', () => {
+    const setA = rewriteSetCookies('sid=alpha; HttpOnly', { tag: A, key: KEY }).headers;
+    const f = filterCookieHeader(`sid=old; theme=dark; ${jar(setA)}`, { tag: A, key: KEY });
+    expect(f.cookie).toBe('theme=dark; sid=alpha');
+    expect(f.untagged.sort()).toEqual(['sid', 'theme']);
+  });
+  it('refuses Origin null or no Origin on a same-site request (a redirect hop through another app), not a cross-site one', () => {
+    const ports = new Map<number, string>([
+      [38080, A],
+      [38090, B],
+    ]);
+    expect(isCrossAppRequest({ method: 'POST', origin: 'null', host: 'harbor.local:38080', secFetchSite: 'same-site' }, A, ports)).toBe(true);
+    expect(isCrossAppRequest({ method: 'POST', host: 'harbor.local:38080', secFetchSite: 'same-site' }, A, ports)).toBe(true);
+    expect(isCrossAppRequest({ method: 'GET', origin: 'null', host: 'harbor.local:38080', secFetchSite: 'same-site', upgrade: true }, A, ports)).toBe(true);
+    expect(isCrossAppRequest({ method: 'POST', origin: 'null', host: 'harbor.local:38080', secFetchSite: 'cross-site' }, A, ports)).toBe(false);
+    expect(isCrossAppRequest({ method: 'POST', origin: 'null', host: 'harbor.local:38080' }, A, ports)).toBe(false);
+    expect(isCrossAppRequest({ method: 'POST', origin: 'https://harbor.local:38080', host: 'harbor.local:38080', secFetchSite: 'same-origin' }, A, ports)).toBe(false);
+    expect(isCrossAppRequest({ method: 'GET', origin: 'null', host: 'harbor.local:38080', secFetchSite: 'same-site' }, A, ports)).toBe(false);
+  });
+  it('writes the key durably (no temp file left) and replaces an empty one (a write that never finished)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'harbor-cookie-key-'));
+    writeFileSync(path.join(dir, 'cookie-firewall.key'), '');
+    const k = loadCookieKey(dir);
+    expect(k.length).toBe(32);
+    expect(readdirSync(dir)).toEqual(['cookie-firewall.key']);
+    expect(statSync(path.join(dir, 'cookie-firewall.key')).mode & 0o777).toBe(0o600);
+    expect(loadCookieKey(dir).equals(k)).toBe(true);
   });
 });

@@ -147,9 +147,14 @@ created by Harbor are never touched. Uninstalling a provider requires no active 
   `[__Host-|__Secure-]hb_<tag>__<name>=<value>.<sig>` (tag = 8 hex of sha256(instance id); sig = 16 bytes of
   HMAC-SHA256 over tag, name, value with `<state>/cookie-firewall.key`; Secure forced, Domain dropped); on
   the way in only this instance's validly signed cookies come back under their own names, other tags and
-  forgeries are dropped, as is an untagged cookie shadowing a signed name; unsafe methods and WebSocket
-  handshakes whose Origin is another instance's port on the same host get a 403. An endpoint may declare
-  `cookies: shared` (its own cookies untagged). *HTTPS only* (`network.httpsOnly`) renders app ports on
+  forgeries are dropped, as is an untagged cookie shadowing a signed name (an older untagged copy the
+  request carried is cleared when the app sets the name again); no app response may set a name shaped like
+  a tagged cookie (dropped, whatever its size or mode); unsafe methods and WebSocket handshakes whose Origin
+  is another instance's port on the same host get a 403, and so do those with `Origin: null` or none that the
+  browser marks `Sec-Fetch-Site: same-site` (a redirect hop through another app hides the origin but keeps
+  SameSite cookies). An endpoint may declare `cookies: shared` (its own cookies untagged, no shadow check).
+  A link re-render with no restart keeps the binding of the file it replaces, so `rebindToApply` follows
+  the running containers. *HTTPS only* (`network.httpsOnly`) renders app ports on
   127.0.0.1 with `x-harbor: {lanAccess: relay}` in the runtime file (the relay serves those) and turns the
   plain-http console (daemon `:80` and Caddy's `harbor_lan`) into a 307 to https except
   `GET /v1/network/https/ca.crt` and `/probe`. Not covered: plain-http app ports while HTTPS only is off,

@@ -1,13 +1,14 @@
 // HTTPS only (decision 167): the pure parts — the redirect target, Caddy's :80 routes, the lock-out guard's view
 // of a request, the relay marker in the rendered Compose file and what the relay then serves, and the package
 // format's new optional `endpoints.<id>.cookies`.
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { arrivedOverHttps } from '../../src/api/server.js';
 import { renderCaddyConfig } from '../../src/exposure/caddy.js';
-import { endpointCookieModes, httpsRedirectLocation, lanBoundPorts, runtimeLanAccess } from '../../src/system/lan-https.js';
+import { endpointCookieModes, httpsRedirectLocation, lanBoundPorts, lanHttpsPort, lanHttpsSignature, relayEndpoints, runtimeLanAccess } from '../../src/system/lan-https.js';
+import { cookieTag, loadCookieKey } from '../../src/system/cookie-firewall.js';
 import { LAN_PEER_RANGES } from '../../src/system/lan.js';
 import { validateManifestShape } from '../../src/packages/manifest.js';
 import { MINIMAL_MANIFEST } from './helpers.js';
@@ -100,5 +101,46 @@ describe('endpoints.<id>.cookies (package format, decision 167)', () => {
     writeFileSync(path.join(state, 'instances', id, 'release', 'manifest.yaml'), 'endpoints:\n  web: {service: web, cookies: shared}\n  api: {service: web}\n');
     expect(endpointCookieModes(state, id)).toEqual({ web: 'shared', api: 'isolated' });
     expect(endpointCookieModes(state, '77777777-7777-4777-8777-777777777777')).toEqual({});
+  });
+});
+
+// Review fixes (decision 167): the relay's policy as reconcile builds it from state, and a reconcile that closed
+// the app relays over a bad key is retried once the key file changes.
+describe('relay policy from state', () => {
+  const A = '88888888-8888-4888-8888-888888888888';
+  const B = '99999999-9999-4999-8999-999999999999';
+  const setup = () => {
+    const stateDir = mkdtempSync(path.join(tmpdir(), 'harbor-relaypol-'));
+    mkdirSync(path.join(stateDir, 'instances', A, 'release'), { recursive: true });
+    writeFileSync(path.join(stateDir, 'instances', A, 'release', 'manifest.yaml'), 'endpoints:\n  web: {service: web}\n  admin: {service: web, cookies: shared}\n');
+    const instances = [
+      { id: A, name: 'alpha', displayName: 'Alpha', purgedAt: null, endpoints: [{ id: 'web', hostPort: 18080 }, { id: 'admin', hostPort: 18081 }] },
+      { id: B, name: 'bravo', displayName: null, purgedAt: null, endpoints: [{ id: 'web', hostPort: 18090 }] },
+      { id: 'aaaaaaaa-0000-4000-8000-000000000000', name: 'gone', displayName: null, purgedAt: '2026-01-01T00:00:00Z', endpoints: [{ id: 'web', hostPort: 18099 }] },
+    ];
+    const settings: Record<string, unknown> = { 'network.httpsEnabled': true };
+    const ctx = { config: { stateDir, lan: { enabled: true } }, repo: { listInstances: () => instances, setting: (k: string) => settings[k] } } as unknown as Parameters<typeof relayEndpoints>[0] & Parameters<typeof lanHttpsSignature>[0];
+    return { stateDir, ctx };
+  };
+  it("maps each secure port to its instance's tag and the manifest's mode, and every plain and secure port to a tag", () => {
+    const { ctx } = setup();
+    const { bySecurePort, portTags } = relayEndpoints(ctx);
+    const [web, admin, bravo] = [18080, 18081, 18090].map(lanHttpsPort) as [number, number, number];
+    expect(bySecurePort.get(web)).toEqual({ tag: cookieTag(A), cookies: 'isolated', label: 'Alpha' });
+    expect(bySecurePort.get(admin)).toEqual({ tag: cookieTag(A), cookies: 'shared', label: 'Alpha' });
+    expect(bySecurePort.get(bravo)).toEqual({ tag: cookieTag(B), cookies: 'isolated', label: 'bravo' });
+    expect(bySecurePort.size).toBe(3);
+    expect(Object.fromEntries(portTags)).toEqual({ 18080: cookieTag(A), [web]: cookieTag(A), 18081: cookieTag(A), [admin]: cookieTag(A), 18090: cookieTag(B), [bravo]: cookieTag(B) });
+  });
+  it('the signature changes when the cookie key file is fixed or replaced, so the observer retries', () => {
+    const { stateDir, ctx } = setup();
+    const keyFile = path.join(stateDir, 'cookie-firewall.key');
+    const none = lanHttpsSignature(ctx);
+    writeFileSync(keyFile, 'short');
+    const bad = lanHttpsSignature(ctx);
+    expect(bad).not.toBe(none);
+    rmSync(keyFile);
+    loadCookieKey(stateDir);
+    expect(lanHttpsSignature(ctx)).not.toBe(bad);
   });
 });

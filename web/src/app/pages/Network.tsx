@@ -42,6 +42,18 @@ function pageIsSecure(): boolean {
   return location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 }
 
+// Decision 167: running apps whose network binding follows the HTTPS-only setting only after a restart. Read from
+// the server's answer every time the card loads, not only right after a switch.
+function rebindNote(st: NetworkHttpsDto | null): string | null {
+  const names = st?.rebindToApply ?? [];
+  if (!st || !names.length) return null;
+  const list = names.join(', ');
+  const one = names.length === 1;
+  if (st.httpsOnly) return `Restart ${list} to finish the switch (open the app, then Restart). Until then ${one ? 'it still answers' : 'they still answer'} on plain http on your network.`;
+  if (st.enabled) return `${list} ${one ? 'opens' : 'open'} only at ${one ? 'its' : 'their'} https address until restarted.`;
+  return `${list} ${one ? 'is' : 'are'} off your network until restarted.`;
+}
+
 export function Network({ c }: { c: Console }) {
   const [st, setSt] = useState<NetworkHttpsDto | null>(c.data.system?.network.https ?? null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +63,6 @@ export function Network({ c }: { c: Console }) {
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmCa, setConfirmCa] = useState(false);
   const [restartNote, setRestartNote] = useState<string | null>(null);
-  const [rebindNote, setRebindNote] = useState<string | null>(null);
   const lanOn = c.data.system?.lan.enabled ?? false;
   const lanUrl = c.data.system?.lan.url ?? null;
 
@@ -97,8 +108,6 @@ export function Network({ c }: { c: Console }) {
       setSt(next);
       // Decision 116: apps that keep their own address pick up the change on Restart.
       setRestartNote(next.restartToApply?.length ? `Restart ${next.restartToApply.join(', ')} so ${next.restartToApply.length === 1 ? 'it uses' : 'they use'} the new address (open the app, then Restart).` : null);
-      // decision 167: turning secure addresses off ends HTTPS only; apps it moved to loopback need a restart
-      setRebindNote(!on && next.rebindToApply?.length ? `${next.rebindToApply.join(', ')} ${next.rebindToApply.length === 1 ? 'is' : 'are'} off your network until restarted.` : null);
       await c.refresh();
     } catch (e) {
       setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
@@ -114,7 +123,6 @@ export function Network({ c }: { c: Console }) {
     try {
       const next = await api.setNetworkHttps(true, on);
       setSt(next);
-      setRebindNote(next.rebindToApply?.length ? `Restart ${next.rebindToApply.join(', ')} to finish the switch (open the app, then Restart).` : null);
       await c.refresh();
     } catch (e) {
       setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
@@ -229,7 +237,7 @@ export function Network({ c }: { c: Console }) {
             </label>
           </div>
         )}
-        {rebindNote && <p className="warn small">{rebindNote}</p>}
+        {rebindNote(st) && <p className="warn small">{rebindNote(st)}</p>}
         {st?.enabled && st.caLimited === false && (
           <div className="row between wrap">
             <p className="warn small">This certificate was made by an older Harbor and could vouch for any website, not just this one. Replace it, then trust the new one on each device.</p>

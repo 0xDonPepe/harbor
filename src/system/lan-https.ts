@@ -26,7 +26,7 @@ import { hostname } from 'node:os';
 import { HarborError } from '../errors.js';
 import { HTTP_KEEP_PATHS } from '../exposure/caddy.js';
 import { isLanPeer, isPrivateIPv4, machineAddresses } from './lan.js';
-import { cookieTag, filterCookieHeader, isCrossAppRequest, loadCookieKey, rewriteSetCookies, type CookieMode } from './cookie-firewall.js';
+import { COOKIE_KEY_FILE, cookieTag, filterCookieHeader, isCrossAppRequest, loadCookieKey, rewriteSetCookies, sharedSetCookies, type CookieMode } from './cookie-firewall.js';
 import type { Ctx } from '../lifecycle/context.js';
 
 // Console HTTPS port + deterministic per-app secure ports (no allocation, no
@@ -333,22 +333,30 @@ interface Relay {
 
 const FORBIDDEN_BODY = 'Refused: this request came from another app on this Harbor.\n';
 
-function filteredHeaders(req: IncomingMessage, targetPort: number, pol: PortPolicy, relay: Relay): Record<string, string | string[] | undefined> {
+// `untagged`: the untagged cookie names the request carried, so the response can clear an older untagged copy of a
+// name the app now holds signed. A `shared` endpoint gets no shadow check: the names its instance's isolated
+// endpoints set are not its own (they share the jar's untagged names on purpose).
+function filteredHeaders(req: IncomingMessage, targetPort: number, pol: PortPolicy, relay: Relay): { headers: Record<string, string | string[] | undefined>; untagged: ReadonlySet<string> } {
   const headers = forwardHeaders(req, targetPort);
-  if (!pol) return headers;
-  const f = filterCookieHeader(req.headers.cookie, { tag: pol.ep.cookies === 'isolated' ? pol.ep.tag : null, key: pol.key, isolatedNames: relay.isolatedNames(pol.ep.tag) });
+  if (!pol) return { headers, untagged: new Set() };
+  const isolated = pol.ep.cookies === 'isolated';
+  const f = filterCookieHeader(req.headers.cookie, { tag: isolated ? pol.ep.tag : null, key: pol.key, ...(isolated ? { isolatedNames: relay.isolatedNames(pol.ep.tag) } : {}) });
   if (f.cookie) headers['cookie'] = f.cookie;
   else delete headers['cookie'];
-  return headers;
+  return { headers, untagged: new Set(f.untagged) };
 }
 
-function rewrittenSetCookies(value: string | string[] | undefined, pol: PortPolicy, relay: Relay): string[] | undefined {
+function rewrittenSetCookies(value: string | string[] | undefined, pol: PortPolicy, relay: Relay, untagged: ReadonlySet<string>): string[] | undefined {
   if (value === undefined) return undefined;
-  if (!pol || pol.ep.cookies !== 'isolated') return Array.isArray(value) ? value : [value];
-  const r = rewriteSetCookies(value, { tag: pol.ep.tag, key: pol.key });
+  if (!pol) return Array.isArray(value) ? value : [value];
+  // a shared endpoint's cookies pass untagged, but never one named like another app's signed cookie
+  if (pol.ep.cookies !== 'isolated') return sharedSetCookies(value).headers;
+  const r = rewriteSetCookies(value, { tag: pol.ep.tag, key: pol.key, untaggedInRequest: untagged });
   relay.learned(pol.ep, r);
   return r.headers;
 }
+
+const secFetchSite = (req: IncomingMessage) => (Array.isArray(req.headers['sec-fetch-site']) ? req.headers['sec-fetch-site'][0] : req.headers['sec-fetch-site']);
 
 // Minimal reverse proxy to one loopback app port (headers + streaming +
 // websocket upgrades). Apps stay plain HTTP on 127.0.0.1; only this listener
@@ -357,17 +365,17 @@ function rewrittenSetCookies(value: string | string[] | undefined, pol: PortPoli
 function proxyHandler(targetPort: number, securePort: number, relay: Relay) {
   return (req: IncomingMessage, res: ServerResponse) => {
     const pol = relay.policy(securePort);
-    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host }, pol.ep.tag, pol.portTags)) {
+    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host, secFetchSite: secFetchSite(req) }, pol.ep.tag, pol.portTags)) {
       res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
       res.end(FORBIDDEN_BODY);
       req.resume();
       return;
     }
-    const headers: Record<string, string | string[] | undefined> = filteredHeaders(req, targetPort, pol, relay);
+    const { headers, untagged } = filteredHeaders(req, targetPort, pol, relay);
     delete headers['connection'];
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]> }, (down) => {
       const out = { ...down.headers };
-      const cookies = rewrittenSetCookies(down.headers['set-cookie'], pol, relay);
+      const cookies = rewrittenSetCookies(down.headers['set-cookie'], pol, relay, untagged);
       if (cookies) out['set-cookie'] = cookies;
       res.writeHead(down.statusCode ?? 502, out);
       down.pipe(res);
@@ -400,12 +408,12 @@ function proxyUpgrade(server: HttpsServer, targetPort: number, securePort: numbe
     const sock = socket as Socket;
     sock.on('error', () => sock.destroy());
     const pol = relay.policy(securePort);
-    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host, upgrade: true }, pol.ep.tag, pol.portTags)) {
+    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host, upgrade: true, secFetchSite: secFetchSite(req) }, pol.ep.tag, pol.portTags)) {
       sock.end(`HTTP/1.1 403 Forbidden\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: ${Buffer.byteLength(FORBIDDEN_BODY)}\r\nconnection: close\r\n\r\n${FORBIDDEN_BODY}`);
       return;
     }
-    const headers = filteredHeaders(req, targetPort, pol, relay);
-    const cookies = (v: string[]) => rewrittenSetCookies(v, pol, relay);
+    const { headers, untagged } = filteredHeaders(req, targetPort, pol, relay);
+    const cookies = (v: string[]) => rewrittenSetCookies(v, pol, relay, untagged);
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]>, agent: false });
     up.on('upgrade', (down, downSocket, downHead) => {
       const d = downSocket as Socket;
@@ -618,7 +626,18 @@ export function lanHttpsSignature(ctx: Ctx): string {
   const tls = readTlsState(ctx.config.stateDir);
   // decision 167: a new instance or a changed `cookies:` mode changes the relay's policy, not only its ports
   const relay = [...relayEndpoints(ctx).bySecurePort].map(([p, e]) => `${p}:${e.tag}:${e.cookies}`).sort();
-  return JSON.stringify({ on: true, ports: ports.sort((a, b) => a - b), fp: tls?.fingerprint ?? null, relay });
+  return JSON.stringify({ on: true, ports: ports.sort((a, b) => a - b), fp: tls?.fingerprint ?? null, relay, key: cookieKeyState(ctx.config.stateDir) });
+}
+
+// Part of the signature: a reconcile that closed the app relays over an unusable key is retried once the operator
+// fixes or deletes the file (the key file's size and mtime change), not only after a restart.
+function cookieKeyState(stateDir: string): string {
+  try {
+    const st = statSync(path.join(stateDir, COOKIE_KEY_FILE));
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return 'none';
+  }
 }
 
 export async function reconcileLanHttps(ctx: Ctx): Promise<void> {

@@ -5,11 +5,16 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { request as httpRequest, type IncomingHttpHeaders } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import type { InstanceSummary, NetworkHttpsDto } from '../../src/contracts/api.js';
+import type { InstanceSummary, NetworkHttpsDto, PackageImportResultDto } from '../../src/contracts/api.js';
+import { writeZip } from '../../src/packages/zip.js';
+import { cookieTag } from '../../src/system/cookie-firewall.js';
 import { lanHttpsPort } from '../../src/system/lan-https.js';
+import { isPrivateIPv4 } from '../../src/system/lan.js';
 import { freePort, startHarness, type Harness } from './harness.js';
 
 function hasOpenssl(): boolean {
@@ -30,6 +35,21 @@ function plain(port: number, method: string, pathname: string): Promise<{ status
     });
     req.on('error', reject);
     req.end(method === 'POST' ? '{}' : undefined);
+  });
+}
+
+// A real LAN peer: this machine's own private IPv4 address as the source (not loopback), straight to the LAN listener.
+const lanAddress = () => Object.values(networkInterfaces()).flat().find((a) => a && a.family === 'IPv4' && !a.internal && isPrivateIPv4(a.address))?.address ?? null;
+function fromLanPeer(ip: string, port: number, token: string, body: unknown): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = httpRequest({ host: ip, port, localAddress: ip, method: 'PUT', path: '/v1/network/https', headers: { host: `harbor.local:${port}`, authorization: `Bearer ${token}`, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } }, (res) => {
+      let text = '';
+      res.on('data', (d: Buffer) => (text += d.toString()));
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text }));
+    });
+    req.on('error', reject);
+    req.end(data);
   });
 }
 
@@ -61,6 +81,14 @@ describe('HTTPS only', () => {
   it('refuses to turn on from a plain-http request that came through a proxy, allows https and this machine', async () => {
     if (!ok) return;
     await h.api.expect<NetworkHttpsDto>(200, 'PUT', '/v1/network/https', { enabled: true });
+    // a browser on the LAN talking plain http to the daemon's own LAN listener (no proxy in between)
+    const ip = lanAddress();
+    if (ip) {
+      const peer = await fromLanPeer(ip, lanPort, h.token, { enabled: true, httpsOnly: true });
+      expect(peer.status, peer.body).toBe(409);
+      expect(peer.body).toMatch(/over https/);
+      expect((await h.api.expect<NetworkHttpsDto>(200, 'GET', '/v1/network/https')).httpsOnly).toBe(false);
+    }
     // what Caddy's :80 route sends for a LAN browser: loopback peer, X-Forwarded-For, X-Forwarded-Proto http
     const viaHttp = await h.api.expectError(409, 'INVALID_STATE', 'PUT', '/v1/network/https', { enabled: true, httpsOnly: true }, { 'x-forwarded-for': '192.168.1.50', 'x-forwarded-proto': 'http' });
     expect(viaHttp.error.message).toMatch(/over https/);
@@ -133,3 +161,106 @@ describe('HTTPS only', () => {
     expect(allOff.httpsOnly).toBe(false);
   }, 30_000);
 });
+
+// Review fixes (decision 167): the relay policy reconcile builds from installed apps (manifest `cookies:` per
+// endpoint, plain and secure ports per instance), and a Compose re-render with no restart (another app's link)
+// keeps the binding the running containers have, so rebindToApply still names them.
+describe('HTTPS only with linked apps, and the relay policy from state', () => {
+  const ok = hasOpenssl();
+  let h: Harness;
+  const head = (id: string, extra = '') => `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: ${id}
+  name: ${id}
+  description: ${id} for the HTTPS-only tests
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: true
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+${extra}health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+`;
+  const provider = head('docsapp', '    cookies: shared\n');
+  const consumer =
+    head('gatewayish') +
+    `links:
+  - id: docs
+    purpose: The documents app it reads
+    provider: {packages: [docsapp]}
+    bindings:
+      - {service: web, environment: DOCS_BASE_URL}
+`;
+  const upload = (m: string) => h.api.expect<PackageImportResultDto>(201, 'POST', '/v1/packages', { fileName: 'p.zip', dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': m, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }).toString('base64')}` });
+  const byName = async (name: string) => (await h.api.instances()).find((i) => i.name === name)!;
+  const post = (port: number, origin: string): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const req = httpsRequest({ host: '127.0.0.1', port, method: 'POST', path: '/save', rejectUnauthorized: false, agent: false, headers: { host: `harbor.local:${port}`, origin, 'content-length': 0 } }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode ?? 0));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+  beforeAll(async () => {
+    h = await startHarness({ portRange: { from: 18340, to: 18370 }, config: { lan: { enabled: true, port: await freePort() } } });
+  });
+  afterAll(async () => h.close());
+
+  it("a link re-render keeps the provider's running binding; rebindToApply still names it", async () => {
+    if (!ok) return;
+    await upload(provider);
+    await upload(consumer);
+    expect((await h.api.run({ kind: 'install', packageId: 'docsapp' })).op.state).toBe('succeeded');
+    const docs = await byName('docsapp');
+    expect(ports(h.stateDir, docs.id)).toEqual({ hostIps: ['0.0.0.0'], marker: undefined });
+    await h.api.expect<NetworkHttpsDto>(200, 'PUT', '/v1/network/https', { enabled: true, httpsOnly: true });
+    const { op } = await h.api.run({ kind: 'install', packageId: 'gatewayish' });
+    expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+    const gw = await byName('gatewayish');
+    expect(ports(h.stateDir, gw.id)).toEqual({ hostIps: ['127.0.0.1'], marker: { lanAccess: 'relay' } });
+    // docsapp's file was re-rendered for the link, but its containers still publish on every interface
+    expect(readFileSync(path.join(h.stateDir, 'instances', docs.id, 'runtime', 'compose.yaml'), 'utf8')).toContain('external: true');
+    expect(ports(h.stateDir, docs.id)).toEqual({ hostIps: ['0.0.0.0'], marker: undefined });
+    expect((await h.api.expect<NetworkHttpsDto>(200, 'GET', '/v1/network/https')).rebindToApply).toEqual(['docsapp']);
+  }, 60_000);
+
+  it("reconcile gives the relay each endpoint's manifest mode and every Harbor port's instance, and refuses a cross-app POST", async () => {
+    if (!ok) return;
+    const docs = await byName('docsapp');
+    const gw = await byName('gatewayish');
+    const docsPlain = docs.endpoints[0]!.hostPort;
+    const gwPlain = gw.endpoints[0]!.hostPort;
+    const [docsSecure, gwSecure] = [lanHttpsPort(docsPlain), lanHttpsPort(gwPlain)];
+    await new Promise((r) => setTimeout(r, 1_200)); // an observer tick reconciles the relays
+    const relay = h.daemon.ctx.lanHttps!;
+    expect(relay.ports()).toEqual(expect.arrayContaining([docsSecure, gwSecure]));
+    const d = relay.policy(docsSecure)!;
+    const g = relay.policy(gwSecure)!;
+    expect(d.ep).toMatchObject({ tag: cookieTag(docs.id), cookies: 'shared' });
+    expect(g.ep).toMatchObject({ tag: cookieTag(gw.id), cookies: 'isolated' });
+    expect(Object.fromEntries([docsPlain, docsSecure, gwPlain, gwSecure].map((p) => [p, g.portTags.get(p)]))).toEqual({ [docsPlain]: cookieTag(docs.id), [docsSecure]: cookieTag(docs.id), [gwPlain]: cookieTag(gw.id), [gwSecure]: cookieTag(gw.id) });
+    // through the real listeners: docsapp's page (secure or plain address) posting to gatewayish is refused
+    expect(await post(gwSecure, `https://harbor.local:${docsSecure}`)).toBe(403);
+    expect(await post(gwSecure, `http://harbor.local:${docsPlain}`)).toBe(403);
+    expect(await post(gwSecure, `https://harbor.local:${gwSecure}`)).not.toBe(403);
+  }, 30_000);
+});
+

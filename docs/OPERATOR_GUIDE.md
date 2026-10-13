@@ -90,16 +90,16 @@ styled by Harbor.
 Harbor's relay renames and signs each app's login cookies (`HttpOnly` ones), so another app on this
 Harbor never receives them and cannot fake them, and it refuses a form or WebSocket sent from one app's
 page to another's. Cookies an app's own scripts read are left as they are. Limits: plain-http app
-addresses do not go through the relay (turn on *HTTPS only* below); logins made before 0.32.0 stay
-readable by other apps until the app sets them again (log out and in once); Tailscale addresses are not
-covered yet. The signing key is `<state dir>/cookie-firewall.key`: stop Harbor, delete it and start
+addresses do not go through the relay (turn on *HTTPS only* below); a login made before 0.32.0 is
+cleared from the browser the next time that app sets its cookie (logging out and in once does it right
+away, and also ends the old session on the app's side); Tailscale addresses are not covered yet. The signing key is `<state dir>/cookie-firewall.key`: stop Harbor, delete it and start
 Harbor again to log every browser out of every app once.
 
 **HTTPS only** (Settings → Network, under Secure addresses; `harbor network https-only on|off`). Once
 every device you use trusts the certificate, this closes the plain-http doors: `http://harbor.local/`
 answers every request with a redirect to `https://` (except the certificate download and the probe, so
 a new device can still fetch the certificate), and each app answers only on its secure address. Apps
-switch when they restart: the card and the CLI name the ones that still need it. It can only be turned
+switch when they restart: the card and the CLI name the ones that still need it, every time you open them. It can only be turned
 on from a page opened over https (or on the machine itself), so you cannot lock yourself out from a
 browser that never reached the https console; turning it off always works, and turning secure
 addresses off turns it off too (apps it moved then need a restart to get their plain address back).

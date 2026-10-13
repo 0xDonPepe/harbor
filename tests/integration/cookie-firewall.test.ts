@@ -64,7 +64,7 @@ function fakeApp(seen: Seen[], setCookies: Record<string, string[]>): Server {
   return app;
 }
 
-function call(port: number, opts: { method?: string; path?: string; jar: Jar; origin?: string; upgrade?: boolean }): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
+function call(port: number, opts: { method?: string; path?: string; jar: Jar; origin?: string; upgrade?: boolean; headers?: Record<string, string> }): Promise<{ status: number; headers: IncomingHttpHeaders; body: string }> {
   return new Promise((resolve, reject) => {
     const cookie = opts.jar.header();
     const req = httpsRequest({
@@ -78,6 +78,7 @@ function call(port: number, opts: { method?: string; path?: string; jar: Jar; or
         host: `harbor.local:${port}`,
         ...(cookie ? { cookie } : {}),
         ...(opts.origin ? { origin: opts.origin } : {}),
+        ...(opts.headers ?? {}),
         ...(opts.upgrade ? { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==' } : {}),
       },
     });
@@ -107,9 +108,11 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
   const seenA: Seen[] = [];
   const seenB: Seen[] = [];
   const seenC: Seen[] = [];
+  const seenD: Seen[] = [];
   let portA = 0;
   let portB = 0;
   let portC = 0;
+  let portD = 0; // a second, `cookies: shared` endpoint of A's own instance
   const tagA = cookieTag('aaaaaaaa-1111-4111-8111-111111111111');
   const tagB = cookieTag('bbbbbbbb-2222-4222-8222-222222222222');
   const tagC = cookieTag('cccccccc-3333-4333-8333-333333333333');
@@ -122,7 +125,8 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
     const specs: [Seen[], Record<string, string[]>][] = [
       [seenA, { '/login': ['sid=alpha-session; Path=/; HttpOnly; SameSite=Lax', 'theme=dark; Path=/'], '/logout': ['sid=; Path=/; HttpOnly; Max-Age=0'] }],
       [seenB, { '/login': ['sid=bravo-session; Path=/; HttpOnly'] }],
-      [seenC, { '/login': ['shared_sid=charlie; Path=/; HttpOnly'] }],
+      [seenC, { '/login': ['shared_sid=charlie; Path=/; HttpOnly'], '/plant': [`hb_${tagA}__sid=evil; Path=/; HttpOnly`] }],
+      [seenD, { '/login': ['sid=delta; Path=/; HttpOnly'] }],
     ];
     const appPorts: number[] = [];
     for (const [seen, sets] of specs) {
@@ -131,7 +135,7 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
       apps.push(app);
       appPorts.push((app.address() as AddressInfo).port);
     }
-    [portA, portB, portC] = [await freePort(), await freePort(), await freePort()];
+    [portA, portB, portC, portD] = [await freePort(), await freePort(), await freePort(), await freePort()];
     const ep = (tag: string, cookies: RelayEndpoint['cookies'], label: string): RelayEndpoint => ({ tag, cookies, label });
     servers.setPolicy({
       key: loadCookieKey(dir),
@@ -139,6 +143,7 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
         [portA, ep(tagA, 'isolated', 'Alpha')],
         [portB, ep(tagB, 'isolated', 'Bravo')],
         [portC, ep(tagC, 'shared', 'Charlie')],
+        [portD, ep(tagA, 'shared', 'Alpha')],
       ]),
       portTags: new Map([
         [portA, tagA],
@@ -147,11 +152,14 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
         [appPorts[1]!, tagB],
         [portC, tagC],
         [appPorts[2]!, tagC],
+        [portD, tagA],
+        [appPorts[3]!, tagA],
       ]),
     });
     await servers.ensureAppProxy(portA, appPorts[0]!, key, cert);
     await servers.ensureAppProxy(portB, appPorts[1]!, key, cert);
     await servers.ensureAppProxy(portC, appPorts[2]!, key, cert);
+    await servers.ensureAppProxy(portD, appPorts[3]!, key, cert);
   });
   afterAll(async () => {
     if (!ok) return;
@@ -236,5 +244,48 @@ describe('cookie firewall through the LAN HTTPS relay', () => {
     expect(jar.cookies.get('shared_sid')).toBe('charlie');
     await call(portC, { path: '/me', jar });
     expect(names(seenC.at(-1)!.cookie)).toEqual(['shared_sid=charlie', 'theme=dark']);
+  });
+
+  // Review fixes (decision 167)
+  it("an untagged session from before 0.32.0 is cleared the first time A sets its tagged one, so B never receives it", async () => {
+    if (!ok) return;
+    const jar = new Jar();
+    jar.cookies.set('sid', 'alpha-before-upgrade');
+    await call(portA, { path: '/login', jar });
+    expect(jar.cookies.has('sid')).toBe(false);
+    expect([...jar.cookies.keys()]).toContain(`hb_${tagA}__sid`);
+    await call(portB, { path: '/me', jar });
+    expect(seenB.at(-1)!.cookie ?? '').not.toContain('alpha');
+  });
+
+  it("a shared endpoint of A's own instance keeps its own untagged cookie of a name A's isolated endpoint also uses", async () => {
+    if (!ok) return;
+    const jar = new Jar();
+    await call(portA, { path: '/login', jar });
+    await call(portD, { path: '/login', jar });
+    await call(portD, { path: '/me', jar });
+    expect(names(seenD.at(-1)!.cookie)).toEqual(['sid=delta', 'theme=dark']);
+    // the isolated endpoint still gets only its signed one
+    await call(portA, { path: '/me', jar });
+    expect(names(seenA.at(-1)!.cookie)).toEqual(['sid=alpha-session', 'theme=dark']);
+  });
+
+  it("a shared endpoint cannot set a cookie under A's tagged name (it would log A out)", async () => {
+    if (!ok) return;
+    const jar = new Jar();
+    await call(portA, { path: '/login', jar });
+    const signed = jar.cookies.get(`hb_${tagA}__sid`);
+    const r = await call(portC, { path: '/plant', jar });
+    expect(r.headers['set-cookie'] ?? []).toEqual([]);
+    expect(jar.cookies.get(`hb_${tagA}__sid`)).toBe(signed);
+  });
+
+  it('refuses a POST with Origin null that the browser calls same-site (a redirect hop through another app)', async () => {
+    if (!ok) return;
+    const jar = new Jar();
+    const r = await call(portA, { method: 'POST', path: '/transfer-null', jar, origin: 'null', headers: { 'sec-fetch-site': 'same-site' } });
+    expect(r.status).toBe(403);
+    expect(seenA.some((s) => s.url === '/transfer-null')).toBe(false);
+    expect((await call(portA, { method: 'POST', path: '/own', jar, origin: `https://harbor.local:${portA}`, headers: { 'sec-fetch-site': 'same-origin' } })).status).toBe(200);
   });
 });

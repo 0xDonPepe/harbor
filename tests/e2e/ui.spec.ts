@@ -42,7 +42,8 @@ async function dismissRecovery(page: Page) {
 async function installFromStore(page: Page, pkgName: string) {
   await page.getByRole('link', { name: 'App Store' }).click();
   await expect(page.getByRole('heading', { name: 'App Store' })).toBeVisible();
-  await page.getByRole('button', { name: `Install ${pkgName}`, exact: true }).click();
+  // decision 170: once a copy is installed the card offers "Add another copy…" instead of Install
+  await page.getByRole('button', { name: `Install ${pkgName}`, exact: true }).or(page.getByRole('button', { name: `Add another copy of ${pkgName}`, exact: true })).click();
   // Every install goes through the install page (decision 148: one Storage
   // summary, defaults accepted) and continues to plan review.
   const wiz = page.getByRole('dialog');
@@ -374,7 +375,8 @@ test('phone width: bottom tabs navigate, tiles render in two columns, dialogs op
   await expect(page.getByRole('heading', { name: 'App Store' })).toBeVisible();
   await page.getByRole('button', { name: 'About BentoPDF' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  // BentoPDF is installed by now: its page offers Open and Close (decision 170)
+  await page.getByRole('dialog').getByRole('button', { name: /^(Close|Cancel)$/ }).click();
   expect(await page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')).toBe(true);
 });
 
@@ -410,6 +412,8 @@ test('install page: a wrong-filesystem drive offers Format, not Mount or a passp
   await page.getByRole('link', { name: 'App Store' }).click();
   await page.getByRole('button', { name: 'About BentoPDF' }).click();
   const where = page.getByRole('dialog');
+  // decision 170: BentoPDF is installed by now, so its page opens it; the install page is one step further
+  await where.getByRole('button', { name: 'Add another copy of BentoPDF', exact: true }).click();
   // This machine is the default (no media folder); Change lists it and every drive as ONE radio group
   await expect(where.locator('.choice-main strong').first()).toHaveText('This machine');
   await where.getByRole('button', { name: 'Change where BentoPDF is stored' }).click();
@@ -1295,6 +1299,110 @@ ui:
   const drawer = page.getByRole('dialog');
   await expect(drawer.getByRole('heading', { name: 'Ports' })).toBeVisible();
   await expect(drawer).toContainText(`forward UDP ${port} on your router`);
+});
+
+test('decision 170: a one-copy app shows only Open once installed, on its card and its page', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  const card = page.locator('.tile.store').filter({ hasText: 'Tunnel E2E' }); // installed by the VPN test above
+  await expect(card.getByRole('link', { name: 'Open Tunnel E2E', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Install Tunnel E2E', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Add another copy of Tunnel E2E', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'About Tunnel E2E', exact: true }).click();
+  const about = page.getByRole('dialog');
+  await expect(about).toContainText('runs as one copy per machine');
+  await expect(about.getByRole('link', { name: 'Open Tunnel E2E', exact: true })).toBeVisible();
+  await expect(about.getByRole('button', { name: 'Install Tunnel E2E now', exact: true })).toHaveCount(0);
+  await expect(about.getByRole('button', { name: 'Add another copy of Tunnel E2E', exact: true })).toHaveCount(0);
+  await about.getByRole('button', { name: 'Close', exact: true }).click();
+  // removed with its data kept: the card and the page bring that copy back (Reinstall…), never an Install
+  // the daemon would refuse
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of tunnel-e2e', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove tunnel-e2e', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove (keep data)' }).click();
+  await trayDone(page, 'Remove');
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  const removed = page.locator('.tile.store').filter({ hasText: 'Tunnel E2E' });
+  await expect(removed).toContainText('Removed · data kept');
+  await expect(removed.getByRole('button', { name: 'Reinstall Tunnel E2E', exact: true })).toBeVisible();
+  await expect(removed.getByRole('button', { name: 'Install Tunnel E2E', exact: true })).toHaveCount(0);
+  await removed.getByRole('button', { name: 'About Tunnel E2E', exact: true }).click();
+  const page2 = page.getByRole('dialog');
+  await expect(page2).toContainText('your removed copy still keeps its data');
+  await expect(page2.getByRole('button', { name: 'Install Tunnel E2E now', exact: true })).toHaveCount(0);
+  await page2.getByRole('button', { name: 'Reinstall Tunnel E2E', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Reinstall tunnel-e2e', exact: true })).toBeVisible();
+});
+
+test('decision 170: Store cards for 0, 1 and 2 copies; the second copy says so, with its own name, and Home tells them apart', async ({ page }) => {
+  await login(page);
+  const store = async () => {
+    await page.getByRole('link', { name: 'App Store' }).click();
+    await expect(page.getByRole('heading', { name: 'App Store' })).toBeVisible();
+    return page.locator('.tile.store').filter({ has: page.getByRole('heading', { name: 'FreshRSS', exact: true }) });
+  };
+  // no copy yet: Install only
+  let card = await store();
+  await expect(card.getByRole('button', { name: 'Install FreshRSS', exact: true })).toBeVisible();
+  await expect(card.getByRole('link', { name: 'Open FreshRSS', exact: true })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Add another copy of FreshRSS', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Install FreshRSS', exact: true }).click();
+  const first = page.getByRole('dialog');
+  await expect(first.getByRole('note', { name: 'Another copy' })).toHaveCount(0);
+  // a bad name typed under Advanced says why Install is greyed out (no silent dead button)
+  await first.getByText('Advanced: name, passphrase, folders, technical details', { exact: true }).click();
+  const optional = first.getByLabel('Instance name for FreshRSS', { exact: true });
+  await optional.fill('Bad_Name');
+  await expect(first.getByRole('alert').filter({ hasText: 'Use lowercase letters' })).toBeVisible();
+  await expect(first.getByRole('button', { name: 'Install FreshRSS now', exact: true })).toBeDisabled();
+  await optional.fill('');
+  await expect(first.getByRole('alert').filter({ hasText: 'Use lowercase letters' })).toHaveCount(0);
+  await first.getByRole('button', { name: 'Install FreshRSS now', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Review install');
+  await expect(page.getByRole('dialog')).not.toContainText('You already have FreshRSS');
+  await approve(page, 'Install');
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  // one copy: Open (the copy you have) plus a secondary "Add another copy…"
+  card = await store();
+  await expect(card).toContainText('Installed');
+  await expect(card.getByRole('link', { name: 'Open FreshRSS', exact: true })).toHaveAttribute('href', /^http:\/\/localhost:\d+\/$/);
+  await expect(card.getByRole('button', { name: 'Install FreshRSS', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: 'Add another copy of FreshRSS', exact: true }).click();
+  const wiz = page.getByRole('dialog');
+  const notice = wiz.getByRole('note', { name: 'Another copy' });
+  await expect(notice).toContainText('You already have FreshRSS. This installs a separate copy with its own data, address and login; the first one is not touched.');
+  const nameField = wiz.getByLabel('Name for this copy', { exact: true });
+  await expect(nameField).toHaveValue('freshrss-2');
+  // the name is required and must be free
+  const go = wiz.getByRole('button', { name: 'Install FreshRSS now', exact: true });
+  await nameField.fill('');
+  await expect(go).toBeDisabled();
+  await nameField.fill('freshrss');
+  await expect(notice.getByRole('alert')).toContainText('already the name of another app');
+  await expect(go).toBeDisabled();
+  await nameField.fill('freshrss-2');
+  await expect(go).toBeEnabled();
+  await go.click();
+  const review = page.getByRole('dialog');
+  await expect(review).toContainText('Review install');
+  await expect(review).toContainText('You already have FreshRSS. This installs a separate copy (freshrss-2)');
+  await approve(page, 'Install');
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  // two copies: the card counts them; Home names each copy under its icon
+  card = await store();
+  await expect(card).toContainText('2 installed');
+  await expect(card.getByRole('link', { name: 'Open FreshRSS', exact: true })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Add another copy of FreshRSS', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Home' }).click();
+  await expect(page.locator('.icon-tile[data-instance="freshrss"] .icon-copy')).toHaveText('freshrss');
+  await expect(page.locator('.icon-tile[data-instance="freshrss-2"] .icon-copy')).toHaveText('freshrss-2');
+  await page.getByRole('button', { name: 'Details of freshrss-2', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('heading', { name: 'FreshRSS · freshrss-2', exact: true })).toBeVisible();
 });
 
 test('decision 164: a locked machine key asks for the password in place and carries on with the install', async ({ page }) => {

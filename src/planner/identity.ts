@@ -45,3 +45,24 @@ export function proposeName(packageId: string, taken: Set<string>, requested?: s
   }
   return { name: packageId, error: 'no free default name' };
 }
+
+// Decision 170: the line an install plan (and `harbor install`) carries when a copy of the app already
+// exists, in the same words as the console's install page. `active` counts copies that are installed
+// (any state but removed), `removed` the removed ones whose data Harbor keeps; null when there is none.
+export function copyNote(appName: string, name: string, copies: { active: number; removed: number }): string | null {
+  if (copies.active === 1) return `You already have ${appName}. This installs a separate copy (${name}) with its own data, address and login; the first one is not touched.`;
+  if (copies.active > 1) return `You already have ${copies.active} copies of ${appName}. This installs another separate copy (${name}) with its own data, address and login; the others are not touched.`;
+  if (copies.removed > 0) return `A removed copy of ${appName} still keeps its data. This installs a new, separate copy (${name}); to get that data back, reinstall the removed copy from Home instead.`;
+  return null;
+}
+
+// Decision 170: what to do instead when a one-copy app (deployment.multiInstance false) already has a copy
+// here. Removed copies (data kept) still hold the one place, so the advice depends on what is there and on
+// whether the operator was installing or restoring a backup.
+export function oneCopyNextAction(copies: { installState: string }[], purpose: 'install' | 'restore'): string {
+  const removedOnly = copies.every((i) => i.installState === 'retained');
+  if (purpose === 'install') return removedOnly ? 'Reinstall the removed copy from Home (its data is kept), or uninstall it completely first.' : 'Open the copy you have; this app runs one copy per machine.';
+  return removedOnly
+    ? 'This app runs one copy per machine: reinstall the removed copy instead, or uninstall it completely (its kept data goes) and restore again.'
+    : 'This app runs one copy per machine: uninstall the copy you have completely first, then restore again.';
+}

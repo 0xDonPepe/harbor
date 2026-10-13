@@ -631,6 +631,39 @@ pre.code {
   display: grid;
   gap: 4px;
 }
+/* decision 170: Open plus "Add another copy…" sit on their own row under the app */
+.tile.store.two-actions {
+  grid-template-columns: 1fr;
+}
+.store-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+.icon-copy {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy-notice {
+  margin: 4px 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  display: grid;
+  gap: 8px;
+}
+.copy-notice p {
+  margin: 0;
+}
+.copy-notice label {
+  display: grid;
+  gap: 4px;
+  max-width: 320px;
+}
 .installed-note {
   padding-left: 4px;
 }

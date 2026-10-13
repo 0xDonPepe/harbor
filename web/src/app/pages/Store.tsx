@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CatalogItemDto, CatalogStatusDto, PackageSourceDto } from '../../../../src/contracts/api';
+import type { CatalogItemDto, CatalogStatusDto, InstanceSummary, PackageSourceDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
-import { StoreCard } from '../components';
+import { StoreCard, copiesOf } from '../components';
 import { categoryLabel, fmtAgo } from '../format';
 import { RefreshIcon } from '../icons';
 import type { Console } from '../store';
@@ -9,7 +9,7 @@ import { BackupPlaces } from './Backups';
 
 type StoreTab = 'apps' | 'places' | 'sources';
 
-export function Store({ c, onOpen, onInstall, onUpload }: { c: Console; onOpen: (item: CatalogItemDto) => void; onInstall: (item: CatalogItemDto) => void; onUpload: () => void }) {
+export function Store({ c, onOpen, onInstall, onAddCopy, onManage, onUpload }: { c: Console; onOpen: (item: CatalogItemDto) => void; onInstall: (item: CatalogItemDto) => void; onAddCopy: (item: CatalogItemDto) => void; onManage: (i: InstanceSummary) => void; onUpload: () => void }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState<string>('all');
   const [tab, setTab] = useState<StoreTab>('apps');
@@ -22,7 +22,6 @@ export function Store({ c, onOpen, onInstall, onUpload }: { c: Console; onOpen: 
   }, []);
   const cats = ['all', ...new Set(c.data.catalog.map((i) => i.presentation.category)), ...(c.data.catalog.some((i) => i.origin === 'local') ? ['mine'] : [])];
   const items = c.data.catalog.filter((i) => (cat === 'all' || (cat === 'mine' ? i.origin === 'local' : i.presentation.category === cat)) && (!q || `${i.name} ${i.description} ${i.presentation.tagline ?? ''}`.toLowerCase().includes(q.toLowerCase())));
-  const installedOf = (id: string) => c.data.instances.filter((x) => x.packageId === id && x.installState !== 'retained').length;
   const tabs: { id: StoreTab; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'places', label: 'Backup places' }, ...(sources.length ? [{ id: 'sources' as const, label: 'Your repositories' }] : [])];
   const shown = tab === 'sources' && !sources.length ? 'apps' : tab;
   return (
@@ -60,12 +59,15 @@ export function Store({ c, onOpen, onInstall, onUpload }: { c: Console; onOpen: 
             <p className="muted">Loading…</p>
           ) : (
             <ul className="grid store">
-              {items.map((i) => (
-                <li key={i.id} className="store-wrap">
-                  <StoreCard item={i} installed={installedOf(i.id)} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} disabled={c.busy} />
-                  {i.availability === 'unavailable' && <p className="error small">{i.reason}</p>}
-                </li>
-              ))}
+              {items.map((i) => {
+                const copies = copiesOf(i.id, c.data.instances);
+                return (
+                  <li key={i.id} className="store-wrap">
+                    <StoreCard item={i} copies={copies.active} removed={copies.removed} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} onAddCopy={() => onAddCopy(i)} onManage={onManage} disabled={c.busy} />
+                    {i.availability === 'unavailable' && <p className="error small">{i.reason}</p>}
+                  </li>
+                );
+              })}
               {items.length === 0 && <li className="muted">No apps match.</li>}
             </ul>
           )}

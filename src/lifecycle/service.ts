@@ -20,7 +20,7 @@ import type { LoadedPackage } from '../contracts/types.js';
 import { compareRevisions, type PackageStore } from '../packages/store.js';
 import { browserUrlFor, managementOrigin } from '../config.js';
 import { HarborError } from '../errors.js';
-import { identityFor, ownedVolumeName, proposeName, type InstanceIdentity } from '../planner/identity.js';
+import { copyNote, identityFor, oneCopyNextAction, ownedVolumeName, proposeName, type InstanceIdentity } from '../planner/identity.js';
 import { allocateEndpoints } from '../planner/ports.js';
 import { renderCompose } from '../planner/render.js';
 import { checkHostDirectory, hostPathsOverlap, normalizeHostPath } from '../storage/host-path.js';
@@ -771,7 +771,9 @@ export class ApplicationService {
   }
 
   catalog(): CatalogItemDto[] {
-    return this.ctx.packages.list();
+    // decision 170: each item carries the name its next install gets by default (the planner's own rule)
+    const taken = new Set(this.ctx.repo.listInstances().map((i) => i.name));
+    return this.ctx.packages.list().map((item) => ({ ...item, proposedName: proposeName(item.id, taken).name }));
   }
 
   private packageMeta(i: InstanceRow): { name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
@@ -1703,8 +1705,9 @@ export class ApplicationService {
       const pkg = this.ctx.packages.load(req.packageId);
       const instances = repo.listInstances();
       const taken = new Set(instances.map((i) => i.name));
-      if (!pkg.manifest.deployment.multiInstance && instances.some((i) => i.packageId === pkg.id)) {
-        throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: 'Remove the existing instance first.' });
+      const copies = instances.filter((i) => i.packageId === pkg.id);
+      if (!pkg.manifest.deployment.multiInstance && copies.length) {
+        throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: oneCopyNextAction(copies, 'install') });
       }
       const proposed = proposeName(pkg.id, taken, req.name);
       if (proposed.error) throw new HarborError(req.name && taken.has(req.name) ? 'NAME_CONFLICT' : 'INVALID_REQUEST', proposed.error);
@@ -1802,6 +1805,8 @@ export class ApplicationService {
         ],
         // decision 157: the plain facts (how it opens, what happens next) read as notes, not amber warnings
         notes: [
+          // decision 170: a second copy says so first, in the install page's words
+          ...[copyNote(pkg.manifest.metadata.name, proposed.name, { active: copies.filter((i) => i.installState !== 'retained').length, removed: copies.filter((i) => i.installState === 'retained').length })].filter((n): n is string => n !== null),
           ...(location
             ? [
                 location.defaultKey ? 'Encrypted — unlocks automatically when you sign in. Your Harbor recovery key opens it on another machine.' : 'Encrypted with its own passphrase, which also opens it on another Harbor machine.',
@@ -2278,7 +2283,8 @@ export class ApplicationService {
       throw new HarborError('NOT_FOUND', `this Harbor has no package ${pkgId}`, { nextAction: 'Add that app\'s package first (App Store → Your apps → Upload, or its git source), then restore again.' });
     }
     const instances = repo.listInstances();
-    if (!pkg.manifest.deployment.multiInstance && instances.some((i) => i.packageId === pkg.id)) throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: 'Remove the existing one first.' });
+    const copies = instances.filter((i) => i.packageId === pkg.id);
+    if (!pkg.manifest.deployment.multiInstance && copies.length) throw new HarborError('NAME_CONFLICT', `${pkg.id} does not support multiple instances`, { nextAction: oneCopyNextAction(copies, 'restore') });
     const taken = new Set(instances.map((i) => i.name));
     const slug = point.home.split('/').pop() ?? pkg.id;
     const proposed = proposeName(req.name ?? slug, taken, req.name);

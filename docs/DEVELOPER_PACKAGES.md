@@ -39,7 +39,7 @@ release:
   # minHarbor: "0.28.2"          # optional: the oldest Harbor release this revision runs on (§10)
 deployment:
   compose: compose.yaml
-  multiInstance: true            # false if only one copy may run
+  multiInstance: true            # false if only one copy may run (the Store then shows Open, never a second Install)
   services:
     web: application             # every compose service, marked application or infrastructure
 endpoints:

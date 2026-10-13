@@ -54,6 +54,7 @@ export function mockCatalog(): CatalogItemDto[] {
     claims: [],
     operatorSecrets: [],
     links: [],
+    multiInstance: true,
     ...extra,
   });
   return [
@@ -87,7 +88,9 @@ export function mockCatalog(): CatalogItemDto[] {
         hasWidget: false,
       },
     }),
+    // decision 170: a one-copy app — once installed, its Store card shows Open only
     app('vaultwarden', 'Vaultwarden', 'Password manager for the whole family', {
+      multiInstance: false,
       presentation: {
         tagline: 'Password manager for the whole family',
         category: 'security',
@@ -130,7 +133,9 @@ export function mockCatalog(): CatalogItemDto[] {
       },
     }),
     app('excalidraw', 'Excalidraw', 'Whiteboard for quick sketches and diagrams'),
+    // decision 170: a one-copy app whose only copy was removed (data kept) — its card shows Reinstall…
     app('open-webui', 'Open WebUI', 'Chat with models running on your machine', {
+      multiInstance: false,
       presentation: {
         tagline: 'Chat with models running on your machine',
         category: 'ai',
@@ -213,6 +218,19 @@ export function mockInstances(): InstanceSummary[] {
       usage: { cpuPercent: 34, memoryBytes: 900 * MiB, sampledAt: t },
       updateAvailable: { revision: '2', version: 'v1.2.0', releaseNotes: 'Faster search' },
     },
+    // decision 170: a second copy of Immich — both tiles name their copy, the Store offers a third
+    {
+      ...base,
+      id: 'inst-immich-2',
+      name: 'immich-2',
+      packageId: 'immich',
+      packageName: 'Immich',
+      category: 'media',
+      installState: 'installed',
+      runtime: 'running',
+      readiness: 'healthy',
+      endpoints: [endpoint(18087)],
+    },
     {
       ...base,
       id: 'inst-jellyfin',
@@ -268,6 +286,19 @@ export function mockInstances(): InstanceSummary[] {
       name: 'draw',
       packageId: 'excalidraw',
       packageName: 'Excalidraw',
+      installState: 'retained',
+      runtime: 'stopped',
+      readiness: 'unknown',
+      endpoints: [],
+      hasRetainedData: true,
+    },
+    {
+      ...base,
+      id: 'inst-open-webui',
+      name: 'open-webui',
+      packageId: 'open-webui',
+      packageName: 'Open WebUI',
+      category: 'ai',
       installState: 'retained',
       runtime: 'stopped',
       readiness: 'unknown',

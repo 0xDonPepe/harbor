@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CatalogItemDto, HostStorageDto, InstanceSummary, SystemMetricsDto, WidgetDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
-import { AppIcon, InstanceIcon, Pill, appLabel, openUrl } from '../components';
+import { AppIcon, InstanceIcon, Pill, appLabel, copyName, openUrl } from '../components';
 import { ArrowUpIcon, EllipsisIcon } from '../icons';
 import { fmtBytes, fmtUptime, plainStatus } from '../format';
 import { useReorder } from '../reorder';
@@ -126,7 +126,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 <span className="row">
                   <InstanceIcon inst={i} size={28} />
                   <span>
-                    <strong>{appLabel(i)}</strong> <span className="muted small">{i.revision} → {i.updateAvailable!.revision}{i.updateAvailable!.version ? ` (${i.updateAvailable!.version})` : ''}</span>
+                    <strong>{appLabel(i, data.instances)}</strong> <span className="muted small">{i.revision} → {i.updateAvailable!.revision}{i.updateAvailable!.version ? ` (${i.updateAvailable!.version})` : ''}</span>
                     {i.updateAvailable!.releaseNotes && <span className="muted small"> · {i.updateAvailable!.releaseNotes}</span>}
                   </span>
                 </span>
@@ -145,7 +145,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
             {attention.map((i) => (
               <li key={i.id} className="row between">
                 <span>
-                  <strong>{appLabel(i)}</strong> — {plainStatus(i).label}
+                  <strong>{appLabel(i, data.instances)}</strong> — {plainStatus(i).label}
                 </span>
                 <button className="btn" onClick={() => onOpenApp(i)}>
                   Details
@@ -198,7 +198,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
           <>
             <ul className="icons" aria-label="Installed apps">
               {tiles.map((i) => (
-                <AppIconTile key={i.id} inst={i} onDetails={() => onOpenApp(i)} reorder={re} />
+                <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} reorder={re} />
               ))}
               {!re.arranging && (
                 <li className="icon-tile add">
@@ -218,7 +218,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 </summary>
                 <ul className="icons">
                   {hidden.map((i) => (
-                    <AppIconTile key={i.id} inst={i} onDetails={() => onOpenApp(i)} />
+                    <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} />
                   ))}
                 </ul>
               </details>
@@ -230,7 +230,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 </summary>
                 <ul className="icons">
                   {retained.map((i) => (
-                    <AppIconTile key={i.id} inst={i} onDetails={() => onOpenApp(i)} />
+                    <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} />
                   ))}
                 </ul>
               </details>
@@ -255,12 +255,15 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
   );
 }
 
-function AppIconTile({ inst, onDetails, reorder }: { inst: InstanceSummary; onDetails: () => void; reorder?: ReturnType<typeof useReorder> }) {
+function AppIconTile({ inst, all = [], onDetails, reorder }: { inst: InstanceSummary; all?: InstanceSummary[]; onDetails: () => void; reorder?: ReturnType<typeof useReorder> }) {
   const url = openUrl(inst);
   const arranging = reorder?.arranging ?? false;
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && url && !arranging;
   const status = plainStatus(inst);
-  const label = appLabel(inst);
+  // decision 170: with several copies of one app, each tile names its copy on a line of its own
+  const copy = copyName(inst, all);
+  const label = copy ? inst.packageName : appLabel(inst);
+  const fullLabel = copy ? `${label} · ${copy}` : label;
   const usageText = inst.usage ? ` · CPU ${inst.usage.cpuPercent}% · ${fmtBytes(inst.usage.memoryBytes)}` : '';
   const tp = reorder?.tileProps(inst.id);
   const guard = (e: React.MouseEvent) => {
@@ -280,18 +283,20 @@ function AppIconTile({ inst, onDetails, reorder }: { inst: InstanceSummary; onDe
       data-instance={inst.name}
     >
       {canOpen ? (
-        <a className="icon-btn" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${inst.name}`} title={`${label} — ${status.label}${usageText}`} onClick={guard} draggable={false}>
+        <a className="icon-btn" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${inst.name}`} title={`${fullLabel} — ${status.label}${usageText}`} onClick={guard} draggable={false}>
           <InstanceIcon inst={inst} size={64} />
           <span className="icon-label">{label}</span>
+          {copy && <span className="icon-copy">{copy}</span>}
           <span className="icon-status">
             <span className={`dot tone-${status.tone}`} aria-hidden="true" />
             <span className="visually-hidden">{status.label}</span>
           </span>
         </a>
       ) : (
-        <button className="icon-btn" onClick={(e) => (arranging || reorder?.suppressClick(inst.id) ? guard(e) : onDetails())} aria-label={arranging ? `Move ${inst.name}` : `Manage ${inst.name}`} title={`${label} — ${status.label}${usageText}`}>
+        <button className="icon-btn" onClick={(e) => (arranging || reorder?.suppressClick(inst.id) ? guard(e) : onDetails())} aria-label={arranging ? `Move ${inst.name}` : `Manage ${inst.name}`} title={`${fullLabel} — ${status.label}${usageText}`}>
           <InstanceIcon inst={inst} size={64} />
           <span className="icon-label">{label}</span>
+          {copy && <span className="icon-copy">{copy}</span>}
           <span className="icon-status small">
             <span className={`dot tone-${status.tone}`} aria-hidden="true" /> {arranging ? 'drag to move' : status.label}
           </span>

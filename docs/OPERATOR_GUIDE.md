@@ -179,6 +179,17 @@ harbor tools / tools bind cockpit --url https://localhost:9090/
 harbor doctor
 ```
 
+**A second copy of an app** (decision 170). Once an app is installed its Store card and its page say
+**Open** (the copy you have; when it is not running, Open shows its page in Harbor instead). An app that
+allows copies also offers **Add another copy…**: the install page then says *You already have Immich. This
+installs a separate copy with its own data, address and login; the first one is not touched.* and asks for
+the copy's name, prefilled with the next free one (`immich-2`). Home names each copy under its icon, so the
+copies stay apart. An app that runs one copy per machine (a VPN server with a fixed port, for example) has no
+second Install at all; when its only copy was removed with its data kept, its card and its page offer
+**Reinstall…** (restoring a backup of it says the same: reinstall or fully uninstall that copy first).
+The install review repeats the line, and `harbor install` prints it too; `harbor install immich --name photos-2`
+names the copy from the terminal, and `harbor catalog` shows `one` or `many` under COPIES.
+
 Exit codes: 0 success, 1 operation failed, 2 invalid request, 3 conflict/action required,
 4 dependency unavailable, 5 authentication. `--json` for machine-readable output.
 

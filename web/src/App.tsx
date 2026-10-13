@@ -298,7 +298,13 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
   const c = useConsole(onAuthLost);
   const [noticeError, setNoticeError] = useState<string | null>(null);
   const [route, go] = useRoute();
-  const [storeItem, setStoreItem] = useState<CatalogItemDto | null>(null);
+  const [storeItem, setStoreItemRaw] = useState<CatalogItemDto | null>(null);
+  // decision 170: the app page (Open once installed) or straight to the install page for another copy
+  const [storeMode, setStoreMode] = useState<'page' | 'copy'>('page');
+  const setStoreItem = useCallback((item: CatalogItemDto | null, mode: 'page' | 'copy' = 'page') => {
+    setStoreMode(mode);
+    setStoreItemRaw(item);
+  }, []);
   const [drawer, setDrawer] = useState<InstanceSummary | null>(null);
   const [publishing, setPublishing] = useState<InstanceSummary | null>(null);
   const [palette, setPalette] = useState(false);
@@ -402,7 +408,19 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
           </p>
         )}
         {page === 'home' && <Home c={c} onOpenApp={setDrawer} onGoStore={() => go({ page: 'store' })} onPick={setStoreItem} />}
-        {page === 'store' && <Store c={c} onOpen={setStoreItem} onInstall={(item) => setStoreItem(item)} onUpload={() => setUploading(true)} />}
+        {page === 'store' && (
+          <Store
+            c={c}
+            onOpen={(item) => setStoreItem(item)}
+            onInstall={(item) => setStoreItem(item)}
+            onAddCopy={(item) => setStoreItem(item, 'copy')}
+            onManage={(i) => {
+              setStoreItem(null);
+              setDrawer(i);
+            }}
+            onUpload={() => setUploading(true)}
+          />
+        )}
         {page === 'publishing' && <Publishing c={c} onPublish={setPublishing} />}
         {page === 'platform' && <Platform c={c} />}
         {page === 'notifications' && <Notifications c={c} onOpenApp={(id) => setDrawer(c.data.instances.find((i) => i.id === id) ?? null)} />}
@@ -419,7 +437,13 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
       )}
       {storeItem && !c.pending && (
         <InstallWizard
-          item={storeItem}
+          key={`${storeItem.id}:${storeMode}`}
+          item={c.data.catalog.find((i) => i.id === storeItem.id) ?? storeItem}
+          mode={storeMode}
+          onOpenInstance={(i) => {
+            setStoreItem(null);
+            setDrawer(i);
+          }}
           instances={c.data.instances}
           busy={c.busy}
           installed={c.data.instances.filter((i) => i.packageId === storeItem.id).length}

@@ -115,6 +115,23 @@ wallpaper, surfaces are translucent (`backdrop-filter`), one accent colour, 8pt 
 - Notifications carry their own buttons (`actions[]`, derived from the kind); the first is primary.
 - A locked machine key (daemon restarted) asks for the password inside the review dialog and carries on.
 
+## 7b. Installed apps in the Store, and second copies (decision 170, v0.32.0)
+
+| Where | Not installed | Installed, copies allowed | Installed, one copy only |
+|---|---|---|---|
+| Store card / app page | **Install** | **Open** (primary) + **Add another copy…** (outline, its own row) | **Open** only |
+| Install page | as before | notice on top (*You already have X. This installs a separate copy with its own data, address and login; the first one is not touched.*) + required name, prefilled from the catalog's `proposedName` | not reachable |
+| Home tiles / drawer title | — | the package name, and the instance name on a second line (drawer: `X · name`) when the operator has not renamed it | — |
+
+- Open opens the first copy's address when it runs, else its drawer (Start, Unlock, Repair live there).
+- A removed copy (data kept): a copyable app keeps **Install** with a note and *Show the removed copy*; a
+  one-copy app offers **Reinstall…** (its drawer) on the card and on its page, never a plan the daemon would refuse.
+- A name typed on the install page (the copy notice, or Advanced on a first install) that is taken or malformed
+  says why under the field; Install stays greyed out only with that reason on screen (pure checks in
+  `web/src/app/copies.ts`, unit-tested).
+- No toggle and no extra confirmation: the install page is the confirmation, the label and button style differ
+  (never color alone), and the required name is what keeps the copies apart on Home.
+
 ## 8. Advanced access, troubleshoot, security (added 2026-09-15, v0.7.0)
 
 Advanced access hosts a real terminal (xterm.js over a WebSocket, shell of the service account), the SSH

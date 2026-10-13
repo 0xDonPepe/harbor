@@ -72,6 +72,7 @@ export interface ManifestEndpoint {
   browserContext: 'secure' | 'ordinary';
   httpsRequired?: boolean; // decision 116: unusable over plain http; needs an HTTPS main address in LAN mode
   kind?: 'web' | 'api'; // decision 141: api = no Open button (addresses only)
+  cookies?: 'isolated' | 'shared'; // decision 167: shared = the relay leaves this endpoint's own cookies untagged
 }
 
 export interface StorageClaim {

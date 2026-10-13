@@ -100,6 +100,20 @@ export function clientOf(req: { socket: { remoteAddress?: string | undefined }; 
   return { id: peer || 'unknown', local: loopback };
 }
 
+// Decision 167: the lock-out guard for HTTPS only. True when this request reached the daemon over TLS (its own
+// https console), through a proxy on this machine that says it served https (Caddy's :443, `tailscale serve`;
+// both overwrite a client's X-Forwarded-Proto), or from a program on this machine with no proxy in between.
+export function arrivedOverHttps(req: { socket: { remoteAddress?: string | undefined; encrypted?: boolean }; headers: Record<string, string | string[] | undefined> }): boolean {
+  if (req.socket.encrypted === true) return true;
+  const who = clientOf(req);
+  if (who.local) return true;
+  const peer = (req.socket.remoteAddress ?? '').replace(/^::ffff:(?=\d+\.)/, '');
+  const loopback = peer === '::1' || peer.startsWith('127.');
+  const raw = req.headers['x-forwarded-proto'];
+  const proto = (Array.isArray(raw) ? raw.join(',') : raw ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean).pop();
+  return loopback && proto === 'https';
+}
+
 export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   const { config, service, sessions, tools, devices, log, appearance, power, terminals, setup, tailscaleFacts } = deps;
   const devices_ = devices; // the mount service, for routes that also list devices
@@ -1033,8 +1047,18 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   app.get('/v1/network/https', { preHandler: requireAuth, schema: { description: 'LAN HTTPS state: whether https://harbor.local/ answers, the CA fingerprint to compare on the device, and the names the server cert covers.' } }, async () => service.networkHttps());
   app.put(
     '/v1/network/https',
-    { preHandler: requireAuth, schema: { description: 'Turn LAN HTTPS on (mints the local CA + server cert, starts the secure listeners) or off (closes them; plain HTTP stays).', body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
-    async (req) => service.setNetworkHttps((req.body as { enabled: boolean }).enabled),
+    {
+      preHandler: requireAuth,
+      schema: {
+        description:
+          'Turn LAN HTTPS on (mints the local CA + server cert, starts the secure listeners) or off (closes them; plain HTTP stays, and HTTPS only turns off too). httpsOnly (decision 167, optional; omitted = unchanged): the plain-http console redirects to https except the CA download and the probe, and apps re-bind to loopback on their next restart so only the secure relay reaches them. Turning it on is refused unless this request itself arrived over https or from this machine.',
+        body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' }, httpsOnly: { type: 'boolean' } } },
+      },
+    },
+    async (req) => {
+      const body = req.body as { enabled: boolean; httpsOnly?: boolean };
+      return service.setNetworkHttps(body.enabled, { ...(body.httpsOnly !== undefined ? { httpsOnly: body.httpsOnly } : {}), overHttps: arrivedOverHttps({ socket: req.raw.socket as { remoteAddress?: string; encrypted?: boolean }, headers: req.headers }) });
+    },
   );
   app.post(
     '/v1/network/https/ca',

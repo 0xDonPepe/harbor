@@ -25,7 +25,7 @@ import { retainedExposures, setRetainedExposures, toRetained } from './retained-
 import type { VolumeImport } from '../storage/fscrypt.js';
 import { renderCaddyConfig, type CaddyLanConsole, type CaddyLanHttps, type CaddyRoute } from '../exposure/caddy.js';
 import { LAN_PEER_RANGES, lanAppHost, lanHostnames, lanNames, localSubnets, machineAddresses } from '../system/lan.js';
-import { HTTPS_SETTING, lanHttpsHosts, readTlsState } from '../system/lan-https.js';
+import { HTTPS_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState, runtimeLanAccess } from '../system/lan-https.js';
 import { splitOneTime } from '../state/one-time.js';
 import type { ExposureRow, PrimaryExposure } from '../state/repo.js';
 import bcrypt from 'bcryptjs';
@@ -460,7 +460,9 @@ export class OperationRunner {
     }
   }
 
-  private async renderAndValidate(op: OperationRow, pkg: LoadedPackage, identity: InstanceIdentity, inst: InstanceRow, runtimeDir: string, secretValues: Record<string, string>, primary?: PrimaryExposure, provisioned?: { username: string; password: string } | null): Promise<string> {
+  // `binding`: how the ports are published. Default = what the settings want now (LAN mode, HTTPS only); a
+  // re-render with no restart (rewriteCompose) passes the binding the running containers already have.
+  private async renderAndValidate(op: OperationRow, pkg: LoadedPackage, identity: InstanceIdentity, inst: InstanceRow, runtimeDir: string, secretValues: Record<string, string>, primary?: PrimaryExposure, provisioned?: { username: string; password: string } | null, binding?: { bindHost: string; lanRelay: boolean }): Promise<string> {
     const externalStorage = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'bind').map((r) => [r.role, { hostPath: r.name, readOnly: Boolean(r.metadata?.['readOnly']) }]));
     const builtImages = Object.fromEntries(Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => [svc, b.tag]));
     // Decision 126: every active link network exists before the containers start (Restart re-applies);
@@ -468,7 +470,8 @@ export class OperationRunner {
     await this.ensureLinkNetworks(op, inst);
     const consumerLinks = this.consumerLinkInputs(inst, pkg);
     const volumeNames = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'volume' && r.role !== '__home__').map((r) => [r.role, r.name]));
-    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: this.ctx.config.lan.enabled ? '0.0.0.0' : '127.0.0.1', provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks });
+    const bind = binding ?? { bindHost: this.ctx.config.lan.enabled && !httpsOnlyOn(this.ctx) ? '0.0.0.0' : '127.0.0.1', lanRelay: httpsOnlyOn(this.ctx) };
+    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: bind.bindHost, lanRelay: bind.lanRelay, provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks });
     const file = writeRuntimeCompose(runtimeDir, rendered.yaml);
     try {
       await this.ctx.compose.config({ projectDir: runtimeDir, projectName: identity.project, file }, 60_000);
@@ -540,7 +543,7 @@ export class OperationRunner {
   // Full Caddy reconcile from state: every public exposure becomes one route (+ the LAN console server in LAN mode).
   private async reconcileCaddy(op: OperationRow, sink: string[]): Promise<void> {
     const routes = caddyRoutesFromState(this.ctx, sink);
-    await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config) }));
+    await this.ctx.caddy.load(renderCaddyConfig(routes, { lan: caddyLanConsole(this.ctx.config, httpsOnlyOn(this.ctx)) }));
     this.event(op, 'applying', `reconciled ${routes.length} public route(s) in Caddy`);
   }
 
@@ -858,7 +861,9 @@ export class OperationRunner {
   }
 
   // Re-render another app's Compose file after its links changed (no restart: the live attach/detach
-  // already applied it; the file keeps every later `up` consistent).
+  // already applied it; the file keeps every later `up` consistent). Decision 167: the file keeps the port
+  // binding its containers run with (read back from the file it replaces), so the relay and rebindToApply keep
+  // describing the running app, not what its next restart will do.
   private async rewriteCompose(op: OperationRow, other: InstanceRow, sink: string[], bestEffort: boolean): Promise<void> {
     try {
       const fresh = this.ctx.repo.instance(other.id);
@@ -867,7 +872,9 @@ export class OperationRunner {
       if (!existsSync(path.join(dirs.release, 'manifest.yaml'))) return;
       const pkg = loadReleaseSnapshot(dirs.release, fresh.packageId);
       const identity = identityFor(this.ctx.installationId, fresh.id);
-      await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink));
+      const access = runtimeLanAccess(this.ctx.config.stateDir, fresh.id);
+      const binding = access === null ? undefined : { bindHost: access === 'lan' ? '0.0.0.0' : '127.0.0.1', lanRelay: access === 'relay' };
+      await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink), undefined, undefined, binding);
       this.event(op, 'preparing', `updated the private Compose file of ${fresh.name} for its links`);
     } catch (e) {
       if (!bestEffort) throw e;
@@ -2174,13 +2181,13 @@ export function caddyRoutesFromState(ctx: Ctx, sink: string[]): CaddyRoute[] {
 // A cheap fingerprint of the desired Caddy state (no hashing): the observer re-applies only when it changes.
 export function caddySignature(ctx: Ctx): string {
   const parts = ctx.repo.exposures().filter((x) => x.via === 'public' && x.state !== 'removing').map((e) => `${e.id}:${e.hostname}:${e.port}:${e.protection}`);
-  const lan = caddyLanConsole(ctx.config);
+  const lan = caddyLanConsole(ctx.config, httpsOnlyOn(ctx));
   const lanHttps = caddyLanHttps(ctx);
   return JSON.stringify({ parts: parts.sort(), lan, lanHttps });
 }
-export function caddyLanConsole(config: Ctx['config']): CaddyLanConsole | null {
+export function caddyLanConsole(config: Ctx['config'], httpsOnly = false): CaddyLanConsole | null {
   if (!config.lan.enabled) return null;
-  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port, peers: [...LAN_PEER_RANGES, ...localSubnets()] };
+  return { hosts: [...lanHostnames(), '*.local', ...machineAddresses().filter((a) => !a.includes(':'))], consolePort: config.listen.port, peers: [...LAN_PEER_RANGES, ...localSubnets()], ...(httpsOnly ? { httpsOnly: true } : {}) };
 }
 // LAN HTTPS served through Caddy (decision 109 + Caddy-owns-443 fix): when LAN HTTPS is on and the Harbor
 // cert exists, Caddy terminates TLS for the LAN hostnames (harbor.local, <hostname>.local, the machine's

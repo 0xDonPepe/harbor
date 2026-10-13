@@ -215,7 +215,8 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     // LAN HTTPS (decision 109): daemon-terminated TLS on 443 + one proxy per
     // app endpoint. The routing function is stashed on the ctx so the HTTPS
     // console listener serves the same Fastify routes (same guards, auth).
-    const { LanHttpsServers, reconcileLanHttps, refuseNonLanPeers } = await import('./system/lan-https.js');
+    const { LanHttpsServers, reconcileLanHttps, refuseNonLanPeers, httpsOnlyOn, httpsRedirectLocation } = await import('./system/lan-https.js');
+    const { lanHostAllowed } = await import('./system/lan.js');
     ctx.lanHttps = new LanHttpsServers();
     // Every login: kernel-unlock machine-wrapped homes (data-folder apps and
     // drive apps sealed with the Harbor password) and try the login password
@@ -251,9 +252,26 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     // LAN mode: a second listener on every interface hands requests (and WebSocket upgrades) to the same routes.
     let lanServer: HttpServer | null = null;
     if (config.lan.enabled) {
-      lanServer = createHttpServer((req, res) => app.routing(req, res));
+      // Decision 167: with HTTPS only on, the plain-http console only hands out the CA and the probe; everything
+      // else is a temporary redirect to the same host and path over https (a WebSocket is refused: no redirects).
+      lanServer = createHttpServer((req, res) => {
+        // only for a Host the console would answer (anything else falls through to the guard's refusal)
+        const location = httpsOnlyOn(ctx) && lanHostAllowed(req.headers.host ?? '', config.lan.port, config.listen.port) ? httpsRedirectLocation(req) : null;
+        if (location) {
+          res.writeHead(307, { location, 'cache-control': 'no-store', 'content-type': 'text/plain; charset=utf-8' });
+          res.end(`Harbor answers over https here: ${location}\n`);
+          return;
+        }
+        app.routing(req, res);
+      });
       refuseNonLanPeers(lanServer);
-      lanServer.on('upgrade', (req, socket, head) => app.server.emit('upgrade', req, socket, head));
+      lanServer.on('upgrade', (req, socket, head) => {
+        if (httpsOnlyOn(ctx)) {
+          socket.end('HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\nconnection: close\r\n\r\n');
+          return;
+        }
+        app.server.emit('upgrade', req, socket, head);
+      });
       const failure = await new Promise<void>((resolve, reject) => {
         lanServer!.once('error', reject);
         lanServer!.listen({ host: '::', port: config.lan.port }, () => resolve());

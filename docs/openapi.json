@@ -3097,7 +3097,7 @@
         }
       },
       "put": {
-        "description": "Turn LAN HTTPS on (mints the local CA + server cert, starts the secure listeners) or off (closes them; plain HTTP stays).",
+        "description": "Turn LAN HTTPS on (mints the local CA + server cert, starts the secure listeners) or off (closes them; plain HTTP stays, and HTTPS only turns off too). httpsOnly (decision 167, optional; omitted = unchanged): the plain-http console redirects to https except the CA download and the probe, and apps re-bind to loopback on their next restart so only the secure relay reaches them. Turning it on is refused unless this request itself arrived over https or from this machine.",
         "requestBody": {
           "required": true,
           "content": {
@@ -3110,6 +3110,9 @@
                 ],
                 "properties": {
                   "enabled": {
+                    "type": "boolean"
+                  },
+                  "httpsOnly": {
                     "type": "boolean"
                   }
                 }

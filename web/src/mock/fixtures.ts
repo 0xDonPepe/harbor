@@ -316,7 +316,7 @@ export function mockSystem(): SystemDto {
     deviceName: 'homelab',
     hostname: 'harbor',
     lan: { enabled: false, url: null },
-    network: { https: { enabled: false, url: null, fingerprint: null, expiresAt: null, hosts: [] } },
+    network: { https: { enabled: false, httpsOnly: false, url: null, fingerprint: null, expiresAt: null, hosts: [] } },
     update: { current: '0.9.0', latest: null, available: false, checkedAt: t, error: null, applying: null },
     docker: { available: true, observedAt: t, version: '29.8.1', error: null },
     busyOperationId: null,

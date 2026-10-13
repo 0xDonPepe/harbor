@@ -54,6 +54,13 @@ endpoints:
                                  # (secure LAN, Tailscale or a domain) and the store says so before install
     kind: web                    # web (default) | api: machine-facing (an MCP gateway, a document server):
                                  # addresses to copy, no Open button (decision 141). Put it on ui.primaryEndpoint.
+    # cookies: shared            # optional (Harbor 0.32.0, decision 167): writing the key at all needs
+                                 # release.minHarbor: "0.32.0" (older Harbors refuse unknown keys).
+                                 # isolated (default) = over the secure LAN address Harbor's relay renames and
+                                 # signs this endpoint's HttpOnly cookies, so other apps on the same machine never
+                                 # receive them. shared = its own cookies pass unchanged (it still never receives
+                                 # another app's isolated cookies, and may not set a name shaped like one). Only for an app that must hand its cookie to
+                                 # something else on harbor.local; most apps never need it.
 ports:                           # optional (Harbor 0.29.0, decision 163; set release.minHarbor: "0.29.0"):
   wireguard:                     # a fixed host port published on EVERY network of the machine, no proxy, no URL
     service: app                 # e.g. a VPN server's tunnel port. Needs multiInstance: false. The plan refuses

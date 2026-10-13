@@ -11,6 +11,9 @@
 // The console keeps its plain-HTTP listener on :80 too: that is where the
 // first-visit banner lives (browsers show their own scary page for HTTPS
 // first, which Harbor cannot style).
+//
+// Decision 167: the app relays are also the cookie firewall (cookie-firewall.ts), and with HTTPS only on, the
+// :80 console redirects to https and apps re-render on 127.0.0.1 (the relay is then their only way in).
 import { execFile } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
 import { request as httpRequest, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
@@ -21,7 +24,9 @@ import { parse as parseYaml } from 'yaml';
 import path from 'node:path';
 import { hostname } from 'node:os';
 import { HarborError } from '../errors.js';
+import { HTTP_KEEP_PATHS } from '../exposure/caddy.js';
 import { isLanPeer, isPrivateIPv4, machineAddresses } from './lan.js';
+import { COOKIE_KEY_FILE, cookieTag, filterCookieHeader, isCrossAppRequest, loadCookieKey, rewriteSetCookies, sharedSetCookies, type CookieMode } from './cookie-firewall.js';
 import type { Ctx } from '../lifecycle/context.js';
 
 // Console HTTPS port + deterministic per-app secure ports (no allocation, no
@@ -32,6 +37,26 @@ import type { Ctx } from '../lifecycle/context.js';
 export const LAN_HTTPS_PORT = 443;
 export const LAN_HTTPS_PORT_OFFSET = 20000;
 export const HTTPS_SETTING = 'network.httpsEnabled';
+// Decision 167: HTTPS only — the plain-http console redirects to https and app ports stay on loopback, so the
+// relay (and its cookie firewall) is the only way onto the network. Only meaningful while LAN HTTPS is on.
+export const HTTPS_ONLY_SETTING = 'network.httpsOnly';
+
+export function httpsOnlyOn(ctx: Pick<Ctx, 'config' | 'repo'>): boolean {
+  return ctx.config.lan.enabled && (ctx.repo.setting<boolean>(HTTPS_SETTING) ?? false) && (ctx.repo.setting<boolean>(HTTPS_ONLY_SETTING) ?? false);
+}
+
+// The two plain-http requests HTTPS only keeps answering: a new device downloads the CA, and the console's probe.
+export const HTTP_KEEPS = HTTP_KEEP_PATHS;
+
+// Where HTTPS only sends a plain-http console request (null = serve it as usual). Same host, same path.
+export function httpsRedirectLocation(req: { method?: string | undefined; url?: string | undefined; headers: { host?: string | undefined } }, httpsPort = consoleHttpsPort()): string | null {
+  const url = req.url ?? '/';
+  if (req.method === 'GET' && HTTP_KEEPS.includes(url.split('?')[0]!)) return null;
+  const host = (req.headers.host ?? '').trim();
+  const m = /^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::\d+)?$/.exec(host);
+  if (!m) return null; // no usable Host: the normal guards answer
+  return `https://${m[1]}${httpsPort === 443 ? '' : `:${httpsPort}`}${url.startsWith('/') ? url : '/'}`;
+}
 
 export function consoleHttpsPort(): number {
   const raw = Number(process.env['HARBOR_LAN_HTTPS_PORT'] ?? LAN_HTTPS_PORT);
@@ -287,15 +312,72 @@ export function forwardHeaders(req: Pick<IncomingMessage, 'headers' | 'socket'>,
   return { ...headers, host: `127.0.0.1:${targetPort}`, 'x-forwarded-proto': 'https', 'x-forwarded-host': req.headers.host ?? '', ...(peer ? { 'x-forwarded-for': peer } : {}) };
 }
 
+// Decision 167: what the relay knows about one secure port (the instance's cookie tag and mode) and about every
+// Harbor endpoint port on the machine (plain and secure twin -> tag), for the cross-app request guard.
+export interface RelayEndpoint {
+  tag: string;
+  cookies: CookieMode;
+  label: string; // for the one-line oversize warning (never a cookie value)
+}
+export interface RelayPolicy {
+  key: Buffer;
+  bySecurePort: ReadonlyMap<number, RelayEndpoint>;
+  portTags: ReadonlyMap<number, string>;
+}
+type PortPolicy = { key: Buffer; ep: RelayEndpoint; portTags: ReadonlyMap<number, string> } | null;
+interface Relay {
+  policy(securePort: number): PortPolicy;
+  isolatedNames(tag: string): ReadonlySet<string>;
+  learned(ep: RelayEndpoint, r: ReturnType<typeof rewriteSetCookies>): void;
+}
+
+const FORBIDDEN_BODY = 'Refused: this request came from another app on this Harbor.\n';
+
+// `untagged`: the untagged cookie names the request carried, so the response can clear an older untagged copy of a
+// name the app now holds signed. A `shared` endpoint gets no shadow check: the names its instance's isolated
+// endpoints set are not its own (they share the jar's untagged names on purpose).
+function filteredHeaders(req: IncomingMessage, targetPort: number, pol: PortPolicy, relay: Relay): { headers: Record<string, string | string[] | undefined>; untagged: ReadonlySet<string> } {
+  const headers = forwardHeaders(req, targetPort);
+  if (!pol) return { headers, untagged: new Set() };
+  const isolated = pol.ep.cookies === 'isolated';
+  const f = filterCookieHeader(req.headers.cookie, { tag: isolated ? pol.ep.tag : null, key: pol.key, ...(isolated ? { isolatedNames: relay.isolatedNames(pol.ep.tag) } : {}) });
+  if (f.cookie) headers['cookie'] = f.cookie;
+  else delete headers['cookie'];
+  return { headers, untagged: new Set(f.untagged) };
+}
+
+function rewrittenSetCookies(value: string | string[] | undefined, pol: PortPolicy, relay: Relay, untagged: ReadonlySet<string>): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!pol) return Array.isArray(value) ? value : [value];
+  // a shared endpoint's cookies pass untagged, but never one named like another app's signed cookie
+  if (pol.ep.cookies !== 'isolated') return sharedSetCookies(value).headers;
+  const r = rewriteSetCookies(value, { tag: pol.ep.tag, key: pol.key, untaggedInRequest: untagged });
+  relay.learned(pol.ep, r);
+  return r.headers;
+}
+
+const secFetchSite = (req: IncomingMessage) => (Array.isArray(req.headers['sec-fetch-site']) ? req.headers['sec-fetch-site'][0] : req.headers['sec-fetch-site']);
+
 // Minimal reverse proxy to one loopback app port (headers + streaming +
 // websocket upgrades). Apps stay plain HTTP on 127.0.0.1; only this listener
-// speaks TLS, so Docker binds never move.
-function proxyHandler(targetPort: number) {
+// speaks TLS, so Docker binds never move. Decision 167: cookies are filtered both ways and a state-changing
+// request from another Harbor app's page is refused.
+function proxyHandler(targetPort: number, securePort: number, relay: Relay) {
   return (req: IncomingMessage, res: ServerResponse) => {
-    const headers: Record<string, string | string[] | undefined> = forwardHeaders(req, targetPort);
+    const pol = relay.policy(securePort);
+    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host, secFetchSite: secFetchSite(req) }, pol.ep.tag, pol.portTags)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(FORBIDDEN_BODY);
+      req.resume();
+      return;
+    }
+    const { headers, untagged } = filteredHeaders(req, targetPort, pol, relay);
     delete headers['connection'];
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]> }, (down) => {
-      res.writeHead(down.statusCode ?? 502, down.headers);
+      const out = { ...down.headers };
+      const cookies = rewrittenSetCookies(down.headers['set-cookie'], pol, relay, untagged);
+      if (cookies) out['set-cookie'] = cookies;
+      res.writeHead(down.statusCode ?? 502, out);
       down.pipe(res);
     });
     up.on('error', () => {
@@ -310,30 +392,41 @@ function proxyHandler(targetPort: number) {
 // Sec-WebSocket-Accept (a hand-written 101 broke Open WebUI over https). Bytes
 // that arrived with either handshake (`head`) are forwarded, and a refusal
 // (403, 400, …) is relayed instead of leaving the browser hanging.
-function rawHead(statusLine: string, rawHeaders: string[]): string {
+function rawHead(statusLine: string, rawHeaders: string[], cookies?: (v: string[]) => string[] | undefined): string {
   let out = statusLine + '\r\n';
-  for (let i = 0; i + 1 < rawHeaders.length; i += 2) out += `${rawHeaders[i]}: ${rawHeaders[i + 1]}\r\n`;
+  const setCookies: string[] = [];
+  for (let i = 0; i + 1 < rawHeaders.length; i += 2) {
+    if (cookies && rawHeaders[i]!.toLowerCase() === 'set-cookie') setCookies.push(rawHeaders[i + 1]!);
+    else out += `${rawHeaders[i]}: ${rawHeaders[i + 1]}\r\n`;
+  }
+  for (const c of (cookies && setCookies.length ? cookies(setCookies) : undefined) ?? setCookies) out += `Set-Cookie: ${c}\r\n`;
   return out + '\r\n';
 }
 
-function proxyUpgrade(server: HttpsServer, targetPort: number): void {
+function proxyUpgrade(server: HttpsServer, targetPort: number, securePort: number, relay: Relay): void {
   server.on('upgrade', (req: IncomingMessage, socket, head: Buffer) => {
     const sock = socket as Socket;
     sock.on('error', () => sock.destroy());
-    const headers = forwardHeaders(req, targetPort);
+    const pol = relay.policy(securePort);
+    if (pol && isCrossAppRequest({ method: req.method, origin: req.headers.origin, host: req.headers.host, upgrade: true, secFetchSite: secFetchSite(req) }, pol.ep.tag, pol.portTags)) {
+      sock.end(`HTTP/1.1 403 Forbidden\r\ncontent-type: text/plain; charset=utf-8\r\ncontent-length: ${Buffer.byteLength(FORBIDDEN_BODY)}\r\nconnection: close\r\n\r\n${FORBIDDEN_BODY}`);
+      return;
+    }
+    const { headers, untagged } = filteredHeaders(req, targetPort, pol, relay);
+    const cookies = (v: string[]) => rewrittenSetCookies(v, pol, relay, untagged);
     const up = httpRequest({ host: '127.0.0.1', port: targetPort, method: req.method, path: req.url, headers: headers as Record<string, string | string[]>, agent: false });
     up.on('upgrade', (down, downSocket, downHead) => {
       const d = downSocket as Socket;
       d.on('error', () => sock.destroy());
       sock.on('close', () => d.destroy());
       d.on('close', () => sock.destroy());
-      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 101} ${down.statusMessage ?? 'Switching Protocols'}`, down.rawHeaders));
+      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 101} ${down.statusMessage ?? 'Switching Protocols'}`, down.rawHeaders, cookies));
       if (downHead.length) sock.write(downHead);
       if (head.length) d.write(head);
       d.pipe(sock).pipe(d);
     });
     up.on('response', (down) => {
-      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 502} ${down.statusMessage ?? ''}`, down.rawHeaders));
+      sock.write(rawHead(`HTTP/1.1 ${down.statusCode ?? 502} ${down.statusMessage ?? ''}`, down.rawHeaders, cookies));
       down.pipe(sock);
     });
     up.on('error', () => sock.destroy());
@@ -358,8 +451,35 @@ function track(server: HttpsServer): HttpsServer {
   return server;
 }
 
-export class LanHttpsServers {
+export class LanHttpsServers implements Relay {
   private servers = new Map<number, HttpsServer>();
+  private relayPolicy: RelayPolicy | null = null;
+  private names = new Map<string, Set<string>>(); // tag -> names the app set HttpOnly since the daemon started
+  private warnedOversize = new Set<string>();
+  warn: (message: string) => void = () => undefined;
+  // Decision 167: set on every reconcile, read per request (a proxy outlives one policy). A port without a policy
+  // entry is relayed as before (only tests do that: reconcile always sets the policy first).
+  setPolicy(policy: RelayPolicy | null): void {
+    this.relayPolicy = policy;
+  }
+  policy(securePort: number): PortPolicy {
+    const p = this.relayPolicy;
+    const ep = p?.bySecurePort.get(securePort);
+    return p && ep ? { key: p.key, ep, portTags: p.portTags } : null;
+  }
+  isolatedNames(tag: string): ReadonlySet<string> {
+    return this.names.get(tag) ?? new Set();
+  }
+  learned(ep: RelayEndpoint, r: ReturnType<typeof rewriteSetCookies>): void {
+    let set = this.names.get(ep.tag);
+    if (!set) this.names.set(ep.tag, (set = new Set()));
+    for (const n of r.plainNames) set.delete(n);
+    for (const n of r.isolatedNames) if (set.size < 64) set.add(n);
+    if (r.oversize.length && !this.warnedOversize.has(ep.tag)) {
+      this.warnedOversize.add(ep.tag);
+      this.warn(`${ep.label} set a cookie too large to isolate (${r.oversize.join(', ')}); it is passed unchanged, so other apps on this Harbor can receive it`);
+    }
+  }
   ports(): number[] {
     return [...this.servers.keys()].sort((a, b) => a - b);
   }
@@ -376,8 +496,8 @@ export class LanHttpsServers {
   }
   async ensureAppProxy(securePort: number, targetPort: number, key: Buffer, cert: Buffer): Promise<void> {
     if (this.servers.has(securePort)) return;
-    const server = track(createHttpsServer({ key, cert }, proxyHandler(targetPort)));
-    proxyUpgrade(server, targetPort);
+    const server = track(createHttpsServer({ key, cert }, proxyHandler(targetPort, securePort, this)));
+    proxyUpgrade(server, targetPort, securePort, this);
     await listen(server, securePort);
     this.servers.set(securePort, server);
   }
@@ -398,26 +518,97 @@ export class LanHttpsServers {
 
 // Decision 165: only an endpoint Docker publishes on every interface gets a LAN HTTPS twin. An app rendered
 // while LAN mode was off (decision 71) stays on 127.0.0.1, and the relay must not open it to the network.
-const boundCache = new Map<string, { mtimeMs: number; ports: Set<number> }>();
-export function lanBoundPorts(stateDir: string, instanceId: string): Set<number> {
+// Decision 167: an app rendered while HTTPS only was on is on 127.0.0.1 too, but its runtime file says
+// `x-harbor.lanAccess: relay` — the relay is its way onto the network, so its ports are served as well.
+export type RuntimeLanAccess = 'lan' | 'relay' | 'loopback';
+const boundCache = new Map<string, { mtimeMs: number; ports: Set<number>; access: RuntimeLanAccess }>();
+function runtimeBinding(stateDir: string, instanceId: string): { ports: Set<number>; access: RuntimeLanAccess } | null {
   const file = path.join(stateDir, 'instances', instanceId, 'runtime', 'compose.yaml');
   let mtimeMs: number;
   try {
     mtimeMs = statSync(file).mtimeMs;
   } catch {
-    return new Set();
+    return null;
   }
   const hit = boundCache.get(file);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.ports;
+  if (hit && hit.mtimeMs === mtimeMs) return hit;
   const ports = new Set<number>();
+  let access: RuntimeLanAccess = 'loopback';
   try {
-    const doc = parseYaml(readFileSync(file, 'utf8')) as { services?: Record<string, { ports?: { published?: string | number; host_ip?: string; protocol?: string }[] }> };
-    for (const svc of Object.values(doc.services ?? {})) for (const p of svc.ports ?? []) if (p.host_ip === '0.0.0.0' && (p.protocol ?? 'tcp') === 'tcp') ports.add(Number(p.published));
+    const doc = parseYaml(readFileSync(file, 'utf8')) as { 'x-harbor'?: { lanAccess?: string }; services?: Record<string, { ports?: { published?: string | number; host_ip?: string; protocol?: string }[] }> };
+    const relay = doc['x-harbor']?.lanAccess === 'relay';
+    for (const svc of Object.values(doc.services ?? {}))
+      for (const p of svc.ports ?? []) {
+        if ((p.protocol ?? 'tcp') !== 'tcp') continue;
+        if (p.host_ip === '0.0.0.0') {
+          ports.add(Number(p.published));
+          access = 'lan';
+        } else if (relay && p.host_ip === '127.0.0.1') ports.add(Number(p.published));
+      }
+    if (relay && access === 'loopback') access = 'relay';
   } catch {
     /* unreadable: nothing is LAN-bound */
   }
-  boundCache.set(file, { mtimeMs, ports });
-  return ports;
+  const entry = { mtimeMs, ports, access };
+  boundCache.set(file, entry);
+  return entry;
+}
+export function lanBoundPorts(stateDir: string, instanceId: string): Set<number> {
+  return runtimeBinding(stateDir, instanceId)?.ports ?? new Set();
+}
+// How a rendered app reaches the network: on every interface, through the relay only, or not at all (null = not rendered).
+export function runtimeLanAccess(stateDir: string, instanceId: string): RuntimeLanAccess | null {
+  return runtimeBinding(stateDir, instanceId)?.access ?? null;
+}
+
+// Decision 167: endpoints.<id>.cookies from the instance's release snapshot (default isolated), cached by mtime.
+const cookieModeCache = new Map<string, { mtimeMs: number; modes: Record<string, CookieMode> }>();
+export function endpointCookieModes(stateDir: string, instanceId: string): Record<string, CookieMode> {
+  const file = path.join(stateDir, 'instances', instanceId, 'release', 'manifest.yaml');
+  let mtimeMs: number;
+  try {
+    mtimeMs = statSync(file).mtimeMs;
+  } catch {
+    return {};
+  }
+  const hit = cookieModeCache.get(file);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.modes;
+  const modes: Record<string, CookieMode> = {};
+  try {
+    const doc = parseYaml(readFileSync(file, 'utf8')) as { endpoints?: Record<string, { cookies?: unknown } | null> };
+    for (const [id, e] of Object.entries(doc.endpoints ?? {})) modes[id] = e?.cookies === 'shared' ? 'shared' : 'isolated';
+  } catch {
+    /* unreadable: every endpoint stays isolated */
+  }
+  cookieModeCache.set(file, { mtimeMs, modes });
+  return modes;
+}
+
+function securePortOrNull(hostPort: number): number | null {
+  try {
+    return lanHttpsPort(hostPort);
+  } catch {
+    return null;
+  }
+}
+
+// Decision 167: the cookie tag and mode of every secure port, and the tag of every Harbor endpoint port.
+export function relayEndpoints(ctx: Pick<Ctx, 'config' | 'repo'>): { bySecurePort: Map<number, RelayEndpoint>; portTags: Map<number, string> } {
+  const bySecurePort = new Map<number, RelayEndpoint>();
+  const portTags = new Map<number, string>();
+  for (const i of ctx.repo.listInstances()) {
+    if (i.purgedAt) continue;
+    const tag = cookieTag(i.id);
+    const modes = endpointCookieModes(ctx.config.stateDir, i.id);
+    for (const e of i.endpoints) {
+      portTags.set(e.hostPort, tag);
+      const sp = securePortOrNull(e.hostPort);
+      if (sp === null) continue;
+      portTags.set(sp, tag);
+      bySecurePort.set(sp, { tag, cookies: modes[e.id] ?? 'isolated', label: i.displayName ?? i.name });
+    }
+  }
+  return { bySecurePort, portTags };
 }
 
 // Desired HTTPS surface from state: console 443 + one proxy per LAN-bound endpoint of
@@ -433,7 +624,20 @@ export function lanHttpsSignature(ctx: Ctx): string {
     for (const e of i.endpoints) if (bound.has(e.hostPort)) ports.push(lanHttpsPort(e.hostPort));
   }
   const tls = readTlsState(ctx.config.stateDir);
-  return JSON.stringify({ on: true, ports: ports.sort((a, b) => a - b), fp: tls?.fingerprint ?? null });
+  // decision 167: a new instance or a changed `cookies:` mode changes the relay's policy, not only its ports
+  const relay = [...relayEndpoints(ctx).bySecurePort].map(([p, e]) => `${p}:${e.tag}:${e.cookies}`).sort();
+  return JSON.stringify({ on: true, ports: ports.sort((a, b) => a - b), fp: tls?.fingerprint ?? null, relay, key: cookieKeyState(ctx.config.stateDir) });
+}
+
+// Part of the signature: a reconcile that closed the app relays over an unusable key is retried once the operator
+// fixes or deletes the file (the key file's size and mtime change), not only after a restart.
+function cookieKeyState(stateDir: string): string {
+  try {
+    const st = statSync(path.join(stateDir, COOKIE_KEY_FILE));
+    return `${st.size}:${st.mtimeMs}`;
+  } catch {
+    return 'none';
+  }
 }
 
 export async function reconcileLanHttps(ctx: Ctx): Promise<void> {
@@ -469,6 +673,18 @@ export async function reconcileLanHttps(ctx: Ctx): Promise<void> {
     }
   }
   const wanted = new Set<number>(caddyOwns443 ? [] : [consoleHttpsPort()]);
+  // Decision 167: no app relay without the cookie firewall's key (fail closed; the console keeps working).
+  let cookieKey: Buffer;
+  try {
+    cookieKey = loadCookieKey(ctx.config.stateDir);
+  } catch (e) {
+    ctx.log.warn(`LAN HTTPS app addresses are closed: the cookie firewall key is unusable (${(e as Error).message})`);
+    servers.setPolicy(null);
+    servers.dropExcept(wanted);
+    return;
+  }
+  servers.warn = (m) => ctx.log.warn(m);
+  servers.setPolicy({ key: cookieKey, ...relayEndpoints(ctx) });
   for (const i of ctx.repo.listInstances()) {
     if (i.purgedAt) continue;
     const bound = lanBoundPorts(ctx.config.stateDir, i.id);

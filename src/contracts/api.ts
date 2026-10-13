@@ -141,6 +141,9 @@ export interface StorageUsageDto {
 // is served openly; the private key never leaves <stateDir>/tls (0600).
 export interface NetworkHttpsDto {
   enabled: boolean;
+  // Decision 167: HTTPS only — the plain-http console redirects to https (except the CA download and the probe)
+  // and apps are rendered on loopback, reachable from the network only through the secure relay.
+  httpsOnly: boolean;
   url: string | null; // https://harbor.local/ when on (console)
   fingerprint: string | null; // SHA-256 of the CA cert, for the "compare on the device" step
   expiresAt: string | null; // server cert notAfter
@@ -152,6 +155,9 @@ export interface NetworkHttpsDto {
   // (only on GET/PUT /v1/network/https; the system DTO's copy omits them)
   breaksWhenOff?: string[];
   restartToApply?: string[];
+  // Decision 167: running apps whose ports follow the HTTPS-only switch only after a restart (still open on
+  // plain http while it is on; secure address only while it is off). Same GET/PUT-only rule as above.
+  rebindToApply?: string[];
 }
 
 // Main-address choices available right now (decision 116): only what is set up appears.
@@ -378,7 +384,7 @@ export interface SystemDto {
   // https://harbor.local/ (plus <hostname>.local) with a Harbor-minted local
   // CA the operator trusts once per device. Apps get one secure address each.
   network: {
-    https: { enabled: boolean; url: string | null; fingerprint: string | null; expiresAt: string | null; hosts: string[] };
+    https: { enabled: boolean; httpsOnly: boolean; url: string | null; fingerprint: string | null; expiresAt: string | null; hosts: string[] }; // httpsOnly: decision 167
   };
   update: SelfUpdateStatusDto;
   docker: { available: boolean; observedAt: string | null; version: string | null; error: string | null };

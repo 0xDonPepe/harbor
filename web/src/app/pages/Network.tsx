@@ -36,6 +36,24 @@ function trustLabel(t: Trust): { tone: 'ok' | 'warn' | 'muted' | 'busy'; text: s
   }
 }
 
+// The page itself is https, or opened on this machine (the API allows both; see decision 167).
+function pageIsSecure(): boolean {
+  if (typeof location === 'undefined') return false;
+  return location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+}
+
+// Decision 167: running apps whose network binding follows the HTTPS-only setting only after a restart. Read from
+// the server's answer every time the card loads, not only right after a switch.
+function rebindNote(st: NetworkHttpsDto | null): string | null {
+  const names = st?.rebindToApply ?? [];
+  if (!st || !names.length) return null;
+  const list = names.join(', ');
+  const one = names.length === 1;
+  if (st.httpsOnly) return `Restart ${list} to finish the switch (open the app, then Restart). Until then ${one ? 'it still answers' : 'they still answer'} on plain http on your network.`;
+  if (st.enabled) return `${list} ${one ? 'opens' : 'open'} only at ${one ? 'its' : 'their'} https address until restarted.`;
+  return `${list} ${one ? 'is' : 'are'} off your network until restarted.`;
+}
+
 export function Network({ c }: { c: Console }) {
   const [st, setSt] = useState<NetworkHttpsDto | null>(c.data.system?.network.https ?? null);
   const [busy, setBusy] = useState(false);
@@ -90,6 +108,21 @@ export function Network({ c }: { c: Console }) {
       setSt(next);
       // Decision 116: apps that keep their own address pick up the change on Restart.
       setRestartNote(next.restartToApply?.length ? `Restart ${next.restartToApply.join(', ')} so ${next.restartToApply.length === 1 ? 'it uses' : 'they use'} the new address (open the app, then Restart).` : null);
+      await c.refresh();
+    } catch (e) {
+      setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Decision 167: the API refuses to turn HTTPS only on from a plain-http page (it would lock this browser out).
+  const setHttpsOnly = async (on: boolean) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const next = await api.setNetworkHttps(true, on);
+      setSt(next);
       await c.refresh();
     } catch (e) {
       setMsg(e instanceof ApiError ? `${e.message}. ${e.nextAction}` : String(e));
@@ -191,6 +224,20 @@ export function Network({ c }: { c: Console }) {
             </button>
           </div>
         )}
+        {st?.enabled && (
+          <div className="row between wrap">
+            <div>
+              <h3 id="net-https-only-h">HTTPS only</h3>
+              <p className="muted small">Plain http addresses stop answering: devices without the certificate can only download it. Apps switch over when they restart.</p>
+              {!st.httpsOnly && !pageIsSecure() && <p className="small">Open this page at {st.url ?? 'its https address'} to turn it on.</p>}
+            </div>
+            <label className="row">
+              <input type="checkbox" checked={st.httpsOnly} disabled={busy || (!st.httpsOnly && !pageIsSecure())} onChange={(e) => void setHttpsOnly(e.target.checked)} aria-labelledby="net-https-only-h" />
+              <span className="small">{st.httpsOnly ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+        )}
+        {rebindNote(st) && <p className="warn small">{rebindNote(st)}</p>}
         {st?.enabled && st.caLimited === false && (
           <div className="row between wrap">
             <p className="warn small">This certificate was made by an older Harbor and could vouch for any website, not just this one. Replace it, then trust the new one on each device.</p>

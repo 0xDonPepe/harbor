@@ -11,7 +11,7 @@ import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
 import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
 import { lanAppHost, lanNames, lanUrl } from '../system/lan.js';
-import { caPem, ensureTlsCerts, lanHttpsHosts, readTlsState, reconcileLanHttps } from '../system/lan-https.js';
+import { caPem, ensureTlsCerts, HTTPS_ONLY_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState, reconcileLanHttps, runtimeLanAccess } from '../system/lan-https.js';
 import { hostname } from 'node:os';
 import { defaultCredentialsOf } from '../packages/catalog.js';
 import { dnsState } from '../system/net.js';
@@ -417,7 +417,7 @@ export class ApplicationService {
     this.ctx.repo.setAutoUpdate(row.id, enabled);
     const meta = this.packageMeta(row);
     const fresh = this.ctx.repo.instance(row.id)!;
-    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
+    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
   }
   // One update plan per eligible instance, submitted through the normal queue ("Update all").
   // Failures roll back per instance and never stop the rest (the queue is serial anyway).
@@ -593,6 +593,10 @@ export class ApplicationService {
   private lanHost(): string | null {
     return this.ctx.config.lan.enabled ? lanAppHost() : null;
   }
+  // Decision 167: with HTTPS only on, apps have no plain-http LAN address (their ports stay on loopback).
+  private lanPlainHost(): string | null {
+    return httpsOnlyOn(this.ctx) ? null : this.lanHost();
+  }
   // https://<hostname>.local for app addresses when LAN HTTPS is on (same swap as lanHost)
   private lanSecureHost(): string | null {
     return this.httpsEnabled() ? (this.lanHost() ?? 'harbor.local') : null;
@@ -613,7 +617,22 @@ export class ApplicationService {
   networkHttps(): NetworkHttpsDto {
     const enabled = this.httpsEnabled();
     const tls = readTlsState(this.ctx.config.stateDir);
-    return { enabled, url: enabled ? 'https://harbor.local/' : null, fingerprint: tls?.fingerprint ?? null, expiresAt: tls?.expiresAt ?? null, hosts: tls?.hosts ?? [], ...(tls ? { caLimited: tls.caLimited } : {}), ...this.addressDependents() };
+    return { enabled, httpsOnly: httpsOnlyOn(this.ctx), url: enabled ? 'https://harbor.local/' : null, fingerprint: tls?.fingerprint ?? null, expiresAt: tls?.expiresAt ?? null, hosts: tls?.hosts ?? [], ...(tls ? { caLimited: tls.caLimited } : {}), ...this.addressDependents(), rebindToApply: this.rebindDependents() };
+  }
+
+  // Decision 167: running apps whose ports are not bound the way the current setting wants until they restart:
+  // with HTTPS only on, apps still open on plain http on the network; with it off, apps that only the relay
+  // carries (no plain-http LAN address yet). Apps rendered while LAN mode was off are not counted (decision 165).
+  private rebindDependents(): string[] {
+    if (!this.ctx.config.lan.enabled) return [];
+    const relayOnly = httpsOnlyOn(this.ctx);
+    const out: string[] = [];
+    for (const inst of this.ctx.repo.listInstances()) {
+      if (inst.installState !== 'installed' || inst.runtime !== 'running') continue;
+      const access = runtimeLanAccess(this.ctx.config.stateDir, inst.id);
+      if ((relayOnly && access === 'lan') || (!relayOnly && access === 'relay')) out.push(inst.displayName ?? inst.name);
+    }
+    return out.sort();
   }
 
   // Decision 116: who a LAN HTTPS switch affects. breaksWhenOff = apps that need HTTPS whose main address
@@ -662,8 +681,15 @@ export class ApplicationService {
       return false;
     }
   }
-  async setNetworkHttps(enabled: boolean): Promise<NetworkHttpsDto> {
+  // Decision 167: `httpsOnly` (optional) switches HTTPS only. Turning it on needs secure addresses on and a request
+  // that itself arrived over https or from this machine (`overHttps`), so nobody locks themselves out from a
+  // browser that never reached the https console. Turning secure addresses off turns HTTPS only off too.
+  async setNetworkHttps(enabled: boolean, opts: { httpsOnly?: boolean; overHttps?: boolean } = {}): Promise<NetworkHttpsDto> {
     if (enabled && !this.ctx.config.lan.enabled) throw new HarborError('INVALID_STATE', 'LAN mode is off', { nextAction: 'Turn on LAN mode first (bootstrap --lan): HTTPS secures the LAN addresses.' });
+    if (!enabled && opts.httpsOnly === true) throw new HarborError('INVALID_STATE', 'HTTPS only needs secure addresses on', { nextAction: 'Turn on secure addresses as well (enabled: true).' });
+    if (opts.httpsOnly === true && !opts.overHttps) {
+      throw new HarborError('INVALID_STATE', 'HTTPS only can only be turned on from a page opened over https', { nextAction: 'Open the console at its https address (trust the certificate on this device first), then turn it on there.' });
+    }
     if (enabled) {
       const hosts = lanHttpsHosts();
       await ensureTlsCerts(this.ctx.config.stateDir, hosts);
@@ -672,6 +698,11 @@ export class ApplicationService {
     } else {
       this.ctx.repo.setSetting('network.httpsEnabled', false);
       this.ctx.log.info('LAN HTTPS disabled', {});
+    }
+    const only = enabled ? (opts.httpsOnly ?? this.ctx.repo.setting<boolean>(HTTPS_ONLY_SETTING) ?? false) : false;
+    if (only !== (this.ctx.repo.setting<boolean>(HTTPS_ONLY_SETTING) ?? false)) {
+      this.ctx.repo.setSetting(HTTPS_ONLY_SETTING, only);
+      this.ctx.log.info(only ? 'HTTPS only on: plain-http console requests redirect to https, apps re-bind to loopback on restart' : 'HTTPS only off', {});
     }
     await reconcileLanHttps(this.ctx);
     return this.networkHttps();
@@ -954,7 +985,7 @@ export class ApplicationService {
     const current = this.currentRevisionsSafe();
     return this.ctx.repo.listInstances().map((i) => {
       const meta = this.packageMeta(i);
-      return instanceSummary(i, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(i.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(i, current), lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(i.id) ?? null, needsDrive: this.needsDrive(i.id), home: this.homeState(i.id), ...this.extraLook(i, meta) });
+      return instanceSummary(i, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(i.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(i, current), lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(i.id) ?? null, needsDrive: this.needsDrive(i.id), home: this.homeState(i.id), ...this.extraLook(i, meta) });
     });
   }
   // Install-location read model: the encrypted home on the drive (null =
@@ -1322,7 +1353,7 @@ export class ApplicationService {
   private summaryOf(instanceId: string): InstanceSummary {
     const fresh = this.ctx.repo.instance(instanceId)!;
     const meta = this.packageMeta(fresh);
-    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
+    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
   }
   private currentRevisionsSafe(): ReturnType<PackageStore['currentRevisions']> {
     try {
@@ -1401,7 +1432,7 @@ export class ApplicationService {
     this.ctx.log.info('drive adopted', { instanceId, storageId, path: hostPath, actor });
     const meta = this.packageMeta(this.ctx.repo.instance(instanceId)!);
     const fresh = this.ctx.repo.instance(instanceId)!;
-    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
+    return instanceSummary(fresh, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(fresh.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(fresh, this.currentRevisionsSafe()), lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(fresh.id) ?? null, needsDrive: this.needsDrive(fresh.id), home: this.homeState(fresh.id), ...this.extraLook(fresh, meta) });
   }
 
   // ---- your own apps
@@ -1566,7 +1597,7 @@ export class ApplicationService {
       void submit;
       const fresh = this.ctx.repo.instance(instanceId)!;
       const meta = this.packageMeta(fresh);
-      return instanceSummary(fresh, meta.name, meta.primaryEndpoint, [], { icon: meta.icon, category: meta.category, lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: null, needsDrive: null, home: this.homeState(instanceId), hiddenFromHome: this.extraLook(fresh, meta).hiddenFromHome, apiOnly: meta.apiOnly });
+      return instanceSummary(fresh, meta.name, meta.primaryEndpoint, [], { icon: meta.icon, category: meta.category, lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: null, needsDrive: null, home: this.homeState(instanceId), hiddenFromHome: this.extraLook(fresh, meta).hiddenFromHome, apiOnly: meta.apiOnly });
     } finally {
       zeroKey(masterKey);
     }
@@ -1575,7 +1606,7 @@ export class ApplicationService {
   async instance(id: string): Promise<InstanceDetail> {
     const row = this.instanceRow(id);
     const meta = this.packageMeta(row);
-    const summary = instanceSummary(row, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(row.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(row, this.currentRevisionsSafe()), lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(row.id) ?? null, needsDrive: this.needsDrive(row.id), home: this.homeState(row.id), ...this.extraLook(row, meta) });
+    const summary = instanceSummary(row, meta.name, meta.primaryEndpoint, this.ctx.repo.exposures(row.id), { icon: meta.icon, category: meta.category, updateAvailable: this.updateFor(row, this.currentRevisionsSafe()), lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: this.usageCache.get(row.id) ?? null, needsDrive: this.needsDrive(row.id), home: this.homeState(row.id), ...this.extraLook(row, meta) });
     const resources = this.ctx.repo.resources(row.id);
     const presence: (boolean | null)[] = [];
     for (const r of resources) {
@@ -1621,7 +1652,7 @@ export class ApplicationService {
       const secretsDir = path.join(instanceDir(this.ctx.config.stateDir, inst.id), 'secrets');
       for (const s of p.proposal.secrets) secretStates[s.id] = secretExists(secretsDir, s.id) ? 'existing' : 'new';
     }
-    return planDto(p, storageStates, secretStates, { lanHost: this.lanHost(), lanSecureHost: this.lanSecureHost(), onDrive: p.proposal.location ? !this.isDataFolderLocation(p.proposal.location.dir) : false });
+    return planDto(p, storageStates, secretStates, { lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), onDrive: p.proposal.location ? !this.isDataFolderLocation(p.proposal.location.dir) : false });
   }
 
   operation(id: string): OperationDto {

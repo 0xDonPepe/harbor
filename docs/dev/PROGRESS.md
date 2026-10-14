@@ -448,7 +448,7 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
-## Phase 64 — read-only NVIDIA driver checks (2026-10-14, 0.34.1) ⏳ live
+## Phase 64 — read-only NVIDIA driver checks (2026-10-14, 0.34.1) ✅
 - [x] Decision 181: `src/system/gpu.ts` counts an NVIDIA card on the PCI bus with no driver (`/sys/bus/pci/devices`, vendor 0x10de, class 0x0300/0x0302); reads `driverVersion` (`/proc/driver/nvidia/version`, proprietary and open wording) and `libraryVersion` (highest `libnvidia-ml.so.<v>`); new problems before the toolkit checks: `NVIDIA_DRIVER_MISSING`, `NVIDIA_REBOOT_NEEDED`, `NVIDIA_DRIVER_TOO_OLD` (`NVIDIA_DRIVER_MIN_MAJOR` = 525, `src/planner/gpu.ts`); `HostGpu`/`GpuDto` gain optional `driverVersion`/`libraryVersion`; Harbor never installs drivers (review fixes below)
 - [x] Wording: plan lines, `harbor gpu` (+ `--json` versions), `harbor inspect`, console (`gpu-text.ts`): each problem's next step; a working card named "(driver 595.99.02)"; review and plan lines stay short
 - [x] `HARBOR_DEV_GPU` + console mock `?gpu=`: `driver-missing`, `reboot-needed`, `driver-too-old` (dev `nvidia` now has driver 595.99.02)

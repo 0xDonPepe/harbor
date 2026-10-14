@@ -816,9 +816,17 @@ Gate: lint, typecheck, unit 552 (+2 skipped), integration 328 + 3 skipped, e2e 4
 | Console | e2e decision 179 (fake NVIDIA machine, driver 595.99.02): the drawer shows *NVIDIA GeForce RTX 3090 (driver 595.99.02, in use)*, Settings → Overview *… (driver 595.99.02)*; the review still reads *This machine has an NVIDIA GeForce RTX 3090: the app uses it.* |
 
 Gate: lint, typecheck, unit 568 (+2 skipped), integration 331 + 3 skipped, e2e 41, catalog verify/hash (fixtures), openapi current (no new route).
-**Live (to be filled by the orchestrator):** harbor-old healthy state shows the driver version — `harbor gpu`,
-`harbor gpu --json` (`driverVersion` = `libraryVersion` = 595.99.02), the app page. The three problem states are
-not reproduced live (they need a driver removed, an unrebooted update or a pre-525 driver).
+**Live on harbor-old** (2026-10-14, self-updated 0.34.0 → 0.34.1 from the signed release, RTX 3090, driver 595.99.02
+open, toolkit 1.20.1). The `harbor` service user reads `/sys/bus/pci/devices/*` (it found `0000:0a:00.0` class
+0x030000 and ignored the audio function 0x040300), `libnvidia-ml.so.595.99.02` and `/proc/driver/nvidia/version`.
+
+| Check | Output |
+|---|---|
+| `harbor gpu` | *NVIDIA GeForce RTX 3090 (driver 595.99.02, ready for apps)* |
+| `harbor gpu --json` | `driverVersion` = `libraryVersion` = `595.99.02`, no problem |
+| `harbor inspect ollama-gpu` | *NVIDIA GeForce RTX 3090 (driver 595.99.02, in use)*; the running app was not re-rendered by the update |
+
+The three problem states are not reproduced live. They need a driver removed, an unrebooted update or a pre-525 driver.
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed
 

@@ -60,6 +60,12 @@ plaintext on disk.
       the tag's current one and re-pin when it moved (a patch-level update through the same smoke test).
 - [ ] **Major updates with upgrade notes.** A major PR from the bot links the release, but nobody reads the notes for
       you: link the project's changelog in the PR body (GitHub releases API for ghcr.io/github.com sources).
+- [ ] **Queue several actions at once** (asked 2026-10-13). Install A, B and C and uninstall D back to back without
+      waiting for each to finish: every approved action joins the serial queue (still one at a time, plan → operation),
+      the tray shows them as queued in order, and only the app an action targets is blocked (busy/queued on its tile,
+      card and drawer) while the rest of the console stays usable. Open points: re-check a queued plan's assumptions
+      (ports, state) when its turn comes instead of at approval; cancel a queued action before it starts; what happens to
+      later queued actions when one fails (keep going unless they depend on it, e.g. a link to the failed app). CLI mirrors it.
 
 
 - [x] *(0.23.0, decision 133: own port)* **Tailnet exposure collides with the LAN app port.** In LAN mode an app's host port (e.g.

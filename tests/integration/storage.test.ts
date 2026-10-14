@@ -194,6 +194,11 @@ describe('external storage', () => {
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
     // restore the original folder for later tests (adopt it back)
     await h.api.run({ kind: 'stop', instanceId: inst.id });
+    // adopt-drive refuses while the summary still says running: on a slow runner it can lag the stop operation
+    for (const stopBy = Date.now() + 20_000; Date.now() < stopBy; await new Promise((r) => setTimeout(r, 250))) {
+      const s = (await h.api.instances()).find((i) => i.id === inst.id);
+      if (s?.runtime === 'stopped' && !s.operationId) break;
+    }
     renameSync(path.join(root, 'photos'), path.join(root, 'photos-repl'));
     renameSync(path.join(root, 'photos-orig'), path.join(root, 'photos'));
     await h.api.expect<InstanceSummary>(200, 'POST', `/v1/instances/${inst.id}/adopt-drive`, { storageId: 'library' });

@@ -761,7 +761,7 @@ that wants the same one.
 
 ### GPU (graphics cards)
 
-Local AI apps (Ollama, and Open WebUI with its bundled Ollama) run much faster on a graphics card. Such an app
+Local AI apps (Ollama, Open WebUI with its bundled Ollama, and ComfyUI for images) run much faster on a graphics card. Such an app
 asks for the **gpu** permission (decision 179, Harbor 0.34.0 and later). Harbor checks the machine and the review
 says what the app gets:
 

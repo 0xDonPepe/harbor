@@ -77,6 +77,18 @@ plaintext on disk.
       container recreate (a link set later, Restart, update) resets them; upstream bind-mounts the file. Harbor's
       Compose subset has no file mount. Options: a `storage` claim that maps a single file inside a managed volume, or
       a per-package symlink at start. Needs a format decision (the format only grows). Until then its README warns.
+- [ ] **Storage a backup may skip** (found with ComfyUI, decision 182): model volumes (ComfyUI `models` and
+      `cache`, Ollama `data`) are tens of GB that can be downloaded again, and every app backup copies them. An
+      optional `storage[].backup: skip` (or `cache: true`) would leave them out of restic runs, with the restore saying
+      which volumes come back empty. Format grows: optional field + minHarbor.
+- [ ] **`setup:` without an account** (found with ComfyUI, decision 182): Harbor reads `setup` as "the app has its
+      own login" (the install note "you'll create your … account", no default basic-auth on a public domain), so an
+      app with first steps but no login (ComfyUI) cannot show them in the console. An optional `setup.account: false`
+      would keep the instructions without the login claims.
+- [ ] **Update bot: a version for tag-only images** (decision 182): `yanwk/comfyui-boot` tags are builds
+      (`cu130-slim-v2-20261021`), not ComfyUI versions, so `catalog:upstream apply` writes the tag as
+      `release.version`. A per-app `version` source in updates.json (an image label, or "keep") would keep the
+      Store's version meaningful.
 
 
 - [x] *(0.23.0, decision 133: own port)* **Tailnet exposure collides with the LAN app port.** In LAN mode an app's host port (e.g.

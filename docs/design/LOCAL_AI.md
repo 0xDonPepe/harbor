@@ -234,6 +234,15 @@ settings:
    admin UI. "Models to download on install" is left out: Ollama has no environment variable for it, and a
    one-shot pull service needs Harbor to understand services that exit (FUTURE).
 
+## Part 4: image generation (packages only, harbor-apps, decision 182)
+
+`comfyui` (ComfyUI + ComfyUI-Manager on `yanwk/comfyui-boot:cu130-slim-v2-<date>`, gpu, minHarbor 0.34.0) and an
+optional `comfyui` link on `open-webui` and `open-webui-shared` (`COMFYUI_BASE_URL`, plus first-start defaults for
+the built-in workflow's node map, 1024x1024 and 25 steps). ComfyUI exits without CUDA, so the package's `command`
+adds `--cpu` when torch sees no card; `/root/ComfyUI` is not a volume (the image copies its ComfyUI there at
+start); no `setup:` (no login). The card is shared with Ollama by memory only: a loaded chat model slows SDXL down.
+Live: docs/evidence/live-comfyui-2026-10-14.
+
 ## Evidence
 
 - Unit: `tests/unit/gpu.test.ts` (format, reserved NVIDIA variables, render nvidia/dri/none, detection incl. a hook

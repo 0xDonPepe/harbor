@@ -828,6 +828,27 @@ open, toolkit 1.20.1). The `harbor` service user reads `/sys/bus/pci/devices/*` 
 
 The three problem states are not reproduced live. They need a driver removed, an unrebooted update or a pre-525 driver.
 
+## 3r. ComfyUI: image generation on the graphics card, linked from Open WebUI (2026-10-14, harbor-apps, decision 182)
+
+No Harbor change: the harbor-apps packages `comfyui` revision 1, `open-webui` revision 5 and `open-webui-shared`
+revision 2 (branch `comfyui`). `pnpm catalog:verify` passes on all 141 packages, and `catalog:hash --check` and
+`catalog:plan` (comfyui and open-webui at 0.34.0, open-webui-shared at the 0.28.0 default, which already accepts
+optional links) also pass.
+
+**Verified live on harbor-old** (RTX 3090, driver 595.99.02, Harbor 0.34.1; uploaded under test ids;
+[docs/evidence/live-comfyui-2026-10-14](evidence/live-comfyui-2026-10-14/README.md)):
+
+| What | Result |
+|---|---|
+| Install with gpu | device request for the RTX 3090; `Device: cuda:0 NVIDIA GeForce RTX 3090`, ComfyUI 0.40.0, healthy at `/system_stats` after 10 attempts |
+| No card (same image, no `--gpus`) | the image's own start exits (`Found no NVIDIA driver`); the package's command starts it on `Device: cpu`, healthy in about 20 s |
+| Model download | the Manager's install queue put SDXL base (6.94 GB) in `models/checkpoints/SDXL` |
+| Link added later | `configure --link comfyui=…` on an Open WebUI that already ran: the network was created and ComfyUI was attached live (not restarted); the address answers from Open WebUI |
+| Link at install | a fresh Open WebUI starts with the ComfyUI address, the node map, 1024x1024 and 25 steps; after the three README steps, `POST /api/v1/images/generations` returned a 1024 x 1024 PNG in 16.2 s (14.2 s warm) at 100 % GPU |
+| Update | revision 1 → 2 kept models and outputs, re-attached both link networks, ran the new image's ComfyUI |
+
+Not covered live: the chat's Image button in a browser (it calls the same route), FLUX workflows.
+
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed
 
 Bootstrap #1 on the fresh VM passed (Docker 29.8.0 / Compose 5.5.1 installed, all listeners loopback-only, CLI login).

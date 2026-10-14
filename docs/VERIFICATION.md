@@ -774,9 +774,18 @@ Review fixes (2026-10-14, before the release):
 | Adopt with gpu | integration `app-homes.test.ts`: a second harness refuses the adopt with `PERMISSION_REQUIRED` and the home's files, its `resources` and `plans` stay untouched; with `acceptPermissions` it adopts and the install operation succeeds (first end-to-end adopt test: it found the `__home__` row hitting the foreign key before its instance existed; submit now records it with the instance) |
 | Wording | unit: `gpuStatusLine` (harbor inspect) and `gpuFact` name the NVIDIA card next to Intel graphics; the console's `gpu-text.ts` for nvidia, dri, dri + toolkit missing, toolkit missing, restart needed, none and a failed check, asking and not |
 
-**Not verified live yet:** anything on a real GPU. harbor-old (RTX 3090, driver 550, Docker 29.8.1, no toolkit) is the
-target: CPU install + toolkit line first, then the toolkit (Operator Guide, GPU), *Docker has not restarted* until
-`systemctl restart docker`, Restart, `ollama ps` = 100% GPU.
+**Verified live on harbor-old** (2026-10-14, RTX 3090, driver 595.99.02, Docker 29.8.1, Harbor 0.34.0 from the signed
+release; [docs/evidence/live-gpu-2026-10-14](evidence/live-gpu-2026-10-14/README.md)). Each machine state
+gave the expected result:
+
+| Machine state | Result |
+|---|---|
+| No toolkit | `NVIDIA_TOOLKIT_MISSING`; the CPU install has no device request. The NVIDIA-owned `/dev/dri` node is ignored. |
+| Toolkit installed, Docker not restarted | `NVIDIA_DOCKER_RESTART_NEEDED` (the dockerd start-time check works for the service user). |
+| Docker restarted | The app showed *found; restart the app*. Restart gave a device request `nvidia` / all / `gpu,compute,utility`, `nvidia-smi` worked in the container, and Ollama ran on `library=CUDA`. |
+| Linked Open WebUI | Ollama kept the GPU after the link re-render. A prompt over `http://ollama-link:11434` ran **100% GPU**, 29/29 layers, 255 tokens/s. |
+
+Not covered live: the Intel/AMD path (no such host).
 
 ## 3p. App settings (2026-10-14, Harbor 0.34.0, decision 180)
 
@@ -791,7 +800,7 @@ target: CPU install + toolkit line first, then the toolkit (Operator Guide, GPU)
 
 Gate: lint, typecheck, unit 552 (+2 skipped), integration 328 + 3 skipped, e2e 41, `catalog:verify` (fixtures and the
 140 harbor-apps-local-ai packages), `catalog:hash --check` (fixtures and harbor-apps-local-ai), `openapi --check`.
-**Not verified live yet:** a setting on a real Docker engine (expected to behave like any other environment literal).
+**Verified live on harbor-old** (same run): six Ollama settings reached the container env at install; `configure --set context-length=16384 --set keep-alive=30m` stored overrides only, re-rendered with the GPU and the link alias kept, `ollama ps` showed context 16384 / 29 min; out-of-choice and out-of-range values refused with `SETTING_INVALID`. Not covered live: the console forms (e2e only).
 
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed

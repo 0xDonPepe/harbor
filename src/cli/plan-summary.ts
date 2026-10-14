@@ -1,5 +1,5 @@
 import type { GpuDto, PlanDto, PlanSettingDto } from '../contracts/api.js';
-import { gpuProblemText } from '../planner/gpu.js';
+import { gpuCardName, gpuProblemText } from '../planner/gpu.js';
 import { formatSettingValue } from '../planner/settings.js';
 
 // What `harbor plan` / `harbor install` print for a plan (also on stderr before an apply). Its notes carry
@@ -8,12 +8,12 @@ function encryptionLine(location: PlanDto['location']): string {
   return location ? `  Encrypted: yes — sealed at ${location.dir}` : '  Encrypted: no — plain Docker volumes (readable on disk, starts on its own after a reboot)';
 }
 
-// Decision 179: what this machine offers an app that asks for its graphics card
+// Decision 179: what this machine offers an app that asks for its graphics card (decision 181: with the driver)
 export function gpuFact(g: GpuDto): string {
-  const p = gpuProblemText(g.problem);
-  if (g.kind === 'nvidia') return `${g.detail} (ready for apps)`;
+  const p = gpuProblemText(g);
+  if (g.kind === 'nvidia') return `${gpuCardName(g, 'ready for apps')}${p ? `, but ${p.what} (${p.next})` : ''}`;
   if (g.kind === 'dri') return `${g.detail}${p ? `; an NVIDIA card is also here, but ${p.what} (${p.next})` : ''}`;
-  if (p) return `${g.detail} found, but ${p.what}: runs on the CPU until then (${p.next})`;
+  if (p) return `${gpuCardName(g)} found, but ${p.what}: runs on the CPU until then (${p.next})`;
   return 'no usable graphics card found: runs on the CPU';
 }
 

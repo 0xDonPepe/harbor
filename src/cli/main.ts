@@ -1425,7 +1425,7 @@ powerCmd
 
 program
   .command('gpu')
-  .description('the graphics card apps that ask for one get on this machine (NVIDIA needs the NVIDIA container toolkit)')
+  .description('the graphics card apps that ask for one get on this machine (NVIDIA needs a working driver and the NVIDIA container toolkit; --json adds the driver versions)')
   .action(async () => {
     const host = await client().get<SystemHostDto>('/v1/system/host');
     const g = host.gpu ?? null;

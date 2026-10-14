@@ -12,10 +12,10 @@ import { parseRestrictedYaml } from '../../src/packages/yaml.js';
 import { identityFor } from '../../src/planner/identity.js';
 import { renderCompose } from '../../src/planner/render.js';
 import { newPermissions, PERMISSION_LABEL, permissionsOf } from '../../src/planner/permissions.js';
-import { gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf, gpuStatusLine, renderedGpuKind, rendersGpu } from '../../src/planner/gpu.js';
-import { detectGpu, dockerdStartedAt, HostGpuObserver } from '../../src/system/gpu.js';
+import { DRIVER_INSTALL_NEXT_STEP, DRIVER_LOAD_NEXT_STEP, DRIVER_REBOOT_NEXT_STEP, DRIVER_UPDATE_NEXT_STEP, gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf, gpuStatusLine, NVIDIA_DRIVER_MIN_MAJOR, renderedGpuKind, rendersGpu } from '../../src/planner/gpu.js';
+import { detectGpu, devGpu, dockerdStartedAt, HostGpuObserver, parseNvidiaDriverVersion } from '../../src/system/gpu.js';
 import { gpuFact } from '../../src/cli/plan-summary.js';
-import { GPU_DOCKER_RESTART_STEP, GPU_TOOLKIT_STEP, gpuAppText, gpuMachineText, gpuReviewText } from '../../web/src/app/gpu-text.js';
+import { GPU_DOCKER_RESTART_STEP, GPU_DRIVER_INSTALL_STEP, GPU_DRIVER_LOAD_STEP, GPU_DRIVER_REBOOT_STEP, GPU_DRIVER_UPDATE_STEP, GPU_TOOLKIT_STEP, gpuAppText, gpuMachineText, gpuReviewText } from '../../web/src/app/gpu-text.js';
 import { FakeDocker } from '../../src/docker/fake.js';
 import { HarborError } from '../../src/errors.js';
 import type { HostGpu } from '../../src/contracts/types.js';
@@ -203,16 +203,16 @@ describe('detecting the graphics card (fake host root)', () => {
 
   it('an NVIDIA card with the nvidia runtime registered in Docker', async () => {
     const root = host(NVIDIA_FILES);
-    expect(await detectGpu({ root, runtimes: async () => ['nvidia', 'runc'] })).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090' });
+    expect(await detectGpu({ root, runtimes: async () => ['nvidia', 'runc'] })).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '550.163.01' });
   });
   it('an NVIDIA card with only the toolkit hook, installed before dockerd started (Docker registered its nvidia driver)', async () => {
     const root = withHook({ ...NVIDIA_FILES, ...dockerd(later()) });
-    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090' });
+    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '550.163.01' });
     expect(dockerdStartedAt(root)).toBe(later() * 1000);
   });
   it('the hook installed after dockerd started: not usable until Docker restarts (a device request would fail)', async () => {
     const root = withHook({ ...NVIDIA_FILES, ...dockerd(1_000_000_000) }); // dockerd started in 2001
-    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_DOCKER_RESTART_NEEDED' });
+    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_DOCKER_RESTART_NEEDED', driverVersion: '550.163.01' });
     // dockerd's start time unknown (no pid file): not usable either, never guessed
     expect((await detectGpu({ root: withHook(NVIDIA_FILES), runtimes: runc })).problem).toBe('NVIDIA_DOCKER_RESTART_NEEDED');
     // the registered nvidia runtime (it only shows after a restart) wins over the start-time check
@@ -228,7 +228,7 @@ describe('detecting the graphics card (fake host root)', () => {
   });
   it('an NVIDIA card without the toolkit (harbor-old today): none, with the problem; its nvidia-drm node is ignored', async () => {
     const root = host({ ...NVIDIA_FILES, ...NVIDIA_DRM }, NVIDIA_DRM_LINKS);
-    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_TOOLKIT_MISSING' });
+    expect(await detectGpu({ root, runtimes: runc })).toEqual({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '550.163.01' });
   });
   it('docker info failing falls back to the hook check', async () => {
     const failing = async (): Promise<string[]> => {
@@ -340,5 +340,209 @@ describe('the console wording for every machine (web/src/app/gpu-text.ts)', () =
     expect(gpuReviewText(gpuDto(NONE))).toBe('No usable graphics card found on this machine: the app runs on the CPU. Allowing it now lets it use a card added later.');
     expect(gpuReviewText(gpuDto(NONE), false)).toBe('No usable graphics card found on this machine: the app runs on the CPU.');
     expect(gpuReviewText(failed, false)).toBe('No usable graphics card found on this machine: the app runs on the CPU.');
+  });
+});
+
+// Decision 181: read-only NVIDIA driver checks (Harbor never installs, updates or removes drivers)
+describe('NVIDIA driver checks (decision 181, fake host root)', () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
+  });
+  const host = (files: Record<string, string>, links: Record<string, string> = {}) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'harbor-gpu-drv-'));
+    roots.push(root);
+    for (const [rel, body] of Object.entries(files)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      writeFileSync(path.join(root, rel), body);
+    }
+    for (const [rel, target] of Object.entries(links)) {
+      mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+      symlinkSync(target, path.join(root, rel));
+    }
+    return root;
+  };
+  const RTX = 'NVIDIA GeForce RTX 3090';
+  const PROPRIETARY = (v: string) => `NVRM version: NVIDIA UNIX x86_64 Kernel Module  ${v}  Tue Apr  8 12:39:50 UTC 2025\nGCC version:  gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04)\n`;
+  const OPEN = (v: string) => `NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  ${v}  Release Build  (dvs-builder@U16-I3-B03-4-3)  Thu Sep 18 00:00:00 UTC 2026\nGCC version:  gcc version 13.3.0\n`;
+  // the card on the PCI bus (VGA controller + its HDMI audio function, which does not count)
+  const PCI = {
+    'sys/bus/pci/devices/0000:01:00.0/vendor': '0x10de\n',
+    'sys/bus/pci/devices/0000:01:00.0/class': '0x030000\n',
+    'sys/bus/pci/devices/0000:01:00.0/device': '0x2204\n',
+    'sys/bus/pci/devices/0000:01:00.1/vendor': '0x10de\n',
+    'sys/bus/pci/devices/0000:01:00.1/class': '0x040300\n',
+    'sys/bus/pci/devices/0000:00:02.0/vendor': '0x8086\n',
+    'sys/bus/pci/devices/0000:00:02.0/class': '0x060000\n',
+  };
+  const driver = (version: string, text = OPEN) => ({
+    'proc/driver/nvidia/version': text(version),
+    'proc/driver/nvidia/gpus/0000:01:00.0/information': `Model: \t\t ${RTX}\n`,
+    'dev/nvidia0': '',
+  });
+  const lib = (version: string, dir = 'usr/lib/x86_64-linux-gnu') => ({ [`${dir}/libnvidia-ml.so.${version}`]: '', [`${dir}/libnvidia-ml.so.1`]: '', [`${dir}/libnvidia-ml.so`]: '' });
+  const INTEL = { files: { 'dev/dri/renderD129': '' }, links: { 'sys/class/drm/renderD129/device/driver': '../../../bus/pci/drivers/i915' } };
+  const toolkit = async () => ['nvidia', 'runc'];
+  const runc = async () => ['runc'];
+
+  it('reads the running driver from both wordings of /proc/driver/nvidia/version', () => {
+    expect(parseNvidiaDriverVersion(PROPRIETARY('550.163.01'))).toBe('550.163.01');
+    expect(parseNvidiaDriverVersion(OPEN('595.99.02'))).toBe('595.99.02');
+    expect(parseNvidiaDriverVersion('NVRM version: NVIDIA UNIX Open Kernel Module for aarch64  580.95.05  Release Build\n')).toBe('580.95.05');
+    expect(parseNvidiaDriverVersion(PROPRIETARY('470.256.02'))).toBe('470.256.02');
+    expect(parseNvidiaDriverVersion('garbage\n')).toBeNull();
+    expect(NVIDIA_DRIVER_MIN_MAJOR).toBe(525);
+  });
+  it('a card on the PCI bus with no driver loaded: none + NVIDIA_DRIVER_MISSING, named generically, even with the toolkit', async () => {
+    for (const runtimes of [runc, toolkit]) {
+      expect(await detectGpu({ root: host(PCI), runtimes })).toEqual({ kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' });
+    }
+    // a 3D controller (0x0302, data-centre cards) counts too
+    const tesla = host({ 'sys/bus/pci/devices/0000:3b:00.0/vendor': '0x10de\n', 'sys/bus/pci/devices/0000:3b:00.0/class': '0x030200\n' });
+    expect((await detectGpu({ root: tesla, runtimes: runc })).problem).toBe('NVIDIA_DRIVER_MISSING');
+    // the driver's libraries installed but no module running (not rebooted, or blocked): still missing, never "reboot"
+    expect(await detectGpu({ root: host({ ...PCI, ...lib('595.99.02') }), runtimes: runc })).toEqual({ kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING', libraryVersion: '595.99.02' });
+    // bound to nouveau (no NVIDIA driver): missing too
+    expect((await detectGpu({ root: host(PCI, { 'sys/bus/pci/devices/0000:01:00.0/driver': '../../../bus/pci/drivers/nouveau' }), runtimes: runc })).problem).toBe('NVIDIA_DRIVER_MISSING');
+    // only other vendors on the bus (and the NVIDIA audio function alone): no card
+    expect(await detectGpu({ root: host({ 'sys/bus/pci/devices/0000:00:02.0/vendor': '0x8086\n', 'sys/bus/pci/devices/0000:00:02.0/class': '0x030000\n', 'sys/bus/pci/devices/0000:01:00.1/vendor': '0x10de\n', 'sys/bus/pci/devices/0000:01:00.1/class': '0x040300\n' }), runtimes: runc })).toEqual({ kind: 'none', detail: 'No graphics card found' });
+  });
+  it('matching running and installed versions, proprietary and open: usable, with both versions', async () => {
+    for (const text of [PROPRIETARY, OPEN]) {
+      const root = host({ ...PCI, ...driver('595.99.02', text), ...lib('595.99.02') });
+      expect(await detectGpu({ root, runtimes: toolkit })).toEqual({ kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' });
+    }
+    // /usr/lib64 (Fedora/RHEL) is read too
+    expect((await detectGpu({ root: host({ ...driver('580.95.05'), ...lib('580.95.05', 'usr/lib64') }), runtimes: toolkit })).libraryVersion).toBe('580.95.05');
+  });
+  it('a card handed to a virtual machine (bound to vfio-pci or pci-stub) is not this machine\'s: no card, no driver advice', async () => {
+    for (const drv of ['vfio-pci', 'pci-stub']) {
+      const root = host({ ...PCI, ...lib('595.99.02') }, { 'sys/bus/pci/devices/0000:01:00.0/driver': `../../../bus/pci/drivers/${drv}` });
+      expect(await detectGpu({ root, runtimes: toolkit })).toEqual({ kind: 'none', detail: 'No graphics card found' });
+    }
+    // a second, unbound card still counts
+    const two = host({ ...PCI, 'sys/bus/pci/devices/0000:02:00.0/vendor': '0x10de\n', 'sys/bus/pci/devices/0000:02:00.0/class': '0x030000\n' }, { 'sys/bus/pci/devices/0000:01:00.0/driver': '../../../bus/pci/drivers/vfio-pci' });
+    expect((await detectGpu({ root: two, runtimes: runc })).problem).toBe('NVIDIA_DRIVER_MISSING');
+  });
+  it('the running driver\'s library gone, another installed (apt updated the driver): NVIDIA_REBOOT_NEEDED with the newest', async () => {
+    const root = host({ ...PCI, ...driver('550.163.01'), ...lib('595.99.02') });
+    expect(await detectGpu({ root, runtimes: toolkit })).toEqual({ kind: 'none', detail: RTX, problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' });
+    // numeric, not text order: 595.100.1 is newer than 595.99.02
+    expect((await detectGpu({ root: host({ ...driver('550.163.01'), ...lib('595.99.02'), ...lib('595.100.1') }), runtimes: toolkit })).libraryVersion).toBe('595.100.1');
+  });
+  it('the running driver\'s library still there next to another version (a leftover .run install, a copied file): usable, never a reboot', async () => {
+    for (const other of ['610.1.1', '550.163.01']) {
+      const root = host({ ...PCI, ...driver('595.99.02'), ...lib('595.99.02'), ...lib(other) });
+      expect(await detectGpu({ root, runtimes: toolkit })).toEqual({ kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' });
+    }
+  });
+  it('the installed version unknown: no reboot claim', async () => {
+    expect(await detectGpu({ root: host({ ...PCI, ...driver('550.163.01') }), runtimes: toolkit })).toEqual({ kind: 'nvidia', detail: RTX, driverVersion: '550.163.01' });
+  });
+  it('a driver older than 525 (CUDA 12) is a note on a usable card: still handed over (CUDA 11 images, NVENC); 525 itself has none', async () => {
+    expect(await detectGpu({ root: host({ ...PCI, ...driver('470.256.02', PROPRIETARY), ...lib('470.256.02') }), runtimes: toolkit })).toEqual({ kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD', driverVersion: '470.256.02', libraryVersion: '470.256.02' });
+    expect(await detectGpu({ root: host({ ...driver('525.60.13'), ...lib('525.60.13') }), runtimes: toolkit })).toEqual({ kind: 'nvidia', detail: RTX, driverVersion: '525.60.13', libraryVersion: '525.60.13' });
+  });
+  it('the order: missing driver, then reboot, then the toolkit checks (too old only notes a usable card)', async () => {
+    // too old AND updated but not rebooted: the reboot finishes it
+    expect((await detectGpu({ root: host({ ...PCI, ...driver('470.256.02'), ...lib('595.99.02') }), runtimes: runc })).problem).toBe('NVIDIA_REBOOT_NEEDED');
+    // too old AND no toolkit: the toolkit blocks, so it is named
+    expect(await detectGpu({ root: host({ ...PCI, ...driver('470.256.02'), ...lib('470.256.02') }), runtimes: runc })).toEqual({ kind: 'none', detail: RTX, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '470.256.02', libraryVersion: '470.256.02' });
+    // a working driver: then the toolkit
+    expect(await detectGpu({ root: host({ ...PCI, ...driver('595.99.02'), ...lib('595.99.02') }), runtimes: runc })).toEqual({ kind: 'none', detail: RTX, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '595.99.02', libraryVersion: '595.99.02' });
+  });
+  it('Intel graphics next to each blocking driver problem: dri, with the problem; a too-old usable card still wins', async () => {
+    const cases: [Record<string, string>, string][] = [
+      [PCI, 'NVIDIA_DRIVER_MISSING'],
+      [{ ...PCI, ...driver('550.163.01'), ...lib('595.99.02') }, 'NVIDIA_REBOOT_NEEDED'],
+    ];
+    for (const [files, problem] of cases) {
+      const g = await detectGpu({ root: host({ ...files, ...INTEL.files }, INTEL.links), runtimes: toolkit });
+      expect(g).toMatchObject({ kind: 'dri', detail: 'Intel graphics', renderNode: 'renderD129', problem });
+    }
+    const old = await detectGpu({ root: host({ ...PCI, ...driver('470.256.02'), ...lib('470.256.02'), ...INTEL.files }, INTEL.links), runtimes: toolkit });
+    expect(old).toEqual({ kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD', driverVersion: '470.256.02', libraryVersion: '470.256.02' });
+  });
+  it('the dev/e2e machines for the new states', async () => {
+    expect((await devGpu('driver-missing').detect()).problem).toBe('NVIDIA_DRIVER_MISSING');
+    expect((await devGpu('reboot-needed').detect()).problem).toBe('NVIDIA_REBOOT_NEEDED');
+    expect(await devGpu('driver-too-old').detect()).toMatchObject({ kind: 'nvidia', problem: 'NVIDIA_DRIVER_TOO_OLD' });
+    expect((await devGpu('nvidia').detect()).driverVersion).toBe('595.99.02');
+  });
+});
+
+describe('driver wording (decision 181)', () => {
+  const m = manifestOf(GPU_MANIFEST);
+  const RTX = 'NVIDIA GeForce RTX 3090';
+  const USABLE: HostGpu = { kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' };
+  const NO_DRIVER: HostGpu = { kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' };
+  const REBOOT: HostGpu = { kind: 'none', detail: RTX, problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' };
+  const OLD: HostGpu = { kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD', driverVersion: '470.256.02', libraryVersion: '470.256.02' };
+  const NOT_LOADED: HostGpu = { kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING', libraryVersion: '595.99.02' };
+  const OLD_NOTE = 'the NVIDIA driver is older than 525, so apps built on CUDA 12 or newer (like Ollama) cannot use the card';
+  const NO_TOOLKIT: HostGpu = { kind: 'none', detail: RTX, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '595.99.02' };
+  const INTEL_REBOOT: HostGpu = { kind: 'dri', detail: 'Intel graphics', renderNode: 'renderD128', renderGid: 992, problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' };
+
+  it('the DTO carries both versions (never group ids)', () => {
+    expect(gpuDto(USABLE)).toEqual({ kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' });
+    expect(gpuDto(INTEL_REBOOT)).toEqual({ kind: 'dri', detail: 'Intel graphics', problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' });
+  });
+  it('plan lines stay short (no version on a working card) and say the next step for each problem', () => {
+    expect(gpuChanges(m, USABLE)).toEqual([`Use the ${RTX} (GPU) for web`]);
+    expect(gpuChanges(m, NO_DRIVER)).toEqual([`An NVIDIA graphics card is in this machine, but the NVIDIA driver is not running: web runs on the CPU until then (${DRIVER_INSTALL_NEXT_STEP})`]);
+    expect(gpuChanges(m, REBOOT)).toEqual([`An NVIDIA graphics card is in this machine, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running): web runs on the CPU until then (${DRIVER_REBOOT_NEXT_STEP})`]);
+    expect(gpuChanges(m, OLD)).toEqual([`Use the ${RTX} (GPU) for web (but ${OLD_NOTE}: ${DRIVER_UPDATE_NEXT_STEP})`]);
+    expect(gpuChanges(m, NOT_LOADED)).toEqual([`An NVIDIA graphics card is in this machine, but the NVIDIA driver is installed but not running: web runs on the CPU until then (${DRIVER_LOAD_NEXT_STEP})`]);
+    expect(gpuChanges(m, INTEL_REBOOT)[0]).toBe(`Use Intel graphics for web (an NVIDIA card is also in this machine, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running): ${DRIVER_REBOOT_NEXT_STEP})`);
+    expect(DRIVER_INSTALL_NEXT_STEP).toBe('Install the NVIDIA driver (sudo ubuntu-drivers install), then restart the machine');
+    expect(DRIVER_REBOOT_NEXT_STEP).toBe('Restart the machine to finish the NVIDIA driver update');
+    expect(DRIVER_UPDATE_NEXT_STEP).toBe('To run them, update the NVIDIA driver to 525 or newer if the card supports it (sudo ubuntu-drivers install), then restart the machine');
+    expect(DRIVER_LOAD_NEXT_STEP).toBe('Restart the machine to load it; if it still does not run, Secure Boot may be blocking it (Operator Guide, GPU → Drivers)');
+  });
+  it('harbor gpu / the plan GPU line name the driver of a working card', () => {
+    expect(gpuFact(USABLE)).toBe(`${RTX} (driver 595.99.02, ready for apps)`);
+    expect(gpuFact(NO_TOOLKIT)).toMatch(/^NVIDIA GeForce RTX 3090 \(driver 595\.99\.02\) found, but the NVIDIA container toolkit is not installed/);
+    expect(gpuFact(NO_DRIVER)).toBe(`NVIDIA graphics card found, but the NVIDIA driver is not running: runs on the CPU until then (${DRIVER_INSTALL_NEXT_STEP})`);
+    expect(gpuFact(REBOOT)).toBe(`${RTX} found, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running): runs on the CPU until then (${DRIVER_REBOOT_NEXT_STEP})`);
+    expect(gpuFact(OLD)).toBe(`${RTX} (driver 470.256.02, ready for apps), but ${OLD_NOTE} (${DRIVER_UPDATE_NEXT_STEP})`);
+    expect(gpuFact(NOT_LOADED)).toBe(`NVIDIA graphics card found, but the NVIDIA driver is installed but not running: runs on the CPU until then (${DRIVER_LOAD_NEXT_STEP})`);
+    expect(gpuFact(gpuDto(INTEL_REBOOT))).toBe(`Intel graphics; an NVIDIA card is also here, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running) (${DRIVER_REBOOT_NEXT_STEP})`);
+  });
+  it('harbor inspect', () => {
+    expect(gpuStatusLine({ ...gpuDto(USABLE), inUse: true })).toBe(`${RTX} (driver 595.99.02, in use)`);
+    expect(gpuStatusLine({ ...gpuDto(USABLE), inUse: false })).toBe(`${RTX} (driver 595.99.02) found; restart the app to use it`);
+    expect(gpuStatusLine({ ...gpuDto(NO_DRIVER), inUse: false })).toBe(`NVIDIA graphics card found, but the NVIDIA driver is not running — runs on the CPU. ${DRIVER_INSTALL_NEXT_STEP}.`);
+    expect(gpuStatusLine({ ...gpuDto(OLD), inUse: true })).toBe(`${RTX} (driver 470.256.02, in use), but ${OLD_NOTE}. ${DRIVER_UPDATE_NEXT_STEP}.`);
+    expect(gpuStatusLine({ ...gpuDto(OLD), inUse: false })).toBe(`${RTX} (driver 470.256.02) found; restart the app to use it, but ${OLD_NOTE}. ${DRIVER_UPDATE_NEXT_STEP}.`);
+    // a driver update waiting for a reboot while the containers still have the card: in use, not "runs on the CPU"
+    expect(gpuStatusLine({ ...gpuDto(REBOOT), inUse: true })).toBe(`${RTX} (in use), but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running). ${DRIVER_REBOOT_NEXT_STEP}; until then, restarting the app moves it to the CPU.`);
+    expect(gpuStatusLine({ ...gpuDto(REBOOT), inUse: false })).toContain('— runs on the CPU');
+    expect(gpuStatusLine({ ...gpuDto(INTEL_REBOOT), inUse: true })).toBe(`Intel graphics (in use). An NVIDIA card is also in this machine, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running). ${DRIVER_REBOOT_NEXT_STEP}.`);
+  });
+  it('the console: Settings → Overview, the app page and the review', () => {
+    expect(gpuMachineText(gpuDto(USABLE))).toBe(`${RTX} (driver 595.99.02)`);
+    expect(gpuMachineText(gpuDto(NO_TOOLKIT))).toBe(`${RTX} (driver 595.99.02) · the NVIDIA container toolkit is not installed (Operator Guide → GPU)`);
+    expect(gpuMachineText(gpuDto(NO_DRIVER))).toBe('NVIDIA graphics card · the NVIDIA driver is not running (Operator Guide → GPU)');
+    expect(gpuMachineText(gpuDto(REBOOT))).toBe(`${RTX} · the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running) (Operator Guide → GPU)`);
+    expect(gpuMachineText(gpuDto(OLD))).toBe(`${RTX} (driver 470.256.02) · ${OLD_NOTE} (Operator Guide → GPU)`);
+    expect(gpuMachineText(gpuDto(NOT_LOADED))).toBe('NVIDIA graphics card · the NVIDIA driver is installed but not running (Operator Guide → GPU)');
+    expect(gpuMachineText(gpuDto(INTEL_REBOOT))).toBe('Intel graphics · an NVIDIA card is also here, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running) (Operator Guide → GPU)');
+    expect(gpuAppText({ ...gpuDto(USABLE), inUse: true })).toBe(`${RTX} (driver 595.99.02, in use)`);
+    expect(gpuAppText({ ...gpuDto(USABLE), inUse: false })).toBe(`${RTX} (driver 595.99.02) found · restart the app to use it`);
+    expect(gpuAppText({ ...gpuDto(NO_DRIVER), inUse: false })).toBe(`NVIDIA graphics card found, but the NVIDIA driver is not running · runs on the CPU. ${GPU_DRIVER_INSTALL_STEP}`);
+    expect(gpuAppText({ ...gpuDto(REBOOT), inUse: false })).toBe(`${RTX} found, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running) · runs on the CPU. ${GPU_DRIVER_REBOOT_STEP}`);
+    expect(gpuAppText({ ...gpuDto(OLD), inUse: true })).toBe(`${RTX} (driver 470.256.02, in use) · ${OLD_NOTE}. ${GPU_DRIVER_UPDATE_STEP}`);
+    expect(gpuAppText({ ...gpuDto(NOT_LOADED), inUse: false })).toBe(`NVIDIA graphics card found, but the NVIDIA driver is installed but not running · runs on the CPU. ${GPU_DRIVER_LOAD_STEP}`);
+    expect(gpuAppText({ ...gpuDto(REBOOT), inUse: true })).toBe(`${RTX} (in use) · the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running). ${GPU_DRIVER_REBOOT_STEP} Until then, restarting the app moves it to the CPU.`);
+    expect(gpuAppText({ ...gpuDto(INTEL_REBOOT), inUse: true })).toBe(`Intel graphics (in use) · an NVIDIA card is also here, but the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running). ${GPU_DRIVER_REBOOT_STEP}`);
+    // the review stays short: no version for a working card
+    expect(gpuReviewText(gpuDto(USABLE))).toBe(`This machine has an ${RTX}: the app uses it.`);
+    expect(gpuReviewText(gpuDto(NO_DRIVER))).toBe(`This machine has an NVIDIA graphics card, but the NVIDIA driver is not running, so the app runs on the CPU until then. ${GPU_DRIVER_INSTALL_STEP}`);
+    expect(gpuReviewText(gpuDto(OLD), false)).toBe(`This machine has an ${RTX}: the app uses it, but ${OLD_NOTE}. ${GPU_DRIVER_UPDATE_STEP}`);
+    expect(GPU_DRIVER_LOAD_STEP).toBe('Restart the machine to load it. If it still does not run, Secure Boot may be blocking it (Operator Guide → GPU → Drivers).');
+    expect(gpuReviewText(gpuDto(INTEL_REBOOT))).toBe(`This machine has Intel graphics (the app uses it) and an NVIDIA card it cannot use yet: the machine has not restarted since the NVIDIA driver update (595.99.02 installed, 550.163.01 running). ${GPU_DRIVER_REBOOT_STEP}`);
+    // versions unknown: still a sentence
+    expect(gpuAppText({ kind: 'none', detail: RTX, problem: 'NVIDIA_REBOOT_NEEDED', inUse: false })).toContain('the machine has not restarted since the NVIDIA driver update · runs on the CPU');
+    expect(gpuMachineText({ kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD' })).toBe(`${RTX} · ${OLD_NOTE} (Operator Guide → GPU)`);
   });
 });

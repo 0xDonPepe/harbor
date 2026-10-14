@@ -1,7 +1,8 @@
 # Local AI stack: GPU access, app settings, one shared Ollama
 
-Status: Part 1 (`gpu` permission, decision 179) and Part 2 (app settings, decision 180) **built in 0.34.0**. Part 3
-is harbor-apps work that declares `release.minHarbor: "0.34.0"` (after 0.34.0 is released).
+Status: Part 1 (`gpu` permission, decision 179) and Part 2 (app settings, decision 180) **built in 0.34.0**; the
+read-only NVIDIA driver checks (decision 181) in 0.34.1. Part 3 is harbor-apps work that declares
+`release.minHarbor: "0.34.0"` (after 0.34.0 is released).
 
 Goal: an operator installs **Ollama** once and has it use the machine's GPU when there is one. They tune
 its server parameters from the app page and download models from **Open WebUI**. Every AI app (Open WebUI,
@@ -35,13 +36,32 @@ release:
   Harbor's too: not a compose literal, nor a secret, link, setting or configuration target (`NVIDIA_RESERVED_ENV`).
   Other services and other `NVIDIA_*` variables are untouched, so no published package changes meaning.
 - **Host facts are a planner input** (`HostGpu` in `src/contracts/types.ts`: `kind: nvidia | dri | none`, `detail`
-  ("NVIDIA GeForce RTX 3090", "Intel graphics"), optional `problem: NVIDIA_TOOLKIT_MISSING | NVIDIA_DOCKER_RESTART_NEEDED`,
-  `renderNode`, `renderGid`).
+  ("NVIDIA GeForce RTX 3090", "Intel graphics"), optional `problem: NVIDIA_TOOLKIT_MISSING | NVIDIA_DOCKER_RESTART_NEEDED` (0.34.1 adds
+  `NVIDIA_DRIVER_MISSING | NVIDIA_REBOOT_NEEDED | NVIDIA_DRIVER_TOO_OLD`), `renderNode`, `renderGid`, and since 0.34.1
+  optional `driverVersion`, `libraryVersion`).
   `renderCompose({ ..., gpu })` stays pure. `ctx.gpu: GpuObserver` (`src/system/gpu.ts`) collects them:
   `HostGpuObserver` in the daemon (root `/`, 30 s cache, never throws), `FakeGpu` in fake mode (no card; tests set
-  any facts; `HARBOR_DEV_GPU=nvidia|dri|dri-toolkit-missing|toolkit-missing|restart-needed|none` for `pnpm dev` and e2e).
-  - **NVIDIA present**: `/proc/driver/nvidia/version` or `/dev/nvidia0`. Name from the `Model:` line of
-    `/proc/driver/nvidia/gpus/*/information` (else "NVIDIA graphics card"; several cards: "… and N more").
+  any facts; `HARBOR_DEV_GPU=nvidia|dri|dri-toolkit-missing|toolkit-missing|restart-needed|driver-missing|reboot-needed|driver-too-old|none`
+  for `pnpm dev` and e2e; the console mock takes `?gpu=` with the same names).
+  - **NVIDIA present**: `/proc/driver/nvidia/version` or `/dev/nvidia0`, or (0.34.1) a PCI device with `vendor`
+    0x10de and `class` 0x0300xx/0x0302xx under `/sys/bus/pci/devices` (a card with no driver; its audio function does
+    not count, nor a card bound to `vfio-pci`/`pci-stub` for a virtual machine). Name from the `Model:` line of `/proc/driver/nvidia/gpus/*/information` (else "NVIDIA graphics
+    card"; several cards: "… and N more").
+  - **Driver checks (decision 181, 0.34.1, read-only: Harbor never installs, updates or removes a driver)**, before
+    the toolkit checks. `driverVersion` = the running module from `/proc/driver/nvidia/version` (both "Kernel Module
+    550.163.01" and "Open Kernel Module for x86_64  595.99.02"); every installed
+    `libnvidia-ml.so.<version>` in /usr/lib/x86_64-linux-gnu, /usr/lib64, /usr/lib/aarch64-linux-gnu is read, and
+    `libraryVersion` = the running version's own when installed, else the newest. Blocking, in order (`none`, or `dri`
+    with Intel/AMD graphics; nothing rendered): on the PCI bus without the /proc file → `NVIDIA_DRIVER_MISSING`
+    ("Install the NVIDIA driver (sudo ubuntu-drivers install), then restart the machine"; with its libraries installed:
+    "installed but not running", restart the machine, Secure Boot may be blocking it); the running version's library
+    gone and another installed → `NVIDIA_REBOOT_NEEDED` ("Restart the machine to finish the NVIDIA driver update"; an
+    unknown installed version, or an extra library next to the running one's, never claims it). A note, not a block:
+    major below `NVIDIA_DRIVER_MIN_MAJOR` (525: CUDA 12, Ollama's CUDA builds) on a usable card → `kind: nvidia` +
+    `NVIDIA_DRIVER_TOO_OLD` (CUDA 11 images and NVENC still get the card). A working card is named with its driver
+    ("NVIDIA GeForce RTX 3090 (driver 595.99.02, in use)") on the app page, Settings, `harbor inspect` and `harbor
+    gpu`; the review and plan lines carry no version next to a working card (the reboot problem names both). While a
+    reboot is pending, an app whose runtime file still hands it the NVIDIA card reads "(in use)" until a Restart.
   - **NVIDIA usable**: `docker info` lists the `nvidia` runtime (new `DockerAdapter.info()`; it only shows after a
     Docker restart with the toolkit installed), **or** an executable `nvidia-container-runtime-hook` in /usr/bin,
     /usr/local/bin or /usr/sbin that was installed before dockerd started. Docker's built-in NVIDIA device request

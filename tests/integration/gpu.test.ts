@@ -184,4 +184,57 @@ describe('the gpu permission (decision 179)', () => {
     expect(op.events.map((e) => e.message).join('\n')).toMatch(/Docker has not restarted since the NVIDIA container toolkit was installed: web runs on the CPU until then \(Restart Docker/);
     expect((await detail(app.id)).gpu).toEqual({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_DOCKER_RESTART_NEEDED', inUse: false });
   });
+
+  it('decision 181: each blocking driver problem reaches the app page and the machine facts, renders no device request, and names the step', async () => {
+    const cases = [
+      { facts: { kind: 'none' as const, detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' as const }, step: /the NVIDIA driver is not running: web runs on the CPU until then \(Install the NVIDIA driver \(sudo ubuntu-drivers install\), then restart the machine\)/ },
+      // installed, not loaded (not rebooted since, or Secure Boot): no install advice
+      { facts: { kind: 'none' as const, detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' as const, libraryVersion: '595.99.02' }, step: /the NVIDIA driver is installed but not running: web runs on the CPU until then \(Restart the machine to load it; if it still does not run, Secure Boot may be blocking it/ },
+      { facts: { kind: 'none' as const, detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_REBOOT_NEEDED' as const, driverVersion: '550.163.01', libraryVersion: '595.99.02' }, step: /the machine has not restarted since the NVIDIA driver update \(595\.99\.02 installed, 550\.163\.01 running\).*\(Restart the machine to finish the NVIDIA driver update\)/ },
+    ];
+    for (const { facts, step } of cases) {
+      gpu.facts = facts;
+      const { op } = await h.api.run({ kind: 'restart', instanceId: app.id });
+      expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+      const web = runtime(app.id).services.web;
+      expect(web.deploy).toBeUndefined();
+      expect(web.devices).toBeUndefined();
+      expect(op.events.map((e) => e.message).join('\n')).toMatch(step);
+      expect((await detail(app.id)).gpu).toEqual({ ...facts, inUse: false });
+      expect((await h.api.expect<SystemHostDto>(200, 'GET', '/v1/system/host')).gpu).toEqual(facts);
+    }
+    // a working driver: the version rides the DTOs of a usable card, and Restart hands it over
+    gpu.facts = { kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '595.99.02', libraryVersion: '595.99.02' };
+    const { op } = await h.api.run({ kind: 'restart', instanceId: app.id });
+    expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+    expect(runtime(app.id).services.web.deploy.resources.reservations.devices[0].driver).toBe('nvidia');
+    expect((await detail(app.id)).gpu).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '595.99.02', libraryVersion: '595.99.02', inUse: true });
+    const plan = await h.api.plan({ kind: 'install', packageId: 'llm-two' });
+    expect(plan.gpu).toEqual({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '595.99.02', libraryVersion: '595.99.02' });
+  });
+
+  it('decision 181: a driver update waiting for a reboot leaves the running containers on the card until a Restart re-renders them', async () => {
+    gpu.facts = { kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090', driverVersion: '550.163.01', libraryVersion: '550.163.01' };
+    expect((await h.api.run({ kind: 'restart', instanceId: app.id })).op.state).toBe('succeeded');
+    expect(runtime(app.id).services.web.deploy.resources.reservations.devices[0].driver).toBe('nvidia');
+    // apt installs 595 overnight: the old module still runs and the containers keep the card
+    const reboot = { kind: 'none' as const, detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_REBOOT_NEEDED' as const, driverVersion: '550.163.01', libraryVersion: '595.99.02' };
+    gpu.facts = reboot;
+    expect((await detail(app.id)).gpu).toEqual({ ...reboot, inUse: true });
+    // a Restart before the reboot cannot hand it over again
+    expect((await h.api.run({ kind: 'restart', instanceId: app.id })).op.state).toBe('succeeded');
+    expect(runtime(app.id).services.web.deploy).toBeUndefined();
+    expect((await detail(app.id)).gpu).toEqual({ ...reboot, inUse: false });
+  });
+
+  it('decision 181: a driver older than 525 is a note: the card is still handed over (CUDA 11 images, NVENC)', async () => {
+    const old = { kind: 'nvidia' as const, detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_DRIVER_TOO_OLD' as const, driverVersion: '470.256.02', libraryVersion: '470.256.02' };
+    gpu.facts = old;
+    const { op } = await h.api.run({ kind: 'restart', instanceId: app.id });
+    expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+    expect(runtime(app.id).services.web.deploy.resources.reservations.devices[0].driver).toBe('nvidia');
+    expect(op.events.map((e) => e.message).join('\n')).toMatch(/Use the NVIDIA GeForce RTX 3090 \(GPU\) for web \(but the NVIDIA driver is older than 525, so apps built on CUDA 12 or newer \(like Ollama\) cannot use the card: To run them, update the NVIDIA driver to 525 or newer/);
+    expect((await detail(app.id)).gpu).toEqual({ ...old, inUse: true });
+    expect((await h.api.expect<SystemHostDto>(200, 'GET', '/v1/system/host')).gpu).toEqual(old);
+  });
 });

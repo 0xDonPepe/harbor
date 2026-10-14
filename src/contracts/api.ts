@@ -47,10 +47,18 @@ export interface PermissionDto {
 // use it until the operator installs the NVIDIA container toolkit; NVIDIA_DOCKER_RESTART_NEEDED = the toolkit is
 // installed, but Docker has not restarted since. With kind dri, the problem is about an NVIDIA card next to the
 // Intel/AMD graphics the app uses.
+// Decision 181 (0.34.1, checked first; Harbor never installs drivers): NVIDIA_DRIVER_MISSING = an NVIDIA card is on
+// the PCI bus (not one bound to vfio-pci/pci-stub for a VM) but no NVIDIA driver runs (libraryVersion present: its
+// files are installed, it is not loaded); NVIDIA_REBOOT_NEEDED = the running driver's (driverVersion) libraries are
+// gone and another version (libraryVersion) is installed: the machine has not restarted since the update;
+// NVIDIA_DRIVER_TOO_OLD = a NOTE with kind nvidia (the card is handed over): the running driver is older than 525, so
+// CUDA 12 images cannot use it. driverVersion / libraryVersion: absent when unknown (and from daemons before 0.34.1).
 export interface GpuDto {
   kind: 'nvidia' | 'dri' | 'none';
   detail: string;
-  problem?: 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED';
+  problem?: 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED' | 'NVIDIA_DRIVER_MISSING' | 'NVIDIA_REBOOT_NEEDED' | 'NVIDIA_DRIVER_TOO_OLD';
+  driverVersion?: string;
+  libraryVersion?: string;
 }
 
 // Decision 180: a setting the operator can change (not a secret: values appear in plans, events and logs).
@@ -287,7 +295,8 @@ export interface InstanceDetail extends InstanceSummary {
   lastError: { code: string; message: string; nextAction: string } | null;
   // decision 179: for an app whose package grants gpu: what this machine offers now, and whether the app's
   // current Compose file hands THAT card to its containers (false = found after it last started, or it runs with a
-  // different one: Restart uses the one found now)
+  // different one: Restart uses the one found now). Decision 181: also true with kind none + NVIDIA_REBOOT_NEEDED when
+  // the containers still have the NVIDIA card from before the driver update (a Restart before the reboot drops it)
   gpu?: GpuDto & { inUse: boolean };
 }
 

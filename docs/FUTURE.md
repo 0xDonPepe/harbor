@@ -137,6 +137,13 @@ refused while an app uses the drive). What remains future: **partition, LUKS, SM
   different cards to different apps.
 - **Sharing limits** (memory or time slices per app); NVIDIA MIG/MPS.
 - **Installing the NVIDIA container toolkit from Harbor** (`harbor-bootstrap --with-nvidia`), see docs/TODO.md.
+- **A per-package minimum NVIDIA driver** (decision 181): an optional field for images that need CUDA 12 or newer, so
+  their review says "this app cannot use the card" instead of the generic below-525 note. Until then the note is
+  engine-wide and the card is still handed over.
+- **Installing, updating or removing the NVIDIA driver: never** (decision 181). Harbor only checks it (no driver
+  running, an update waiting for a reboot, older than 525) and names `sudo ubuntu-drivers install` + a restart: drivers
+  are kernel modules (DKMS, Secure Boot keys, reboots) and the card may drive the desktop. Even a future
+  `--with-nvidia` would install the container toolkit only, never a driver.
 
 ## App settings: later (recorded 2026-10-14, after decision 180)
 

@@ -5,6 +5,7 @@ import type {
   DomainsDto,
   EndpointDto,
   ExposureDto,
+  GpuDto,
   HostStorageDto,
   InstanceSummary,
   NotificationChannelDto,
@@ -386,6 +387,24 @@ export function mockMetrics(): SystemMetricsDto {
   };
 }
 
+// The mock machine's graphics card (decisions 179, 181). Preview switches: ?gpu=driver-missing | reboot-needed |
+// driver-too-old | toolkit-missing | restart-needed | dri | none (default: a working NVIDIA card)
+const RTX = 'NVIDIA GeForce RTX 3090';
+const MOCK_GPUS: Record<string, GpuDto> = {
+  nvidia: { kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' },
+  'driver-missing': { kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' },
+  'reboot-needed': { kind: 'none', detail: RTX, problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' },
+  'driver-too-old': { kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD', driverVersion: '470.256.02', libraryVersion: '470.256.02' },
+  'toolkit-missing': { kind: 'none', detail: RTX, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '595.99.02', libraryVersion: '595.99.02' },
+  'restart-needed': { kind: 'none', detail: RTX, problem: 'NVIDIA_DOCKER_RESTART_NEEDED', driverVersion: '595.99.02', libraryVersion: '595.99.02' },
+  dri: { kind: 'dri', detail: 'Intel graphics' },
+  none: { kind: 'none', detail: 'No graphics card found' },
+};
+export function mockGpu(): GpuDto {
+  const m = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('gpu') : null;
+  return MOCK_GPUS[m ?? 'nvidia'] ?? MOCK_GPUS['nvidia']!;
+}
+
 export function mockHost(): SystemHostDto {
   return {
     hostname: 'harbor',
@@ -393,7 +412,7 @@ export function mockHost(): SystemHostDto {
     arch: 'x64',
     cpuModel: 'Intel Core i7 (mock)',
     power: { available: true, note: null },
-    gpu: { kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090' },
+    gpu: mockGpu(),
   };
 }
 

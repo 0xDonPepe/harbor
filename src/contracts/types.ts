@@ -73,10 +73,17 @@ export type ManifestPermission = 'net-admin' | 'tun' | 'ip-forwarding' | 'gpu';
 // problem (informational): NVIDIA_TOOLKIT_MISSING = an NVIDIA card is present, but the NVIDIA container toolkit is
 // not installed; NVIDIA_DOCKER_RESTART_NEEDED = the toolkit is installed, but Docker has not restarted since, so it
 // cannot hand the card over yet.
-export type GpuProblem = 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED';
+// Decision 181 (0.34.1; checked before the toolkit, read-only: Harbor never installs drivers):
+// NVIDIA_DRIVER_MISSING = an NVIDIA card is on the PCI bus (not bound to vfio-pci/pci-stub) but no NVIDIA driver runs;
+// NVIDIA_REBOOT_NEEDED = the running driver's (driverVersion) libraries are gone and another version (libraryVersion)
+// is installed: apt updated it, the machine has not restarted since; NVIDIA_DRIVER_TOO_OLD = a note on a usable card
+// (kind nvidia): the running driver is older than 525, so images built on CUDA 12 or newer cannot use it.
+export type GpuProblem = 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED' | 'NVIDIA_DRIVER_MISSING' | 'NVIDIA_REBOOT_NEEDED' | 'NVIDIA_DRIVER_TOO_OLD';
 export interface HostGpu {
   kind: 'nvidia' | 'dri' | 'none';
   problem?: GpuProblem;
+  driverVersion?: string; // decision 181: the running NVIDIA kernel module, e.g. 595.99.02
+  libraryVersion?: string; // decision 181: the installed NVIDIA userspace driver (libnvidia-ml.so.<version>): the running one's when installed, else the newest
   renderNode?: string; // dri: the render node's name, e.g. renderD128
   renderGid?: number;
   detail: string; // "NVIDIA GeForce RTX 3090", "Intel graphics", "No graphics card found"

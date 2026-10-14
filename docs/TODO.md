@@ -71,7 +71,7 @@ plaintext on disk.
 - [ ] **`harbor-bootstrap --with-nvidia`** (asked with decision 179): install the NVIDIA container toolkit for the
       operator (NVIDIA's apt repository + key, `nvidia-container-toolkit`, `nvidia-ctk runtime configure`, a Docker
       restart that restarts every app). Needs its own decision: it adds a third-party repository and OS packages as root.
-      Until then the Operator Guide (GPU) lists the commands.
+      Until then the Operator Guide (GPU) lists the commands. Drivers stay out of it: Harbor only checks them (decision 181).
 - [ ] **A package way to keep one file an app writes outside its volumes** (found with the AnythingLLM Ollama link,
       2026-10-14): AnythingLLM saves its provider choices and API keys in `/app/server/.env` inside the image, so every
       container recreate (a link set later, Restart, update) resets them; upstream bind-mounts the file. Harbor's

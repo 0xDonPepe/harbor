@@ -2812,9 +2812,12 @@ export class ApplicationService {
     if (!services.length) return undefined;
     const model = readRuntimeModel(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'runtime'));
     const found = await this.ctx.gpu.detect();
-    // in use = the containers have the card found NOW (one rendered with another kind needs a Restart to switch)
+    // in use = the containers have the card found NOW (one rendered with another kind needs a Restart to switch).
+    // Decision 181: a driver update waiting for a reboot leaves containers created before it on the NVIDIA card (the
+    // old module still runs, their libraries stay mounted), so with kind none they still count as using it.
     const rendered = gpuFromRendered(model, services).kind;
-    return { ...gpuDto(found), inUse: found.kind !== 'none' && rendered === found.kind };
+    const keepsNvidia = found.kind === 'none' && found.problem === 'NVIDIA_REBOOT_NEEDED' && rendered === 'nvidia';
+    return { ...gpuDto(found), inUse: (found.kind !== 'none' && rendered === found.kind) || keepsNvidia };
   }
 
   // plan lines for fixed ports and permissions (decision 163)

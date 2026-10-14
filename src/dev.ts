@@ -71,7 +71,7 @@ if (!existsSync(path.join(stateDir, 'harbor.db'))) {
   }
 }
 
-// decision 179: HARBOR_DEV_GPU=nvidia|dri|toolkit-missing|none picks the fake machine's graphics card (fake mode only)
+// decisions 179, 181: HARBOR_DEV_GPU picks the fake machine's graphics card (fake mode only; values: devGpu in src/system/gpu.ts)
 const daemon = await startDaemon(config, socket ? {} : { gpu: devGpu(process.env['HARBOR_DEV_GPU']) });
 console.error(`[dev] ${daemon.url}  docker=${daemon.ctx.docker.description}  ui=${config.uiDir ?? '(not built; run pnpm build:web)'}`);
 const stop = () => void daemon.close().then(() => process.exit(0));

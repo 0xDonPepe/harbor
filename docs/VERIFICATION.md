@@ -803,6 +803,23 @@ Gate: lint, typecheck, unit 552 (+2 skipped), integration 328 + 3 skipped, e2e 4
 **Verified live on harbor-old** (same run): six Ollama settings reached the container env at install; `configure --set context-length=16384 --set keep-alive=30m` stored overrides only, re-rendered with the GPU and the link alias kept, `ollama ps` showed context 16384 / 29 min; out-of-choice and out-of-range values refused with `SETTING_INVALID`. Not covered live: the console forms (e2e only).
 
 
+## 3q. Read-only NVIDIA driver checks (2026-10-14, Harbor 0.34.1, decision 181)
+
+| What | Evidence |
+|---|---|
+| Card without a driver | unit `gpu.test.ts`, fake host roots: an NVIDIA VGA controller (class 0x030000) or 3D controller (0x030200) under `/sys/bus/pci/devices` with no `/proc/driver/nvidia/version` = none + `NVIDIA_DRIVER_MISSING`, "NVIDIA graphics card", also with the toolkit registered, bound to nouveau, and with the libraries installed (never "reboot"; worded "installed but not running" with the restart / Secure Boot step, never the install advice); a card bound to `vfio-pci` or `pci-stub` (handed to a VM) = no card, a second unbound one still counts; the HDMI audio function (0x0403) and other vendors alone = no card |
+| Versions | unit: `parseNvidiaDriverVersion` reads the proprietary ("Kernel Module  550.163.01"), open x86_64 ("Open Kernel Module for x86_64  595.99.02") and aarch64 wording; every installed `libnvidia-ml.so.<v>` is read (numeric order: 595.100.1 > 595.99.02), also from /usr/lib64; `libraryVersion` = the running one's when installed, else the newest |
+| Reboot / too old | unit: running 550 with only 595 installed = `NVIDIA_REBOOT_NEEDED`; running 595.99.02 with its library next to 610.1.1 or 550 = usable, no reboot claim; installed version unknown = no reboot claim (usable with the toolkit); 470 with the toolkit = `kind: nvidia` + the `NVIDIA_DRIVER_TOO_OLD` note (still handed over); 525.60.13 usable with no note |
+| Order | unit: no driver before reboot; reboot before too old (470 running, 595 installed); too old without the toolkit = `NVIDIA_TOOLKIT_MISSING`; a working driver then `NVIDIA_TOOLKIT_MISSING` with both versions; Intel graphics next to a blocking driver problem = dri + that problem, next to a too-old usable card = nvidia + the note |
+| Wording | unit: plan lines, `harbor gpu`/plan GPU fact ("(driver 595.99.02, ready for apps)"), `harbor inspect` ("(driver 595.99.02, in use)"), console machine/app/review text for each new problem and with unknown versions; no version next to a working card, the reboot problem names both versions; a pending reboot with the device request still rendered = "(in use), but the machine has not restarted…" |
+| End to end (fake engine) | integration `gpu.test.ts`: each blocking driver problem (missing, installed but not loaded, reboot) reaches `InstanceDetail.gpu` and `GET /v1/system/host` with its versions, a Restart renders no device request and its event names the step; a usable card with a driver version renders the NVIDIA device request, `inUse: true`, and the install plan's `gpu` carries the versions; a reboot pending after the card was handed over = `inUse: true` until a Restart re-renders without it; a 470 driver keeps the device request, with the note in the Restart event |
+| Console | e2e decision 179 (fake NVIDIA machine, driver 595.99.02): the drawer shows *NVIDIA GeForce RTX 3090 (driver 595.99.02, in use)*, Settings → Overview *… (driver 595.99.02)*; the review still reads *This machine has an NVIDIA GeForce RTX 3090: the app uses it.* |
+
+Gate: lint, typecheck, unit 568 (+2 skipped), integration 331 + 3 skipped, e2e 41, catalog verify/hash (fixtures), openapi current (no new route).
+**Live (to be filled by the orchestrator):** harbor-old healthy state shows the driver version — `harbor gpu`,
+`harbor gpu --json` (`driverVersion` = `libraryVersion` = 595.99.02), the app page. The three problem states are
+not reproduced live (they need a driver removed, an unrebooted update or a pre-525 driver).
+
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed
 
 Bootstrap #1 on the fresh VM passed (Docker 29.8.0 / Compose 5.5.1 installed, all listeners loopback-only, CLI login).

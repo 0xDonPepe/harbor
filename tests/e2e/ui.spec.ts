@@ -1333,7 +1333,7 @@ ui:
 });
 
 test('decision 179: an app that asks for the graphics card: the review names the card and Install waits for the box; the app page and Settings show it', async ({ page }) => {
-  // the e2e daemon's fake machine has an NVIDIA card with the toolkit (HARBOR_DEV_GPU=nvidia in playwright.config.ts)
+  // the e2e daemon's fake machine has an NVIDIA card (driver 595.99.02) with the toolkit (HARBOR_DEV_GPU=nvidia in playwright.config.ts)
   const { writeZip } = await import('../../src/packages/zip.js');
   const manifest = `apiVersion: harbor/v1alpha1
 kind: Application
@@ -1391,11 +1391,12 @@ ui:
   await page.getByRole('button', { name: 'Details of gpu-e2e', exact: true }).click();
   const drawer = page.getByRole('dialog');
   await expect(drawer.getByRole('heading', { name: 'Graphics card', exact: true })).toBeVisible();
-  await expect(drawer).toContainText('NVIDIA GeForce RTX 3090 (in use)');
+  // decision 181: a working NVIDIA card is named with its running driver (the review above stays short)
+  await expect(drawer).toContainText('NVIDIA GeForce RTX 3090 (driver 595.99.02, in use)');
   await drawer.getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.locator('.device-facts')).toContainText('Graphics card');
-  await expect(page.locator('.device-facts')).toContainText('NVIDIA GeForce RTX 3090');
+  await expect(page.locator('.device-facts')).toContainText('NVIDIA GeForce RTX 3090 (driver 595.99.02)');
 });
 
 test('decision 180: app settings: the install review has Options; the app page lists Settings and Change… goes through a plan', async ({ page }) => {

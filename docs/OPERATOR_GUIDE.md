@@ -767,7 +767,10 @@ says what the app gets:
 
 | This machine has | The app gets | The review / app page says |
 |---|---|---|
-| An NVIDIA card **and** the NVIDIA container toolkit | the card (all NVIDIA cards, for computing: CUDA and `nvidia-smi`) | "Use the NVIDIA GeForce RTX 3090 (GPU)…", *Graphics card: … (in use)* |
+| An NVIDIA card **and** the NVIDIA container toolkit | the card (all NVIDIA cards, for computing: CUDA and `nvidia-smi`) | "Use the NVIDIA GeForce RTX 3090 (GPU)…", *Graphics card: … (driver 595.99.02, in use)* |
+| An NVIDIA card with **no driver** running | nothing yet: it runs on the CPU | "…the NVIDIA driver is not running…" (since 0.34.1) |
+| An NVIDIA driver **updated but not rebooted** | nothing new: an app already on the card keeps it until it restarts, others run on the CPU | "…the machine has not restarted since the NVIDIA driver update (… installed, … running)…" (since 0.34.1) |
+| An NVIDIA driver **older than 525**, with the toolkit | the card, with a note: apps built on CUDA 12 or newer (like Ollama) cannot use it | "…the NVIDIA driver is older than 525…" (since 0.34.1) |
 | Intel or AMD graphics | its render device only (`/dev/dri/renderD…`), not the display | "Use Intel graphics…" |
 | An NVIDIA card **without** the toolkit | nothing yet: it runs on the CPU | "…the NVIDIA container toolkit is not installed…" |
 | An NVIDIA card, the toolkit installed, Docker **not restarted** since | nothing yet: it runs on the CPU | "…Docker has not restarted since the NVIDIA container toolkit was installed…" |
@@ -780,9 +783,35 @@ without a card: a card added later is then used without a new question. *Setting
 question (*Settings → Storage → Adopt…*: tick *Allow … to do this*; CLI: `harbor adopt <home> --accept-permissions`;
 `harbor found-apps` lists the permissions).
 
-**NVIDIA: install the container toolkit once** (Ubuntu 24.04; the NVIDIA driver itself must already work, check
-with `nvidia-smi`). Harbor does not do this for you: it adds NVIDIA's package repository and restarts Docker, which
-restarts every app.
+**Drivers: Harbor checks, you install** (decision 181). Harbor never installs, updates or removes the NVIDIA
+driver: it is part of the operating system (kernel modules rebuilt for every kernel, Secure Boot keys, a reboot), and
+the card may also drive this machine's screen. It only reads what is there and says what to do, in this order:
+
+- *the NVIDIA driver is not running*: the card is in the machine but no driver is loaded. Install Ubuntu's
+  recommended one with `sudo ubuntu-drivers install`, then restart the machine. With Secure Boot on, Ubuntu asks
+  you to set a password for the driver's key during the install and to enroll it (*Enroll MOK*) on the blue screen
+  at the next boot; skip that and the driver stays blocked.
+- *the NVIDIA driver is installed but not running*: its files are there, its kernel module is not loaded. Restart
+  the machine. If it still says so, Secure Boot is likely refusing the module: enroll its key (`sudo
+  update-secureboot-policy --enroll-key`, then *Enroll MOK* at the next boot) or switch to Ubuntu's signed prebuilt
+  modules (`sudo ubuntu-drivers install` picks them where they exist).
+- A card handed to a virtual machine (bound to `vfio-pci` or `pci-stub`) is not this machine's: Harbor does not
+  count it and gives no driver advice for it.
+- *the machine has not restarted since the NVIDIA driver update*: apt installed a newer driver while the old one
+  still runs (`nvidia-smi` says "Driver/library version mismatch"). Restart the machine. Until then an app already
+  on the card keeps it (its page says *in use*); restarting that app first moves it to the CPU until the reboot.
+- *the NVIDIA driver is older than 525*: a note, not a block. Apps still get the card (CUDA 11 images and video
+  transcoding work on older drivers), but apps built on CUDA 12 or newer, like Ollama, cannot use it. If the card
+  supports it, run `sudo ubuntu-drivers install` (or install a newer `nvidia-driver-<version>` package), then
+  restart the machine. Some older cards (Kepler) stop at driver 470.
+
+Check the driver with `nvidia-smi`: it names the card and the driver version. *Settings → Overview → Graphics card*
+and `harbor gpu` show the version Harbor found (`harbor gpu --json` also has the installed one, `libraryVersion`).
+After the machine restarts, Docker restarts every app with the containers it had; restart an app that should use
+the card (app page → Restart) once its page says *found · restart the app to use it*.
+
+**NVIDIA: install the container toolkit once** (Ubuntu 24.04; the driver must already work, see above). Harbor does
+not do this for you: it adds NVIDIA's package repository and restarts Docker, which restarts every app.
 
 ```sh
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg

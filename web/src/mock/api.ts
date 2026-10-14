@@ -189,7 +189,7 @@ const detailFor = (inst: InstanceSummary): InstanceDetail => ({
   resources: [],
   events: [],
   lastError: null,
-  ...(GPU_APPS.has(inst.packageId) ? { gpu: { ...mockHost().gpu!, inUse: true } } : {}),
+  ...(GPU_APPS.has(inst.packageId) ? { gpu: { ...mockHost().gpu!, inUse: mockHost().gpu!.kind !== 'none' } } : {}),
 });
 
 // Backups (decisions 149–154): two places, one app on, a week of restore points.

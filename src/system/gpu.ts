@@ -1,9 +1,13 @@
 // Decision 179: which graphics card this machine can hand to an app that asks for `gpu`. Read-only host facts
-// (files under /proc, /dev, /sys, /run and Docker's registered runtimes); the planner gets them as an input.
-// Every path is under `root` so tests use a fake host tree. Never throws.
+// (files under /proc, /dev, /sys, /run, /usr/lib and Docker's registered runtimes); the planner gets them as an
+// input. Every path is under `root` so tests use a fake host tree. Never throws.
+// Decision 181: the NVIDIA driver is only CHECKED (on the PCI bus but not loaded, updated but not rebooted, too
+// old: a note, the card is still handed over). Harbor never installs, updates or removes a driver: that is the OS's (kernel modules, DKMS, Secure Boot,
+// reboots, and the card may drive the desktop).
 import { accessSync, constants, existsSync, readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import path from 'node:path';
-import type { HostGpu } from '../contracts/types.js';
+import type { GpuProblem, HostGpu } from '../contracts/types.js';
+import { NVIDIA_DRIVER_MIN_MAJOR } from '../planner/gpu.js';
 
 export interface GpuObserver {
   // fresh facts (cached ~30 s so plan creation stays cheap)
@@ -24,6 +28,85 @@ export const NO_GPU: HostGpu = { kind: 'none', detail: 'No graphics card found' 
 // without the toolkit it gives a container nothing it can compute on.
 const DRI_DRIVERS: Readonly<Record<string, string>> = { i915: 'Intel graphics', xe: 'Intel graphics', amdgpu: 'AMD graphics', radeon: 'AMD graphics' };
 const HOOK_DIRS = ['usr/bin', 'usr/local/bin', 'usr/sbin'];
+// Where the driver's userspace libraries live (Ubuntu/Debian x86-64 and arm64, Fedora/RHEL)
+const NVML_DIRS = ['usr/lib/x86_64-linux-gnu', 'usr/lib64', 'usr/lib/aarch64-linux-gnu'];
+
+// The kernel module's version from /proc/driver/nvidia/version, both wordings:
+//   "NVRM version: NVIDIA UNIX x86_64 Kernel Module  550.163.01  Tue Apr  8 …"
+//   "NVRM version: NVIDIA UNIX Open Kernel Module for x86_64  595.99.02  Release Build  …"
+export function parseNvidiaDriverVersion(text: string): string | null {
+  const m = /^NVRM version:.*?Kernel Module(?: for [\w-]+)?\s+(\d+\.\d+(?:\.\d+)?)\b/m.exec(text);
+  return m ? m[1]! : null;
+}
+
+const versionParts = (v: string): number[] => v.split('.').map(Number);
+function compareVersions(a: string, b: string): number {
+  const x = versionParts(a);
+  const y = versionParts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+// Every installed userspace driver version (libnvidia-ml.so.<version>), oldest first. Several can sit side by side
+// (a .run install apt later replaced, a hand-copied library): the toolkit picks the one matching the running module.
+function nvidiaLibraryVersions(root: string): string[] {
+  const found = new Set<string>();
+  for (const d of NVML_DIRS) {
+    let names: string[];
+    try {
+      names = readdirSync(path.join(root, d));
+    } catch {
+      continue;
+    }
+    for (const n of names) {
+      const m = /^libnvidia-ml\.so\.(\d+\.\d+(?:\.\d+)?)$/.exec(n);
+      if (m) found.add(m[1]!);
+    }
+  }
+  return [...found].sort(compareVersions);
+}
+
+// Drivers that hold a card for a virtual machine (GPU passthrough): such a card is not this machine's to use
+const PASSTHROUGH_DRIVERS = new Set(['vfio-pci', 'pci-stub']);
+
+// An NVIDIA display (0x0300) or 3D (0x0302) controller on the PCI bus, driver loaded or not (its audio function and
+// bridges do not count, nor a card handed to a virtual machine: bound to vfio-pci or pci-stub)
+function nvidiaOnPci(root: string): boolean {
+  const dir = path.join(root, 'sys/bus/pci/devices');
+  let devices: string[];
+  try {
+    devices = readdirSync(dir);
+  } catch {
+    return false;
+  }
+  return devices.some((d) => {
+    try {
+      const vendor = readFileSync(path.join(dir, d, 'vendor'), 'utf8').trim().toLowerCase();
+      const cls = readFileSync(path.join(dir, d, 'class'), 'utf8').trim().toLowerCase();
+      if (vendor !== '0x10de' || !(cls.startsWith('0x0300') || cls.startsWith('0x0302'))) return false;
+    } catch {
+      return false;
+    }
+    let bound: string | null = null;
+    try {
+      bound = path.basename(readlinkSync(path.join(dir, d, 'driver')));
+    } catch {
+      /* no driver bound (or nouveau's link unreadable): counts */
+    }
+    return bound === null || !PASSTHROUGH_DRIVERS.has(bound);
+  });
+}
+
+function readOrNull(file: string): string | null {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+}
 
 function nvidiaName(root: string): string {
   const dir = path.join(root, 'proc/driver/nvidia/gpus');
@@ -114,11 +197,32 @@ function driNode(root: string): { node: string; detail: string; renderGid: numbe
 export async function detectGpu(probe: GpuProbe): Promise<HostGpu> {
   try {
     const { root } = probe;
-    const nvidia = existsSync(path.join(root, 'proc/driver/nvidia/version')) || existsSync(path.join(root, 'dev/nvidia0'));
+    const versionPath = path.join(root, 'proc/driver/nvidia/version');
+    const loaded = existsSync(versionPath); // the kernel module is running
+    const onPci = nvidiaOnPci(root);
+    const nvidia = loaded || existsSync(path.join(root, 'dev/nvidia0')) || onPci;
     const dri = driNode(root);
     // only the render node and its group (never card<N> or the video group: no display or modesetting access)
     const driFacts = (): HostGpu => ({ kind: 'dri', detail: dri!.detail, renderNode: dri!.node, renderGid: dri!.renderGid });
     if (nvidia) {
+      const versionFile = loaded ? readOrNull(versionPath) : null;
+      const driverVersion = versionFile !== null ? parseNvidiaDriverVersion(versionFile) : null;
+      const installed = nvidiaLibraryVersions(root);
+      // the running driver's own userspace when it is installed (the toolkit uses that one), else the newest
+      const libraryVersion = driverVersion && installed.includes(driverVersion) ? driverVersion : (installed.at(-1) ?? null);
+      const versions = { ...(driverVersion ? { driverVersion } : {}), ...(libraryVersion ? { libraryVersion } : {}) };
+      // an NVIDIA card Docker cannot hand over: the app uses Intel/AMD graphics when there are some, else the CPU
+      const blocked = (problem: GpuProblem, detail: string): HostGpu => (dri ? { ...driFacts(), problem, ...versions } : { kind: 'none', detail, problem, ...versions });
+      // Decision 181, driver checks first (the toolkit cannot help without a working driver):
+      // on the PCI bus with no kernel module loaded (not installed, not rebooted since, or blocked, e.g. by Secure Boot)
+      if (onPci && !loaded) return blocked('NVIDIA_DRIVER_MISSING', 'NVIDIA graphics card');
+      const name = nvidiaName(root);
+      // apt updated the driver and deleted the running module's userspace; the old module still runs. Only claimed when
+      // the running version is known and its library is gone (an extra, newer library next to it is not a reboot).
+      if (driverVersion && installed.length && !installed.includes(driverVersion)) return blocked('NVIDIA_REBOOT_NEEDED', name);
+      // older than CUDA 12 needs: still handed over (CUDA 11 images, NVENC/NVDEC work), with a note
+      const tooOld = driverVersion !== null && versionParts(driverVersion)[0]! < NVIDIA_DRIVER_MIN_MAJOR;
+      const usable = (): HostGpu => ({ kind: 'nvidia', detail: name, ...(tooOld ? { problem: 'NVIDIA_DRIVER_TOO_OLD' as const } : {}), ...versions });
       let runtimes: string[] = [];
       try {
         runtimes = await probe.runtimes();
@@ -127,12 +231,10 @@ export async function detectGpu(probe: GpuProbe): Promise<HostGpu> {
       }
       // A registered `nvidia` runtime only shows after a Docker restart with the toolkit installed, so the device
       // driver is registered too. Else the hook counts only when dockerd started after it was installed.
-      if (runtimes.includes('nvidia')) return { kind: 'nvidia', detail: nvidiaName(root) };
+      if (runtimes.includes('nvidia')) return usable();
       const hook = hookPath(root);
-      if (hook && hookUsable(root, hook)) return { kind: 'nvidia', detail: nvidiaName(root) };
-      const problem = hook ? 'NVIDIA_DOCKER_RESTART_NEEDED' : 'NVIDIA_TOOLKIT_MISSING';
-      if (dri) return { ...driFacts(), problem };
-      return { kind: 'none', detail: nvidiaName(root), problem };
+      if (hook && hookUsable(root, hook)) return usable();
+      return blocked(hook ? 'NVIDIA_DOCKER_RESTART_NEEDED' : 'NVIDIA_TOOLKIT_MISSING', name);
     }
     if (dri) return driFacts();
     return NO_GPU;
@@ -174,20 +276,27 @@ export class FakeGpu implements GpuObserver {
   }
 }
 
-// `pnpm dev` / e2e: HARBOR_DEV_GPU=nvidia|dri|dri-toolkit-missing|toolkit-missing|restart-needed|none picks what the
-// fake machine has
+// `pnpm dev` / e2e: HARBOR_DEV_GPU picks what the fake machine has: nvidia | dri | dri-toolkit-missing |
+// toolkit-missing | restart-needed | driver-missing | reboot-needed | driver-too-old | none (the default)
 export function devGpu(kind: string | undefined): FakeGpu {
+  const RTX = 'NVIDIA GeForce RTX 3090';
   switch (kind) {
     case 'nvidia':
-      return new FakeGpu({ kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090' });
+      return new FakeGpu({ kind: 'nvidia', detail: RTX, driverVersion: '595.99.02', libraryVersion: '595.99.02' });
     case 'dri':
       return new FakeGpu({ kind: 'dri', detail: 'Intel graphics', renderNode: 'renderD128', renderGid: 992 });
     case 'dri-toolkit-missing':
-      return new FakeGpu({ kind: 'dri', detail: 'Intel graphics', renderNode: 'renderD128', renderGid: 992, problem: 'NVIDIA_TOOLKIT_MISSING' });
+      return new FakeGpu({ kind: 'dri', detail: 'Intel graphics', renderNode: 'renderD128', renderGid: 992, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '595.99.02' });
     case 'toolkit-missing':
-      return new FakeGpu({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_TOOLKIT_MISSING' });
+      return new FakeGpu({ kind: 'none', detail: RTX, problem: 'NVIDIA_TOOLKIT_MISSING', driverVersion: '595.99.02' });
     case 'restart-needed':
-      return new FakeGpu({ kind: 'none', detail: 'NVIDIA GeForce RTX 3090', problem: 'NVIDIA_DOCKER_RESTART_NEEDED' });
+      return new FakeGpu({ kind: 'none', detail: RTX, problem: 'NVIDIA_DOCKER_RESTART_NEEDED', driverVersion: '595.99.02' });
+    case 'driver-missing':
+      return new FakeGpu({ kind: 'none', detail: 'NVIDIA graphics card', problem: 'NVIDIA_DRIVER_MISSING' });
+    case 'reboot-needed':
+      return new FakeGpu({ kind: 'none', detail: RTX, problem: 'NVIDIA_REBOOT_NEEDED', driverVersion: '550.163.01', libraryVersion: '595.99.02' });
+    case 'driver-too-old':
+      return new FakeGpu({ kind: 'nvidia', detail: RTX, problem: 'NVIDIA_DRIVER_TOO_OLD', driverVersion: '470.256.02', libraryVersion: '470.256.02' });
     default:
       return new FakeGpu();
   }

@@ -42,6 +42,8 @@ export default defineConfig({
         // Catalog checks on, pointed at a closed loopback port: Store → Check for new apps fails and says why.
         // (The setup daemon below keeps catalog updates off.)
         HARBOR_DEV_CATALOG_URL: 'http://127.0.0.1:9/',
+        // decision 179: the fake machine has an NVIDIA card with the container toolkit installed
+        HARBOR_DEV_GPU: 'nvidia',
         // Fake removable hardware: macOS/CI have no lsblk, so inject one
         // unmounted USB stick for the Mount/Eject click test below.
         HARBOR_DEVICES_JSON: JSON.stringify({

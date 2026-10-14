@@ -127,3 +127,23 @@ refused while an app uses the drive). What remains future: **partition, LUKS, SM
 - **Backing up operator folders** (bind claims) opt-in per claim, read-only, never restored over.
 - **A local staging pass** while an app is paused, then shipping to every place after it runs again —
   only if several slow places ever make the pause too long.
+
+## Graphics cards: later (recorded 2026-10-13, after decision 179)
+
+- **AMD ROCm.** Ollama's AMD build needs `/dev/kfd` + `/dev/dri` and a different image (`ollama/ollama:rocm`). The image is
+  the package's choice, so this needs per-host image variants in the package format (an image per GPU kind) before
+  Harbor can render it. Intel/AMD graphics through `/dev/dri` (Vulkan/VA-API) work today.
+- **Choosing one card** when a machine has several (today an app gets every NVIDIA card, `count: all`), and handing
+  different cards to different apps.
+- **Sharing limits** (memory or time slices per app); NVIDIA MIG/MPS.
+- **Installing the NVIDIA container toolkit from Harbor** (`harbor-bootstrap --with-nvidia`), see docs/TODO.md.
+
+## App settings: later (recorded 2026-10-14, after decision 180)
+
+- **Settings that pick an image** (a CUDA or ROCm variant), or reach `command`, volumes or ports. v1 settings are
+  environment literals only.
+- **Settings shown only when another one is set** (an SMTP block behind "Send email"), groups and ordering hints.
+- **Restarting only the service a setting binds** without a plan per service: `compose up` already recreates only the
+  services whose environment changed.
+- **Settings that are secrets** (a typed password shown as a setting): those stay operator-provided secrets
+  (decision 125).

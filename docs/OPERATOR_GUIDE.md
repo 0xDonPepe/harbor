@@ -747,6 +747,7 @@ UDP port on your machine. Harbor lets an app ask for only a short, fixed list (d
 | Use this machine's tunnel device | open `/dev/net/tun` (OpenVPN-style servers) |
 | Pass traffic between networks inside the app | IP forwarding, so VPN clients reach your home network |
 | Port: UDP 51820 on every network | the tunnel port, open on every network of this machine (not only this one) |
+| Use this machine's graphics card (GPU) | use the graphics card, for local AI apps such as Ollama (since 0.34.0; see *GPU (graphics cards)* below) |
 
 The **Install** button stays off until you tick **Allow … to do this**. On the command line, add
 `--accept-permissions` (`harbor --accept-permissions install wireguard`); `--yes` alone never accepts them.
@@ -757,6 +758,51 @@ An update that asks for a new permission, or opens a port the app did not have b
 which), and tell the app your public IP or a domain when it asks for its host. Inside your home network it works
 without that. Only one VPN server can use a port: Harbor refuses a second app, or anything else on the machine,
 that wants the same one.
+
+### GPU (graphics cards)
+
+Local AI apps (Ollama, and Open WebUI with its bundled Ollama) run much faster on a graphics card. Such an app
+asks for the **gpu** permission (decision 179, Harbor 0.34.0 and later). Harbor checks the machine and the review
+says what the app gets:
+
+| This machine has | The app gets | The review / app page says |
+|---|---|---|
+| An NVIDIA card **and** the NVIDIA container toolkit | the card (all NVIDIA cards, for computing: CUDA and `nvidia-smi`) | "Use the NVIDIA GeForce RTX 3090 (GPU)…", *Graphics card: … (in use)* |
+| Intel or AMD graphics | its render device only (`/dev/dri/renderD…`), not the display | "Use Intel graphics…" |
+| An NVIDIA card **without** the toolkit | nothing yet: it runs on the CPU | "…the NVIDIA container toolkit is not installed…" |
+| An NVIDIA card, the toolkit installed, Docker **not restarted** since | nothing yet: it runs on the CPU | "…Docker has not restarted since the NVIDIA container toolkit was installed…" |
+| No graphics card | nothing: it runs on the CPU | "No usable graphics card found…" |
+
+When Intel or AMD graphics sit next to an NVIDIA card Harbor cannot use yet, the app uses the Intel/AMD graphics
+and every screen also names the NVIDIA card and what to do for it. You allow the permission even on a machine
+without a card: a card added later is then used without a new question. *Settings → Overview → Graphics card*,
+`harbor inspect <app>` and `harbor gpu` show what Harbor found. Adopting such an app from a drive asks the same
+question (*Settings → Storage → Adopt…*: tick *Allow … to do this*; CLI: `harbor adopt <home> --accept-permissions`;
+`harbor found-apps` lists the permissions).
+
+**NVIDIA: install the container toolkit once** (Ubuntu 24.04; the NVIDIA driver itself must already work, check
+with `nvidia-smi`). Harbor does not do this for you: it adds NVIDIA's package repository and restarts Docker, which
+restarts every app.
+
+```sh
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
+Do not skip `systemctl restart docker`: Docker only notices the toolkit when it starts. Until then Harbor reports
+*Docker has not restarted since the NVIDIA container toolkit was installed* and keeps the app on the CPU (an app
+asking Docker for the card before that would fail to start). Then **restart the app** (app page → Restart, or
+`harbor restart <app>`): Harbor checks the machine again each time it prepares an app's containers (install,
+Restart, update, changing its values), so the next Restart hands the card over. The app page says *found · restart
+the app to use it* whenever the card found now differs from the one the app's containers have. Stop and Start reuse the same containers and do not. The app page then says
+*Graphics card: NVIDIA … (in use)*. In Ollama, `ollama ps` shows `100% GPU` while a model answers.
+
+Not yet: AMD ROCm (Ollama's `:rocm` image), choosing one card when there are several (an app gets all NVIDIA cards),
+and limits on how much of a card an app uses.
 
 ### Values an app asks you for, and apps that talk to each other
 
@@ -788,6 +834,34 @@ that wants the same one.
   you pick another one. Removing the app that asked drops the link too; Reinstall brings it back.
   CLI: `harbor install <app> --link <id>=<other-app>`, `harbor configure <app> --link <id>=<other-app>`
   (or `--unlink <id>`), `harbor links`.
+
+### App settings (since 0.34.0)
+
+Some apps have settings you can change without editing any file (decision 180), for example Ollama's
+*Context length*, *Keep models loaded* or *Flash attention*. Each one has a default from the app's package.
+
+- **At install**: the review has a collapsed **Options** section with every setting at its default. Open it,
+  change what you want (a number shows its allowed range; a value outside it keeps *Install* greyed out) and
+  install. Nothing to change? Leave it closed.
+- **Later**: the app's page has a **Settings** section with each value; *(default)* marks the ones you never
+  changed. **Change…** opens a form with every setting (*Reset to default* next to each one you changed);
+  **Review** shows the plan ("Context length (tokens): 8192 → 16384") and **Apply** recreates the app with the new
+  values. Data, ports and addresses stay.
+- **What Harbor keeps**: only the values you changed. A setting you left at its default follows the package, so an
+  update that changes a default changes it for you too. Your values are kept when you remove and reinstall the app,
+  go with its backups (a restore puts back the values it had then) and are deleted by *Uninstall completely*. An
+  app adopted from a drive on another machine starts at the defaults.
+- **Updates**: a setting the new release adds starts at its default (the update review lets you pick another in
+  *Options*); one it removes is dropped; a value it no longer allows goes back to the default. The review says
+  which. Automatic updates do the same without asking.
+- Settings are **not secrets**: they appear in plans, the app's events and logs. Passwords and tokens are asked as
+  *values only you have* (above), never as settings.
+- **CLI**: `harbor settings <app>` lists them (id, value, default, what is allowed; `--json` too);
+  `harbor configure <app> --set context-length=16384` changes one (a default value removes your override);
+  `harbor install <app> --set context-length=16384 --set flash-attention=on` chooses at install;
+  `harbor update <app> --set parallel=2` for a setting the update adds; `harbor apply <plan> --set …` for a plan
+  made with `harbor plan`. On/off settings take `on`/`off` (or `true`/`false`). A value that is not allowed is
+  refused with `SETTING_INVALID` and what the setting accepts.
 
 ## 4e. Updating Harbor itself
 

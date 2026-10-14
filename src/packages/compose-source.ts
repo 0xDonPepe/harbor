@@ -16,6 +16,8 @@ const FORBIDDEN_SERVICE_KEYS = new Set([
   'links', 'external_links', 'expose', 'dns', 'extra_hosts', 'tmpfs', 'ulimits', 'cgroup_parent', 'runtime',
   'platform', 'pull_policy', 'profiles', 'develop', 'stdin_open', 'tty', 'working_dir', 'hostname', 'domainname',
   'init', 'stop_signal', 'stop_grace_period', 'shm_size', 'mem_limit', 'cpus', 'oom_kill_disable',
+  // decision 179: only Harbor's renderer hands out a graphics card (`permissions: [gpu]`)
+  'group_add', 'device_cgroup_rules', 'gpus',
 ]);
 const FORBIDDEN_ROOT_KEYS = new Set(['networks', 'configs', 'secrets', 'include', 'name', 'version', 'x-harbor']);
 

@@ -6,8 +6,11 @@ import { AppBackupsPanel } from './pages/Backups';
 import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy, Pill, RecoveryCard, StatusPill, UpdateButton, appLabel, copiesOf, endpointUrlHere, openUrl, outdatedCopy } from './components';
 import { defaultCopyName, installView, nameProblem } from './copies';
 import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './format';
+import { gpuAppText, gpuReviewText } from './gpu-text';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
+import { SettingFields, SettingsDialog } from './settings-fields';
+import { changedValues, draftOf, optionsSummary, settingText, type SettingDraft } from './setting-draft';
 
 // App links (decision 126): installed apps that can satisfy one link of a package.
 export function linkCandidates(link: { packages: string[] | null }, instances: InstanceSummary[], selfId?: string): InstanceSummary[] {
@@ -56,14 +59,22 @@ export function PlanDialog({ c }: { c: Console }) {
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   // decision 163: permissions get their own explicit yes
   const [permissionsAccepted, setPermissionsAccepted] = useState(false);
+  // decision 180: Options — the settings this plan asks about, at their defaults until changed
+  const askedSettings = plan?.settings?.filter((s) => s.ask) ?? [];
+  const [settingDraft, setSettingDraft] = useState<SettingDraft>({});
+  const [optionsOpen, setOptionsOpen] = useState(false);
   useEffect(() => {
     setSecretValues({});
     setPermissionsAccepted(false);
+    setOptionsOpen(false);
+    setSettingDraft(draftOf(plan?.settings?.filter((s) => s.ask) ?? [], (s) => s.default));
   }, [plan?.id]);
+  const chosenSettings = changedValues(askedSettings, settingDraft, (s) => s.default);
   if (!pending) return null;
   const missingSecret = plan ? plan.secrets.some((s) => s.ask === 'required' && (secretValues[s.id] ?? '').length < Math.max(1, s.minLength ?? 1)) : false;
   const opensPorts = plan?.opensPorts ?? [];
   const needsPermission = plan ? (plan.permissions.length > 0 || opensPorts.length > 0) && !permissionsAccepted : false;
+  const settingProblem = chosenSettings.problem;
   const typed = Object.fromEntries(Object.entries(secretValues).filter(([id, v]) => v !== '' || plan?.secrets.find((s) => s.id === id)?.ask === 'optional' && plan.kind === 'configure'));
   const title = plan ? (plan.kind === 'install' && pending.kind === 'restore-app' ? 'Review restore' : `Review ${verb(plan.kind)}`) : `Planning ${pending.kind === 'restore-app' ? 'restore' : verb(pending.kind)}…`;
   const appName = plan ? (c.data.catalog.find((i) => i.id === plan.packageId)?.name ?? plan.name) : '';
@@ -166,6 +177,37 @@ export function PlanDialog({ c }: { c: Console }) {
                 </span>
               </li>
             ))}
+            {(plan.settings ?? [])
+              .filter((x) => !x.ask)
+              .map((x) => (
+                // decision 180: what a configure plan changes, and what an update resets or drops
+                <li key={`setting-${x.id}`}>
+                  <span className="fact-k">Setting</span>
+                  <span>
+                    {x.label}:{' '}
+                    {x.change === 'dropped' ? (
+                      <>no longer part of this release{x.previous !== null ? ` (your value ${settingText(x, x.previous)} is dropped)` : ''}</>
+                    ) : x.change === 'reset' ? (
+                      <>
+                        back to the default {settingText(x, x.default)} <span className="muted small">· this release no longer allows {x.previous !== null ? settingText(x, x.previous) : 'your value'}</span>
+                      </>
+                    ) : (
+                      <>
+                        {x.previous !== null ? `${settingText(x, x.previous)} → ` : ''}
+                        <strong>{settingText(x, x.value)}</strong>
+                        {x.value === x.default ? <span className="muted small"> (default)</span> : null}
+                      </>
+                    )}
+                  </span>
+                </li>
+              ))}
+            {plan.gpu && !plan.permissions.some((x) => x.permission === 'gpu') && (
+              // decision 179: already allowed (an update): say what the app gets on this machine now
+              <li>
+                <span className="fact-k">Graphics card</span>
+                <span>{gpuReviewText(plan.gpu, false)}</span>
+              </li>
+            )}
             {plan.update && (
               <li>
                 <span className="fact-k">Version</span>
@@ -213,12 +255,31 @@ export function PlanDialog({ c }: { c: Console }) {
                   </li>
                 ))}
               </ul>
+              {plan.gpu && plan.permissions.some((x) => x.permission === 'gpu') && <p className="small">{gpuReviewText(plan.gpu)}</p>}
               <label className="row small">
                 <input type="checkbox" checked={permissionsAccepted} onChange={(e) => setPermissionsAccepted(e.target.checked)} /> Allow {displayName} to do this
               </label>
             </fieldset>
           )}
           <SecretFields plan={plan} values={secretValues} onChange={setSecretValues} />
+          {askedSettings.length > 0 && (
+            <details
+              className="options"
+              open={optionsOpen || Boolean(settingProblem)}
+              onToggle={(e) => {
+                // an option that cannot be used keeps the section open (Install is off until it is fixed)
+                const el = e.currentTarget;
+                if (!el.open && settingProblem) el.open = true;
+                else setOptionsOpen(el.open);
+              }}
+            >
+              <summary className="small">
+                Options <span className={settingProblem ? 'error-text' : 'muted'}>· {optionsSummary(Object.keys(chosenSettings.values).length, chosenSettings.invalid.length, plan.kind === 'update' ? { newCount: askedSettings.length } : null)}</span>
+              </summary>
+              <SettingFields settings={askedSettings} draft={settingDraft} onChange={setSettingDraft} />
+              <p className="muted small">You can change these later on the app page (Settings).</p>
+            </details>
+          )}
           {plan.notes.map((n, i) => (
             <p key={`n${i}`} className="muted">
               {n}
@@ -248,11 +309,16 @@ export function PlanDialog({ c }: { c: Console }) {
           </details>
         </div>
       )}
+      {plan && settingProblem && (
+        <p className="error small" role="alert">
+          Fix an option first: {settingProblem}
+        </p>
+      )}
       <div className="row end">
         <button className="btn" onClick={c.cancel}>
           Cancel
         </button>
-        {!c.locked && <button className="btn primary" onClick={() => void c.approve(typed, permissionsAccepted)} disabled={!plan || Boolean(planError) || missingSecret || needsPermission} title={missingSecret ? 'Fill in the value the app needs first' : needsPermission ? 'Allow the permissions first' : undefined}>
+        {!c.locked && <button className="btn primary" onClick={() => void c.approve(typed, permissionsAccepted, chosenSettings.values)} disabled={!plan || Boolean(planError) || missingSecret || needsPermission || Boolean(settingProblem)} title={missingSecret ? 'Fill in the value the app needs first' : needsPermission ? 'Allow the permissions first' : settingProblem ? `Fix an option first: ${settingProblem}` : undefined}>
           {approveLabel}
         </button>}
       </div>
@@ -1458,6 +1524,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
   const lockable = Boolean(home && home.sealed && home.state === 'unlocked' && !retained && inst.installState === 'installed');
   const canLock = lockable && inst.runtime === 'stopped';
   const [locking, setLocking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false); // decision 180
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && !need && !locked;
   const canStop = (inst.installState === 'installed' || inst.installState === 'needs_action' || inst.installState === 'failed') && inst.runtime !== 'stopped';
   const canStart = inst.installState === 'installed' && inst.desired === 'stopped' && !need;
@@ -1735,6 +1802,15 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           </ul>
         </>
       )}
+      {!retained && detail?.gpu && (
+        // decision 179: which graphics card the app gets on this machine, and the next step when it cannot
+        <>
+          <h4>Graphics card</h4>
+          <p className="small">
+            {gpuAppText(detail.gpu)}
+          </p>
+        </>
+      )}
       {!retained && (inst.links.length > 0 || inst.linkedBy.length > 0) && (
         <>
           <h4>Links</h4>
@@ -1797,6 +1873,36 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
               </li>
             ))}
           </ul>
+        </>
+      )}
+      {!retained && inst.settings && inst.settings.length > 0 && (
+        // decision 180: the app's settings with their current values; Change… opens the form, then the plan
+        <>
+          <h4>Settings</h4>
+          <ul className="addresses settings-list">
+            {inst.settings.map((x) => (
+              <li key={x.id}>
+                {x.label} <strong>{settingText(x, x.value)}</strong>
+                {!x.overridden ? <span className="muted small"> (default)</span> : null}
+              </li>
+            ))}
+          </ul>
+          <div className="row">
+            <button className="btn small" disabled={busy || inst.installState !== 'installed'} onClick={() => setSettingsOpen(true)} aria-label={`Change the settings of ${inst.name}`}>
+              Change…
+            </button>
+          </div>
+          {settingsOpen && (
+            <SettingsDialog
+              inst={inst}
+              title={`Settings of ${appLabel(inst, instances)}`}
+              onClose={() => setSettingsOpen(false)}
+              onReview={(values) => {
+                setSettingsOpen(false);
+                onAction({ kind: 'configure', instance: inst, settings: values });
+              }}
+            />
+          )}
         </>
       )}
       {!retained && <AppBackupsPanel inst={inst} busy={busy} onAction={onAction} />}

@@ -1,11 +1,13 @@
 import { SECRET_TEMPLATE_SLOT } from '../contracts/patterns.js';
 import { stringify as yamlStringify } from 'yaml';
-import type { ComposeSource, Manifest } from '../contracts/types.js';
+import type { ComposeSource, HostGpu, Manifest, SettingValue } from '../contracts/types.js';
 import type { EndpointAllocation } from '../state/repo.js';
 import { LABELS } from '../naming.js';
 import { browserUrlFor } from '../config.js';
 import { defaultNetworkName, instanceLabels, ownedVolumeName, type InstanceIdentity } from './identity.js';
 import { linkValue } from './links.js';
+import { driDevice, NVIDIA_DEVICE_REQUEST } from './gpu.js';
+import { effectiveSettings, settingBindingValue } from './settings.js';
 
 // Decision 126: an active link where this instance is the consumer: its bound services get the provider's
 // address. Decision 171: link networks never appear in a Compose file (Compose would add every service
@@ -41,6 +43,11 @@ export interface RenderInput {
   builtImages?: Record<string, string>;
   // decision 126: only links whose network exists (state active); others render nothing
   consumerLinks?: ConsumerLink[];
+  // decision 179: this machine's graphics card, for services granted `gpu` (absent = none: they run on the CPU)
+  gpu?: HostGpu;
+  // decision 180: the operator's stored setting overrides (absent/empty = every setting at the release default;
+  // an override the release does not allow falls back to the default)
+  settingOverrides?: Record<string, SettingValue>;
 }
 
 export interface RenderedCompose {
@@ -93,6 +100,7 @@ export function renderCompose(input: RenderInput): RenderedCompose {
 
   const endpointById = new Map(endpoints.map((e) => [e.id, e]));
   const consumerLinks = input.consumerLinks ?? [];
+  const settingValues = effectiveSettings(manifest, input.settingOverrides ?? {});
 
   for (const service of Object.keys(compose.services).sort()) {
     const src = compose.services[service]!;
@@ -124,6 +132,14 @@ export function renderCompose(input: RenderInput): RenderedCompose {
       for (const b of l.bindings) {
         if (b.service !== service) continue;
         env[b.environment] = escapeCompose(linkValue(active.alias, active.containerPort, b.format ?? 'url'));
+        generated.push(b.environment);
+      }
+    }
+    // decision 180: settings are visible values, written as literals ($ escaped like every other literal)
+    for (const st of manifest.settings ?? []) {
+      for (const b of st.bindings) {
+        if (b.service !== service) continue;
+        env[b.environment] = escapeCompose(settingBindingValue(st, b, settingValues[st.id]!));
         generated.push(b.environment);
       }
     }
@@ -162,6 +178,14 @@ export function renderCompose(input: RenderInput): RenderedCompose {
     if (perms.includes('net-admin')) def['cap_add'] = ['NET_ADMIN'];
     if (perms.includes('tun')) def['devices'] = ['/dev/net/tun:/dev/net/tun'];
     if (perms.includes('ip-forwarding')) def['sysctls'] = { ...IP_FORWARDING_SYSCTLS };
+    // decision 179: the graphics card, from host facts (none: nothing, the app runs on the CPU)
+    if (perms.includes('gpu') && input.gpu?.kind === 'nvidia') {
+      def['deploy'] = { resources: { reservations: { devices: [{ ...NVIDIA_DEVICE_REQUEST, capabilities: [...NVIDIA_DEVICE_REQUEST.capabilities] }] } } };
+    } else if (perms.includes('gpu') && input.gpu?.kind === 'dri' && input.gpu.renderNode) {
+      // only the render node and its group: compute and media work, no display or modesetting (card<N>)
+      def['devices'] = [...((def['devices'] as string[] | undefined) ?? []), driDevice(input.gpu.renderNode)];
+      if (input.gpu.renderGid !== undefined) def['group_add'] = [String(input.gpu.renderGid)];
+    }
     if (Object.keys(env).length) def['environment'] = env;
     if (ports.length) def['ports'] = ports;
     if (src.depends_on) def['depends_on'] = src.depends_on;

@@ -1,5 +1,6 @@
 import type { Db } from './db.js';
 import { rfc3339, type Clock } from '../util.js';
+import type { PlanSettingDto, SettingValue } from '../contracts/api.js';
 
 // Thin typed data access. JSON columns hold small immutable nested records.
 
@@ -187,7 +188,9 @@ export interface PlanProposal {
   endpoints: EndpointAllocation[];
   // decision 163: fixed ports published on every interface; permissions the submitter must accept (absent before 0.29.0)
   ports?: { id: string; service: string; protocol: 'udp'; hostPort: number; containerPort: number; purpose: string }[];
-  permissions?: { service: string; permission: 'net-admin' | 'tun' | 'ip-forwarding' }[];
+  permissions?: { service: string; permission: 'net-admin' | 'tun' | 'ip-forwarding' | 'gpu' }[];
+  // decision 179: the graphics card found at plan time, only when the package grants gpu to a service
+  gpu?: { kind: 'nvidia' | 'dri' | 'none'; detail: string; problem?: 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED' };
   // decision 165: update plans: fixed ports the current release does not publish yet (accepted like permissions)
   opensPorts?: number[];
   // external claims: hostPath set, volumeName null (nothing is created in Docker)
@@ -199,6 +202,10 @@ export interface PlanProposal {
   secrets: PlannedSecret[];
   // decision 126: links the plan sets up (install/update/reinstall/configure)
   links?: PlannedLink[];
+  // decision 180: settings the plan shows (definition + value; ask = the submission may carry a value) and, for a
+  // configure plan, the values it applies (a value equal to the default removes the override)
+  settings?: PlanSettingDto[];
+  settingValues?: Record<string, SettingValue>;
   changes: string[];
   warnings: string[];
   notes?: string[]; // decision 157: informational lines (absent on plans made before 0.27.1)

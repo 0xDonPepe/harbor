@@ -1332,6 +1332,191 @@ ui:
   await expect(drawer).toContainText(`forward UDP ${port} on your router`);
 });
 
+test('decision 179: an app that asks for the graphics card: the review names the card and Install waits for the box; the app page and Settings show it', async ({ page }) => {
+  // the e2e daemon's fake machine has an NVIDIA card with the toolkit (HARBOR_DEV_GPU=nvidia in playwright.config.ts)
+  const { writeZip } = await import('../../src/packages/zip.js');
+  const manifest = `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: gpu-e2e
+  name: GPU E2E
+  description: A local model server
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: false
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+permissions:
+  web: [gpu]
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+`;
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('button', { name: 'Add your own app' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Your own app' });
+  await dlg.getByLabel('Package zip file').setInputFiles({ name: 'gpu-e2e.zip', mimeType: 'application/zip', buffer: writeZip({ 'manifest.yaml': manifest, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }, { folder: 'gpu-e2e' }) });
+  await expect(dlg).toContainText('GPU E2E is in your App Store');
+  await dlg.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  await page.locator('.tile.store').filter({ hasText: 'GPU E2E' }).getByRole('button', { name: 'Install GPU E2E', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install GPU E2E now' }).click();
+  const review = page.getByRole('dialog');
+  const asks = review.getByRole('group', { name: 'This app asks to' });
+  await expect(asks).toContainText("Use this machine's graphics card (GPU)");
+  await expect(asks).toContainText('This machine has an NVIDIA GeForce RTX 3090: the app uses it.');
+  const install = review.getByRole('button', { name: 'Install', exact: true });
+  await expect(install).toBeDisabled();
+  await review.getByLabel('Allow GPU E2E to do this', { exact: true }).check();
+  await expect(install).toBeEnabled();
+  await install.click();
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of gpu-e2e', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await expect(drawer.getByRole('heading', { name: 'Graphics card', exact: true })).toBeVisible();
+  await expect(drawer).toContainText('NVIDIA GeForce RTX 3090 (in use)');
+  await drawer.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.locator('.device-facts')).toContainText('Graphics card');
+  await expect(page.locator('.device-facts')).toContainText('NVIDIA GeForce RTX 3090');
+});
+
+test('decision 180: app settings: the install review has Options; the app page lists Settings and Change… goes through a plan', async ({ page }) => {
+  const { writeZip } = await import('../../src/packages/zip.js');
+  const manifest = `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: tuning-e2e
+  name: Tuning E2E
+  description: A model server with settings
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: false
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+settings:
+  - id: context-length
+    label: "Context length (tokens)"
+    help: "How much text a model keeps in mind."
+    type: integer
+    default: 8192
+    min: 2048
+    max: 131072
+    bindings:
+      - {service: web, environment: OLLAMA_CONTEXT_LENGTH}
+  - id: flash-attention
+    label: "Flash attention"
+    type: boolean
+    default: false
+    bindings:
+      - {service: web, environment: OLLAMA_FLASH_ATTENTION}
+  - id: kv-cache
+    label: "Memory cache precision"
+    type: choice
+    default: f16
+    choices: [{value: f16, label: "Full"}, {value: q8_0, label: "Half"}]
+    bindings:
+      - {service: web, environment: OLLAMA_KV_CACHE_TYPE}
+`;
+  await login(page);
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('button', { name: 'Add your own app' }).click();
+  const dlg = page.getByRole('dialog', { name: 'Your own app' });
+  await dlg.getByLabel('Package zip file').setInputFiles({ name: 'tuning-e2e.zip', mimeType: 'application/zip', buffer: writeZip({ 'manifest.yaml': manifest, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }, { folder: 'tuning-e2e' }) });
+  await expect(dlg).toContainText('Tuning E2E is in your App Store');
+  await dlg.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  await page.locator('.tile.store').filter({ hasText: 'Tuning E2E' }).getByRole('button', { name: 'Install Tuning E2E', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Install Tuning E2E now' }).click();
+  // the review: Options is collapsed, with the defaults filled in
+  const review = page.getByRole('dialog', { name: 'Review install' });
+  const options = review.locator('details.options');
+  await expect(options).toContainText('Options');
+  await expect(options).not.toHaveAttribute('open', '');
+  await options.locator('summary').click();
+  const context = review.getByLabel('Context length (tokens)', { exact: true });
+  await expect(context).toHaveValue('8192');
+  await expect(review.getByLabel('Flash attention', { exact: true })).not.toBeChecked();
+  const install = review.getByRole('button', { name: 'Install', exact: true });
+  await context.fill('100'); // below the minimum: Install waits
+  await expect(install).toBeDisabled();
+  await expect(options).toContainText('Use a whole number from 2048 to 131072.');
+  // the reason stays visible: the summary counts it, an alert names it, and Options does not collapse over it
+  await expect(options.locator('summary')).toContainText('1 to fix');
+  await expect(review.getByRole('alert')).toContainText('Fix an option first: Context length (tokens): a whole number from 2048 to 131072');
+  await options.locator('summary').click();
+  await expect(options).toHaveAttribute('open', '');
+  await context.fill('16384');
+  await review.getByLabel('Flash attention', { exact: true }).check();
+  await expect(options).toContainText('2 changed');
+  await expect(install).toBeEnabled();
+  await install.click();
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  // the app page: label, value, (default) marker
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of tuning-e2e', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Tuning E2E' });
+  await expect(drawer.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  const list = drawer.locator('.settings-list');
+  await expect(list).toContainText('Context length (tokens) 16384');
+  await expect(list).toContainText('Flash attention on');
+  await expect(list).toContainText('Memory cache precision Full (default)');
+  // Change… → the form → Review → the normal review dialog → Apply
+  await drawer.getByRole('button', { name: 'Change the settings of tuning-e2e', exact: true }).click();
+  const form = page.getByRole('dialog', { name: 'Settings of Tuning E2E' });
+  const reviewBtn = form.getByRole('button', { name: 'Review', exact: true });
+  await expect(reviewBtn).toBeDisabled(); // nothing changed yet
+  await form.getByLabel('Memory cache precision', { exact: true }).selectOption('q8_0');
+  await form.getByRole('button', { name: 'Reset Context length (tokens) to the default', exact: true }).click();
+  await expect(form.getByLabel('Context length (tokens)', { exact: true })).toHaveValue('8192');
+  await reviewBtn.click();
+  const plan = page.getByRole('dialog', { name: 'Review new settings' });
+  await expect(plan).toContainText('Memory cache precision: Full → Half');
+  await expect(plan).toContainText('Context length (tokens): 16384 → 8192 (default)');
+  await plan.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /settings applied$/ })).toBeVisible({ timeout: 30_000 });
+  // the drawer closed when the review opened; the app page shows the new values
+  await page.getByRole('button', { name: 'Details of tuning-e2e', exact: true }).click();
+  await expect(list).toContainText('Memory cache precision Half', { timeout: 15_000 });
+  await expect(list).toContainText('Context length (tokens) 8192 (default)');
+  await drawer.getByRole('button', { name: 'Close', exact: true }).last().click();
+});
+
 test('decision 170: a one-copy app shows only Open once installed, on its card and its page', async ({ page }) => {
   await login(page);
   await page.getByRole('link', { name: 'App Store' }).click();

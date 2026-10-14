@@ -1,15 +1,17 @@
-import { closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { chmodSync, closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import type { LoadedPackage } from '../contracts/types.js';
+import type { LoadedPackage, SettingValue } from '../contracts/types.js';
 import { UUID_RE } from '../contracts/patterns.js';
 import { HarborError } from '../errors.js';
 import { loadPackageDir } from '../packages/catalog.js';
+import { parse as parseYaml } from 'yaml';
 import type { Ids } from '../util.js';
 
 // Layout under <stateDir>/instances/<uuid>/ :
 //   release/   immutable snapshot of the four package files (nonsecret)      0700 / 0600
 //   runtime/   generated compose.yaml with resolved secrets (private)         0700 / 0600
 //   secrets/   one file per secret id, hex, written once                     0700 / 0600
+//   settings.json  decision 180: the operator's setting overrides (not secret)   0644, absent = all defaults
 
 export function instanceDir(stateDir: string, instanceId: string): string {
   if (!UUID_RE.test(instanceId)) throw new HarborError('INVALID_REQUEST', `invalid instance id ${instanceId}`);
@@ -81,6 +83,16 @@ export function writeRuntimeCompose(runtimeDir: string, yaml: string): string {
   return file;
 }
 
+// The parsed runtime compose.yaml (null = not rendered yet or unreadable). It holds secret values: callers read
+// structure only (decision 179: whether it hands a service the graphics card), never pass it on.
+export function readRuntimeModel(runtimeDir: string): unknown {
+  try {
+    return parseYaml(readFileSync(path.join(runtimeDir, 'compose.yaml'), 'utf8')) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export function secretFile(secretsDir: string, secretId: string): string {
   return path.join(secretsDir, secretId);
 }
@@ -131,4 +143,64 @@ export function secretExists(secretsDir: string, secretId: string): boolean {
 
 export function writeJsonPrivate(file: string, value: unknown): void {
   writeFileSync(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+}
+
+// Decision 180: the setting values the operator chose (only overrides; the release's defaults fill the rest).
+// Not secret. Kept with the instance directory: across remove/reinstall, gone with a full uninstall.
+export const SETTINGS_FILE = 'settings.json';
+
+export function settingsFile(stateDir: string, instanceId: string): string {
+  return path.join(instanceDir(stateDir, instanceId), SETTINGS_FILE);
+}
+
+// The stored overrides; a missing or unreadable file means none (every setting at its default).
+export function readSettingOverrides(stateDir: string, instanceId: string): Record<string, SettingValue> {
+  let raw: string;
+  try {
+    raw = readFileSync(settingsFile(stateDir, instanceId), 'utf8');
+  } catch {
+    return {};
+  }
+  try {
+    const doc = JSON.parse(raw) as { values?: unknown };
+    const values = doc && typeof doc === 'object' && doc.values && typeof doc.values === 'object' ? (doc.values as Record<string, unknown>) : {};
+    const out: Record<string, SettingValue> = {};
+    for (const [k, v] of Object.entries(values)) if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Written atomically (temp file + rename); no overrides = no file.
+export function writeSettingOverrides(stateDir: string, instanceId: string, values: Record<string, SettingValue>): void {
+  const file = settingsFile(stateDir, instanceId);
+  if (!Object.keys(values).length) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const sorted = Object.fromEntries(Object.entries(values).sort(([a], [b]) => a.localeCompare(b)));
+  writeDurable(file, JSON.stringify({ format: 1, values: sorted }, null, 2) + '\n', 0o644, false);
+  chmodSync(file, 0o644); // UMask=0077 masks the open() mode
+}
+
+// The raw bytes (backups carry the file as it is; null = no overrides).
+export function readSettingsBytes(stateDir: string, instanceId: string): Buffer | null {
+  try {
+    return readFileSync(settingsFile(stateDir, instanceId));
+  } catch {
+    return null;
+  }
+}
+
+export function writeSettingsBytes(stateDir: string, instanceId: string, bytes: Buffer | null): void {
+  const file = settingsFile(stateDir, instanceId);
+  if (!bytes) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  writeDurable(file, bytes, 0o644, false);
+  chmodSync(file, 0o644);
 }

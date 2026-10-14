@@ -54,6 +54,11 @@ export class DockerodeAdapter implements DockerAdapter {
     }
   }
 
+  async info(): Promise<{ runtimes: string[] }> {
+    const i = (await this.docker.info()) as { Runtimes?: Record<string, unknown> };
+    return { runtimes: Object.keys(i.Runtimes ?? {}).sort() };
+  }
+
   async listContainers(opts: { all: boolean; labels?: Record<string, string> }): Promise<ContainerInfo[]> {
     const filters: Record<string, string[]> = {};
     if (opts.labels) filters['label'] = Object.entries(opts.labels).map(([k, v]) => `${k}=${v}`);

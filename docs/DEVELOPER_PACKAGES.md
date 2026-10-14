@@ -74,6 +74,8 @@ permissions:                     # optional (0.29.0, decision 163): per service,
                                  # inside the app's own network. Harbor renders them; cap_add/devices/sysctls stay
                                  # refused in compose.yaml. The operator accepts them when approving the install
                                  # (and an update that adds one); update-all and auto-update skip such updates.
+                                 # gpu (0.34.0, decision 179; set release.minHarbor: "0.34.0") = this machine's
+                                 # graphics card, e.g. `ollama: [gpu]`: see "The gpu permission" below.
 health:
   endpoint: web
   path: /                        # must answer before any account exists; a published address of this
@@ -128,6 +130,40 @@ links:                           # optional: talk privately to another installed
       - service: web             # only bound services join the link network
         environment: DOCS_BASE_URL
         format: url              # url (http://docs-link:3010) | authority (docs-link:3010) | host | port
+settings:                        # optional (0.34.0, decision 180; set release.minHarbor: "0.34.0"): values the
+                                 # operator can change, see "Settings the operator can change" (§8). Not secrets.
+  - id: context-length           # lowercase, dashes, ≤ 40 chars; the CLI's --set context-length=16384
+    label: Context length (tokens)
+    help: How much text a model keeps in mind. More uses more memory.   # optional, ≤ 300 chars
+    type: integer                # integer | number | boolean | string | choice
+    default: 8192                # required, must fit the rules below
+    min: 2048                    # optional (integer/number only)
+    max: 131072
+    bindings:                    # 1–8 variables; each is this setting's alone (not in compose.yaml)
+      - service: web
+        environment: OLLAMA_CONTEXT_LENGTH
+  - id: flash-attention
+    label: Flash attention
+    type: boolean
+    default: false
+    onValue: "1"                 # optional (boolean only): what the variable gets (default "true"/"false")
+    offValue: "0"
+    bindings:
+      - {service: web, environment: OLLAMA_FLASH_ATTENTION}
+  - id: kv-cache
+    label: Memory cache precision
+    type: choice
+    default: f16
+    choices: [{value: f16, label: Full}, {value: q8_0, label: Half}, {value: q4_0}]   # 1–32; label optional
+    bindings:
+      - {service: web, environment: OLLAMA_KV_CACHE_TYPE}
+  - id: keep-alive
+    label: Keep models loaded
+    type: string                 # one line, no control characters
+    default: 5m
+    maxLength: 16                # optional (string only, 1–1024, default 256)
+    bindings:
+      - {service: web, environment: OLLAMA_KEEP_ALIVE, template: "{{value}}"}   # optional template, one {{value}}, no `$`
 configuration:                   # optional: hand the app its main address (links it sends out)
   - service: web
     environment: PUBLIC_URL
@@ -203,8 +239,28 @@ volumes:
 
 Allowed per service: `image`, `command` (an argument array, decision 123), `environment` (literal
 values), `depends_on` (with `condition`), `healthcheck`, `volumes` of `type: volume`. Not allowed, on
-purpose: `ports` (Harbor publishes the endpoints on 127.0.0.1 itself), `entrypoint`, `privileged`, `cap_add`, `devices`, host networking, bind mounts
+purpose: `ports` (Harbor publishes the endpoints on 127.0.0.1 itself), `entrypoint`, `privileged`, `cap_add`, `devices`, `deploy`, `runtime`, `group_add`, host networking, bind mounts
 (operators choose folders through storage claims instead).
+
+**The gpu permission** (Harbor 0.34.0, decision 179; set `release.minHarbor: "0.34.0"`). `permissions: {<service>: [gpu]}`
+asks for the machine's graphics card. Harbor writes what Docker needs from what it finds when it prepares the
+containers, never from the package:
+
+| The machine has | Harbor renders for that service |
+|---|---|
+| NVIDIA card + NVIDIA container toolkit (Docker restarted since) | `deploy.resources.reservations.devices: [{driver: nvidia, count: all, capabilities: [gpu, compute, utility]}]` (Docker then sets `NVIDIA_DRIVER_CAPABILITIES=compute,utility`) |
+| Intel/AMD graphics (an i915, xe, amdgpu or radeon render node) | that node only, `devices: ['/dev/dri/renderD128:/dev/dri/renderD128']`, + `group_add` (the node's group; no `card<N>`, no `video`) |
+| nothing usable (or NVIDIA without the toolkit, or Docker not restarted since) | nothing: the app runs on the CPU |
+
+So the image must work on the CPU too (Ollama does), and must not set its own NVIDIA selection variables: on a
+service granted `gpu`, `NVIDIA_VISIBLE_DEVICES`, `NVIDIA_DRIVER_CAPABILITIES`, `NVIDIA_MIG_CONFIG_DEVICES`,
+`NVIDIA_MIG_MONITOR_DEVICES` and `NVIDIA_IMEX_CHANNELS` are refused as `compose.yaml` literals and as secret, link,
+setting or configuration targets (other `NVIDIA_*` variables, such as `NVIDIA_DISABLE_REQUIRE`, are fine). The
+device request already selects the cards and the driver features (compute and utility: CUDA and `nvidia-smi`; no
+graphics, display or video encoding yet). An image that uses integrated Intel/AMD graphics through Vulkan may need
+its own switch for it (Ollama: `OLLAMA_IGPU_ENABLE: "1"`). `devices`, `deploy`, `runtime`, `group_add`, `gpus` and `device_cgroup_rules`
+stay refused in `compose.yaml`. The operator accepts `gpu` like the other permissions, also on a machine without a
+card. AMD ROCm (`/dev/kfd` + a `:rocm` image) is not supported yet.
 
 `healthcheck: {disable: true}` (Harbor 0.28.4, decision 162; set `release.minHarbor: "0.28.4"`) switches off a check the
 image carries. Use it when the image's own check cannot pass in your setup or takes longer than Harbor waits: Harbor
@@ -356,6 +412,38 @@ database and other services never join), with no route to the internet. The prov
 - Use the address as a base URL (`url` has no trailing slash). Authenticate to the other app like any
   client would (often with an operator-provided secret, above): a link is reachability, not trust.
 
+
+### Settings the operator can change (`settings:`, Harbor 0.34.0)
+
+Some apps are tuned with environment variables an operator may want to change: Ollama's context length,
+keep-alive, parallel requests. Declare them as `settings` (decision 180) instead of fixed literals in
+`compose.yaml`, and declare `release.minHarbor: "0.34.0"` (older Harbors refuse the unknown field).
+
+- **Types and rules.** `integer` (whole numbers; `min`/`max` optional), `number` (any finite number;
+  `min`/`max`), `boolean` (`onValue`/`offValue` are what the variable gets, default `"true"`/`"false"`),
+  `string` (one line, no control characters, `maxLength` 1–1024, default 256), `choice` (`choices` 1–32
+  `{value, label?}`). `default` is required and must fit; rules for another type are refused (`min` on a
+  boolean, `choices` on a string). Up to 32 settings, each with 1–8 `bindings` (`service`, `environment`, optional
+  `template` with one `{{value}}` and no `$`, as for secrets).
+- **One owner per variable.** A variable a setting binds may not also be set in `compose.yaml`'s `environment`
+  (move the literal into the setting's `default`), by a secret, a link, a `configuration` binding or another
+  setting.
+- **What reaches the app.** Integers and numbers as written (`16384`, `0.5`), booleans as `onValue`/`offValue`,
+  strings and choices as the value; then the template. A `$` in a value is passed literally (Harbor writes `$$`
+  for Compose), so a value can never expand a variable. Settings reach environment variables only — never
+  `command`, images or volumes.
+- **Values are visible.** They appear in plans, the console, `harbor settings`, operation events, logs and
+  backups. Anything secret is an operator-provided secret (above), not a setting.
+- **What Harbor stores.** Only the values the operator changed (`instances/<id>/settings.json`). An app that
+  kept a default follows your package: raise a default in a new revision and every such app gets it at its
+  update. A stored value your new revision no longer allows (a narrower `max`, a removed choice, another type)
+  goes back to the default during the update, and the update review says so; a setting you remove is dropped.
+  A setting you add starts at its default (the operator may pick another in the update review).
+- **Where the operator sees them.** Install review → *Options* (collapsed, defaults filled in); app page →
+  *Settings → Change…* (a form, then a plan "Context length (tokens): 8192 → 16384"); CLI `--set id=value` on
+  `install`/`apply`/`update`/`configure` and `harbor settings <app>`.
+- Write labels the way the operator thinks ("Context length (tokens)", not `OLLAMA_CONTEXT_LENGTH`) and put
+  the effect in `help`.
 
 ## 9. Backup place packages (`kind: BackupTarget`)
 

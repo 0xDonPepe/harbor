@@ -170,6 +170,11 @@ operator cannot set them up.
 console as an "App settings" form. Applying changes runs a reconfigure plan → operation, which is the
 same idea as operator secrets (decision 125) but editable after install. No raw env file on disk.
 
+**Built in 0.34.0** for the non-secret half (decision 180, docs/design/LOCAL_AI.md part 2): typed `settings:`
+(integer, number, boolean, string, choice) with defaults, the install review's *Options*, the app page's
+*Settings → Change…* → a `configure` plan, `--set` on the CLI. Secret values (API keys, SMTP passwords) stay
+operator-provided secrets (decision 125), which configure can already replace after install.
+
 ## 3. Elevated permissions (features 7, 8, 9, 11)
 
 These four break the rule that a package stays inside its container:
@@ -199,7 +204,9 @@ boundary (AGENTS.md §4.2, decision 123). A package with `privileged: true` owns
 - Host-network apps get no Harbor port allocation; their endpoint names a fixed host port, and a
   conflict refuses the install.
 - Official-catalog CI flags any package that requests a permission, so a reviewer looks at it on purpose.
-- GPU fits here as `device:dri` (14 apps run CPU-only today: immich, frigate, jellyfin, ollama).
+- GPU fits here as `device:dri` (14 apps run CPU-only today: immich, frigate, jellyfin, ollama). **Built in 0.34.0** as
+  the `gpu` permission (decision 179, docs/design/LOCAL_AI.md): NVIDIA through the container toolkit, Intel/AMD
+  through `/dev/dri`, CPU otherwise. Umbrel's `devices: [/dev/dri]` maps to `permissions: {<service>: [gpu]}`.
 
 This needs its own design round and decision row before any code: it is the largest change to
 Harbor's trust model since the catalog split.
@@ -303,7 +310,8 @@ The first slice of §2.2 (raw ports) and §3 (permissions), cut to what VPN serv
   so the package sets `DISABLE_IPV6: "true"`: wg-easy's IPv6 rules need `ip6table_nat`, which only `SYS_MODULE` could
   load. Live: qualified, and a real tunnel from a second droplet (VERIFICATION 3u).
 
-Not yet: raw TCP ports (Git over SSH, MQTT), host networking, devices beyond `/dev/net/tun`, Docker-in-Docker.
+Not yet: raw TCP ports (Git over SSH, MQTT), host networking, devices beyond `/dev/net/tun` and the graphics card
+(`gpu`, 0.34.0, decision 179), Docker-in-Docker.
 
 **OpenVPN is parked** (checked 2026-10-12; WireGuard covers the use for now):
 - *openvpn-ui* (d3vilh, MIT, has a login) is the candidate. Its UI uses the Docker socket only for its two Restart

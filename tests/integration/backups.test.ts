@@ -27,6 +27,9 @@ const dataFile = (inst: InstanceSummary) => {
 };
 const backups = (hh: Harness, id: string, refresh = false) => hh.api.expect<AppBackupsDto>(200, 'GET', `/v1/instances/${id}/backups${refresh ? '?refresh=true' : ''}`);
 const drain = async (hh: Harness) => hh.daemon.ctx.backups!.drain();
+// decision 180: the operator's setting overrides travel with the app (memos declares none; the file round-trips as is)
+const settingsJson = (hh: Harness, id: string) => path.join(hh.stateDir, 'instances', id, 'settings.json');
+const SETTINGS_AT_BACKUP = JSON.stringify({ format: 1, values: { 'page-size': 50 } });
 
 describe('backup places (decision 152)', () => {
   let target: BackupTargetDto;
@@ -106,6 +109,7 @@ describe('backup places (decision 152)', () => {
     memos = await byName(h, 'memos');
     mkdirSync(path.dirname(dataFile(memos)), { recursive: true });
     writeFileSync(dataFile(memos), 'version one');
+    writeFileSync(settingsJson(h, memos.id), SETTINGS_AT_BACKUP);
     await h.api.expectError(422, 'INVALID_REQUEST', 'PUT', `/v1/instances/${memos.id}/backups`, { enabled: true, targets: [] });
     const p = await h.api.expect<AppBackupsDto>(200, 'PUT', `/v1/instances/${memos.id}/backups`, { enabled: true, targets: [target.id] });
     expect(p.policy).toMatchObject({ enabled: true, targets: [target.id] });
@@ -124,7 +128,7 @@ describe('backup places (decision 152)', () => {
     const mine = remote.snapshots.filter((s) => s.tags.includes(`app:${memos.id}`));
     expect(mine.map((s) => s.tags.find((t) => t.startsWith('kind:')))).toEqual(['kind:cold']);
     expect([...mine[0]!.data.values()].map((v) => v.toString())).toContain('version one');
-    expect(mine[0]!.stage.map((f) => f.path)).toEqual(expect.arrayContaining(['instance.json', 'home-manifest.json', 'app-key']));
+    expect(mine[0]!.stage.map((f) => f.path)).toEqual(expect.arrayContaining(['instance.json', 'home-manifest.json', 'app-key', 'settings.json']));
     expect(mine[0]!.stage.some((f) => f.path.startsWith('release/'))).toBe(true);
     // the app is running again
     expect(await byName(h, 'memos')).toMatchObject({ runtime: 'running', installState: 'installed', desired: 'running' });
@@ -132,6 +136,7 @@ describe('backup places (decision 152)', () => {
 
   it('restores in place: the data of the restore point comes back, the current copy is kept aside', async () => {
     writeFileSync(dataFile(memos), 'version two');
+    writeFileSync(settingsJson(h, memos.id), JSON.stringify({ format: 1, values: { 'page-size': 10 } }));
     const point = (await backups(h, memos.id)).points[0]!;
     const plan = await h.api.plan({ kind: 'restore', instanceId: memos.id, runId: point.runId });
     expect(plan.kind).toBe('restore');
@@ -141,6 +146,7 @@ describe('backup places (decision 152)', () => {
     const after = await byName(h, 'memos');
     expect(after).toMatchObject({ id: memos.id, runtime: 'running' });
     expect(readFileSync(dataFile(after), 'utf8')).toBe('version one');
+    expect(readFileSync(settingsJson(h, memos.id), 'utf8')).toBe(SETTINGS_AT_BACKUP); // decision 180: as at the restore point
     const b = await backups(h, memos.id);
     expect(b.previous?.path).toMatch(/\.before-restore-/);
     const kept = b.previous!.path;
@@ -225,6 +231,7 @@ describe('backup places (decision 152)', () => {
     // the database password is the one the data was created with
     const secretsOf = (hh: Harness) => readdirSync(path.join(hh.stateDir, 'instances', memos.id, 'secrets')).sort().map((f) => readFileSync(path.join(hh.stateDir, 'instances', memos.id, 'secrets', f), 'utf8'));
     expect(secretsOf(h2)).toEqual(secretsOf(h));
+    expect(readFileSync(settingsJson(h2, memos.id), 'utf8')).toBe(SETTINGS_AT_BACKUP); // decision 180: settings came along
     // the restored app can be backed up from here, to the same place
     await h2.api.expect(200, 'PUT', `/v1/instances/${memos.id}/backups`, { enabled: true, targets: [r.target.id] });
     await h2.api.expect(202, 'POST', `/v1/instances/${memos.id}/backups/run`, {});

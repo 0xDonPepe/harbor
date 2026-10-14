@@ -753,6 +753,46 @@ Gate: lint, typecheck, unit 491 (+2 skipped), integration 288 + 3 skipped, e2e 3
 The first dispatch (38426002364) found a jq scope bug in the find job; fixed in harbor-apps before these runs.
 **Not verified yet:** a non-dry run (land: commit, PR, issue, catalog dispatch on GitHub), an automatic update on a box.
 
+## 3o. Local AI: the gpu permission (2026-10-13, Harbor 0.34.0, decision 179)
+
+| What | Evidence |
+|---|---|
+| Format | unit `gpu.test.ts`: `gpu` accepted with all three decision-163 permissions, unknown values refused; package compose refuses `devices`, `deploy`, `runtime`, `group_add` |
+| Render (pure) | unit: NVIDIA device request only; `/dev/dri` + render/video groups (merged after `/dev/net/tun`, deduplicated); nothing for none / toolkit missing / no facts / a service without the grant; a no-restart re-render reproduces the running file |
+| Detection | unit, fake host roots: NVIDIA + `nvidia` runtime; NVIDIA + executable hook only (a non-executable one does not count); NVIDIA without toolkit + an nvidia-drm render node (harbor-old's layout) = none + `NVIDIA_TOOLKIT_MISSING`; `docker info` failing falls back to the hook; i915 → dri with gids; AMD next to NVIDIA-without-toolkit; nothing; unreadable root; 30 s cache |
+| Plans, runtime, DTOs | integration `gpu.test.ts` (fake engine + injected FakeGpu): review lists gpu, `PERMISSION_REQUIRED` until accepted, CPU line; toolkit problem in `InstanceDetail.gpu` and `/v1/system/host`; NVIDIA after the toolkit: Restart writes the device request, `inUse` flips; update adding gpu skipped by update-all and refused without acceptance; dri render |
+| Console | e2e decision 179 (fake NVIDIA machine): the review names the card, Install waits for the box, the drawer shows *Graphics card … (in use)*, Settings → Overview shows the card |
+
+Review fixes (2026-10-14, before the release):
+
+| What | Evidence |
+|---|---|
+| Hook newer than dockerd | unit: a hook installed after dockerd started (ctime vs `/run/docker.pid` + `/proc/<pid>/stat` + btime) is `NVIDIA_DOCKER_RESTART_NEEDED`, also with an unknown start time; one installed before is `nvidia`; the registered runtime wins; with Intel graphics too = dri + the problem. Integration: that problem renders no device request, the event names "Restart Docker" |
+| `inUse` = the kind found now | integration: Intel graphics in use, then NVIDIA found → `inUse: false` until Restart switches the file; the toolkit removed again → `inUse: false` |
+| Render node only | unit + integration: dri renders `/dev/dri/renderD128:/dev/dri/renderD128` + the node's gid (no `video`, no `card<N>`); the node name survives a no-restart re-render; no node, nothing |
+| NVIDIA capabilities and variables | unit: the device request names `compute, utility`; a gpu service refuses `NVIDIA_VISIBLE_DEVICES` / `NVIDIA_DRIVER_CAPABILITIES` / `NVIDIA_MIG_CONFIG_DEVICES` literals and a setting bound to one; other services and `NVIDIA_DISABLE_REQUIRE` stay accepted (all 140 harbor-apps-local-ai packages verify) |
+| Adopt with gpu | integration `app-homes.test.ts`: a second harness refuses the adopt with `PERMISSION_REQUIRED` and the home's files, its `resources` and `plans` stay untouched; with `acceptPermissions` it adopts and the install operation succeeds (first end-to-end adopt test: it found the `__home__` row hitting the foreign key before its instance existed; submit now records it with the instance) |
+| Wording | unit: `gpuStatusLine` (harbor inspect) and `gpuFact` name the NVIDIA card next to Intel graphics; the console's `gpu-text.ts` for nvidia, dri, dri + toolkit missing, toolkit missing, restart needed, none and a failed check, asking and not |
+
+**Not verified live yet:** anything on a real GPU. harbor-old (RTX 3090, driver 550, Docker 29.8.1, no toolkit) is the
+target: CPU install + toolkit line first, then the toolkit (Operator Guide, GPU), *Docker has not restarted* until
+`systemctl restart docker`, Restart, `ollama ps` = 100% GPU.
+
+## 3p. App settings (2026-10-14, Harbor 0.34.0, decision 180)
+
+| What | Evidence |
+|---|---|
+| Format | unit `app-settings.test.ts`: every type accepted; unknown keys, bad types, empty bindings, multi-line strings, bad ids and `$` templates refused by the schema; the validator refuses a default that does not fit (range, integer, type, choice), rules of another type (`min` on boolean, `maxLength` on integer, `choices` on string, `onValue` on string), equal on/off values, duplicate ids, unknown services, a template without `{{value}}`, and a variable already set by compose (with "move that value into the setting's default"), a secret, a link or another setting |
+| Render (pure) | unit: defaults when nothing is stored; overrides win; a disallowed override falls back to the default; boolean onValue/offValue and true/false; templates; `$HOME${X}` rendered as `$$HOME$${X}` |
+| Plans and submissions | unit: install plan asks every setting + one change line; submissions checked (range, type, choice, one line, ids the plan does not ask about) with `SETTING_INVALID`; configure lines "old -> new" and "(back to the default)", unchanged values skipped; update plan: reset (no longer allowed), new (asked), dropped, default change line; merge/prune for the runner; CLI `--set` parsing; console form helpers |
+| End to end (fake engine) | integration `app-settings.test.ts`: install with defaults (no file, defaults in env, DTO); 400 `SETTING_INVALID` for out of range / unknown id / wrong type before any instance exists; install with chosen values (event lines, `settings.json` 0644 with overrides only, env, DTO); configure one value (re-render, change line, file); back to the default removes the override; same value = nothing to change; bad / unknown value refused; Restart keeps values; remove + reinstall keeps them; update resets the narrowed value, drops the removed setting, asks only for the new one and stores it; an unattended update gives the new one its default; purge deletes the file; a package without settings carries none. `backups.test.ts`: `settings.json` is in the cold stage, restore in place puts the backed-up file back, restore on another machine brings it along |
+| Override equal to a new default | unit: an update whose default moves onto the operator's value keeps the override (no plan line), the next default change leaves the app at that value; choosing the default on the app page then follows it ("stays 8192, now as the default") |
+| Console | e2e decision 180: the review's Options (collapsed, defaults, out-of-range blocks Install with "1 to fix" in the summary, an alert next to the buttons and the section kept open, "2 changed"); the app page lists values with *(default)*; Change… → form (Review disabled until a change, Reset to default) → *Review new settings* shows "Full → Half" and "16384 → 8192 (default)" → Apply → the page shows the new values |
+
+Gate: lint, typecheck, unit 552 (+2 skipped), integration 328 + 3 skipped, e2e 41, `catalog:verify` (fixtures and the
+140 harbor-apps-local-ai packages), `catalog:hash --check` (fixtures and harbor-apps-local-ai), `openapi --check`.
+**Not verified live yet:** a setting on a real Docker engine (expected to behave like any other environment literal).
+
 
 ### Run vm-2026-09-14T17-27-18 (fresh VM) — FAILED at A01, fixed
 

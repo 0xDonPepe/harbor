@@ -3,12 +3,14 @@ import path from 'node:path';
 import { UUID_RE } from '../contracts/patterns.js';
 import { tagValue } from '../backups/restic.js';
 import type { AppLinkDto, FixedPortDto, LinkChoice, LinkDto } from '../contracts/api.js';
-import type { LinkClaim, Manifest, ManifestPermission, SecretClaim } from '../contracts/types.js';
-import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permissionsOf } from '../planner/permissions.js';
+import type { LinkClaim, Manifest, ManifestPermission, ManifestSetting, SecretClaim, SettingValue } from '../contracts/types.js';
+import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permissionDto, permissionsOf } from '../planner/permissions.js';
+import { gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf } from '../planner/gpu.js';
 import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
+import { checkSubmittedSettings, formatSettingValue, installSettingChanges, plannedConfigureSettings, plannedInstallSettings, plannedUpdateSettings, settingDtos } from '../planner/settings.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
-import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, GpuDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, PermissionDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
 import { lanAppHost, lanNames, lanUrl } from '../system/lan.js';
 import { caPem, ensureTlsCerts, HTTPS_ONLY_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState, reconcileLanHttps, runtimeLanAccess } from '../system/lan-https.js';
@@ -44,7 +46,7 @@ import { ONE_TIME_TTL_MS } from '../state/one-time.js';
 import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
 import { retainedExposures } from './retained-exposures.js';
-import { instanceDir, loadReleaseSnapshot, secretExists } from './instance-dir.js';
+import { instanceDir, loadReleaseSnapshot, readRuntimeModel, readSettingOverrides, secretExists } from './instance-dir.js';
 import { packageVersionOf } from '../packages/version.js';
 
 // Decision 176: an automatic update waits for its backup this long, and after a failed backup tries again this much later.
@@ -869,15 +871,15 @@ export class ApplicationService {
     return this.packageMeta(i).primaryEndpoint;
   }
 
-  private packageMeta(i: InstanceRow): { version: string | null; name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
-    const from = (pkg: LoadedPackage) => ({ version: pkg.revision === i.revision ? packageVersionOf(pkg) : null, ports: fixedPortsOf(pkg.manifest), hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
+  private packageMeta(i: InstanceRow): { version: string | null; name: string; primaryEndpoint: string; description: string; setup: { endpoint: string; instructions: string } | null; icon: string | null; category: string; defaultCredentials: CatalogItemDto['defaultCredentials']; widget: NonNullable<LoadedPackage['manifest']['presentation']>['widget'] | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; settings: ManifestSetting[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
+    const from = (pkg: LoadedPackage) => ({ settings: pkg.manifest.settings ?? [], version: pkg.revision === i.revision ? packageVersionOf(pkg) : null, ports: fixedPortsOf(pkg.manifest), hideFromHome: pkg.manifest.presentation?.hideFromHome === true, apiOnly: pkg.manifest.endpoints[pkg.manifest.ui.primaryEndpoint]?.kind === 'api', name: pkg.manifest.metadata.name, primaryEndpoint: pkg.manifest.ui.primaryEndpoint, description: pkg.manifest.metadata.description, setup: pkg.manifest.setup ?? null, icon: pkg.manifest.presentation?.icon ?? null, category: pkg.manifest.presentation?.category ?? 'other', defaultCredentials: defaultCredentialsOf(pkg.manifest), widget: pkg.manifest.presentation?.widget ?? null, operatorSecrets: (pkg.manifest.secrets ?? []).filter((x) => x.source === 'operator'), links: pkg.manifest.links ?? [] });
     try {
       return from(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'release'), i.packageId));
     } catch {
       try {
         return from(this.ctx.packages.load(i.packageId));
       } catch {
-        return { version: null, name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], hideFromHome: false, apiOnly: false, ports: [] };
+        return { version: null, name: i.packageId, primaryEndpoint: i.endpoints[0]?.id ?? 'web', description: '', setup: null, icon: null, category: 'other', defaultCredentials: null, widget: null, operatorSecrets: [], links: [], settings: [], hideFromHome: false, apiOnly: false, ports: [] };
       }
     }
   }
@@ -914,9 +916,11 @@ export class ApplicationService {
 
   // Read-time look that is not a column: links, operator secrets and Hide from Home (decision 131: the
   // operator's per-app choice in the `home.hidden` setting wins over the package's suggestion).
-  private extraLook(i: InstanceRow, meta: { version: string | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { version: string | null; hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] } {
+  private extraLook(i: InstanceRow, meta: { version: string | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; settings: ManifestSetting[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { version: string | null; hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[]; settings: NonNullable<InstanceSummary['settings']> } {
     const choice = this.ctx.repo.setting<Record<string, boolean>>('home.hidden')?.[i.id];
-    return { ...this.linkLook(i, meta), version: meta.version, hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports };
+    // decision 180: effective values (the operator's overrides, else the installed release's defaults)
+    const settings = meta.settings.length ? settingDtos({ settings: meta.settings }, readSettingOverrides(this.ctx.config.stateDir, i.id)) : [];
+    return { ...this.linkLook(i, meta), version: meta.version, hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports, settings };
   }
 
   private linkLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[] }): { links: AppLinkDto[]; linkedBy: InstanceSummary['linkedBy']; operatorSecrets: InstanceSummary['operatorSecrets'] } {
@@ -1151,14 +1155,19 @@ export class ApplicationService {
   async backfillLoginKey(instanceId: string, masterKey: Buffer, passphrase: string): Promise<boolean> {
     const home = this.homeRow(instanceId);
     if (!home || home.metadata?.['machineWrapped'] !== undefined) return false;
-    if (!(await this.matchesAdminPassword(passphrase))) return false;
+    const wrapped = await this.loginWrapping(masterKey, passphrase);
+    if (!wrapped) return false;
+    this.ctx.repo.upsertResource({ instanceId: home.instanceId, kind: home.kind, role: home.role, dockerId: home.dockerId, name: home.name, token: home.token, metadata: { ...(home.metadata ?? {}), machineWrapped: wrapped, loginKey: true } });
+    this.ctx.log.info('app home now unlocks with the Harbor login on this machine (passphrase matches)', { instanceId });
+    return true;
+  }
+  // The machine wrapping of an app's key when its passphrase is the Harbor login password (null otherwise)
+  private async loginWrapping(masterKey: Buffer, passphrase: string): Promise<MachineWrappedKey | null> {
+    if (!(await this.matchesAdminPassword(passphrase))) return null;
     const machineKey = this.ctx.machineKey.take();
-    if (!machineKey) return false;
+    if (!machineKey) return null;
     try {
-      const wrapped = wrapMasterKeyForMachine(masterKey, machineKey);
-      this.ctx.repo.upsertResource({ instanceId: home.instanceId, kind: home.kind, role: home.role, dockerId: home.dockerId, name: home.name, token: home.token, metadata: { ...(home.metadata ?? {}), machineWrapped: wrapped, loginKey: true } });
-      this.ctx.log.info('app home now unlocks with the Harbor login on this machine (passphrase matches)', { instanceId });
-      return true;
+      return wrapMasterKeyForMachine(masterKey, machineKey);
     } finally {
       zeroMachineKey(machineKey);
     }
@@ -1558,7 +1567,9 @@ export class ApplicationService {
           entries = scanAppHomes(pkgPath).map((e) => {
             if (!e.descriptor) return { home: `${pkgPath}/${e.name}`, name: e.name, displayName: e.name, packageId: '', packageRevision: '', instanceId: '', drive: c.dir, adopted: false, error: e.error ?? 'unreadable app home' };
             const m = e.descriptor.manifest;
-            return { home: e.descriptor.home, name: e.name, displayName: m.displayName, packageId: m.packageId, packageRevision: m.packageRevision, instanceId: m.instanceId, drive: c.dir, adopted: adoptedPaths.has(e.descriptor.home), error: null };
+            const adopted = adoptedPaths.has(e.descriptor.home);
+            const permissions = adopted ? null : this.adoptPermissions(m.packageId);
+            return { home: e.descriptor.home, name: e.name, displayName: m.displayName, packageId: m.packageId, packageRevision: m.packageRevision, instanceId: m.instanceId, drive: c.dir, adopted, error: null, ...(permissions?.length ? { permissions } : {}) };
           });
         } catch {
           continue; // package dir missing mid-scan: skip quietly
@@ -1569,17 +1580,32 @@ export class ApplicationService {
     return out.sort((a, b) => a.home.localeCompare(b.home));
   }
 
+  // What adopting a found app asks the operator to accept (decision 163/179); null when its package is not here
+  private adoptPermissions(packageId: string): PermissionDto[] | null {
+    try {
+      return permissionsOf(this.ctx.packages.load(packageId).manifest).map(permissionDto);
+    } catch {
+      return null;
+    }
+  }
+
   // Adopt a found app home onto this machine with its encryption passphrase
   // (or recovery key): verify once, then LEAVE LOCKED. The adopted instance
   // records the home with no machine wrapping, so it shows locked until the
   // operator Starts it with the passphrase — one by one, like every custom
   // app. Ports re-allocate locally; identity (UUID) travels in the manifest.
-  async adoptApp(home: string, passphrase: string, opts: { name?: string } | undefined, actor: string): Promise<InstanceSummary> {
+  async adoptApp(home: string, passphrase: string, opts: { name?: string; acceptPermissions?: boolean } | undefined, actor: string): Promise<InstanceSummary> {
     const { manifest } = describeAppHome(home);
     const masterKey = await unlockAppHome(home, passphrase);
     try {
       if (this.ctx.repo.instance(manifest.instanceId)) throw new HarborError('NAME_CONFLICT', `this machine already has an instance for ${manifest.displayName}`, { nextAction: 'That app is already adopted here.' });
       const pkg = this.ctx.packages.load(manifest.packageId);
+      // Decision 163/179: the person adopting accepts the package's permissions (gpu included) up front, before
+      // anything touches the drive or this machine's records (adopt submits its own plan)
+      const asked = permissionsOf(pkg.manifest);
+      if (asked.length && opts?.acceptPermissions !== true) {
+        throw new HarborError('PERMISSION_REQUIRED', `${manifest.displayName} asks for permissions you have not accepted: ${asked.map((p) => `${p.service} ${p.permission}`).join(', ')}`, { nextAction: 'Adopt it with them accepted (console: tick the box under Adopt; CLI: harbor adopt --accept-permissions).' });
+      }
       const instances = this.ctx.repo.listInstances();
       const taken = new Set(instances.map((i) => i.name));
       const slug = manifest.displayName.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || pkg.id;
@@ -1598,6 +1624,7 @@ export class ApplicationService {
       const endpoints = await this.allocatePorts(pkg);
       const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
       const permissions = permissionsOf(pkg.manifest);
+      const gpu = await this.planGpu(pkg.manifest);
       const storage = this.resolveStorage(pkg, identity, {}, instances);
       const now = this.ctx.clock.now();
       const expiresAt = rfc3339(addSeconds(now, this.ctx.config.planTtlSeconds));
@@ -1609,6 +1636,7 @@ export class ApplicationService {
         endpoints,
         ports: fixedPorts,
         permissions,
+        ...(gpu ? { gpu } : {}),
         storage,
         // Nested layout: the home is <candidate>/<packageId>/<instanceName>;
         // the location dir is the package dir (strip one segment).
@@ -1620,7 +1648,10 @@ export class ApplicationService {
           `Create Compose project ${identity.project} with a private bridge network`,
           ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
           ...this.fixedPortChanges(fixedPorts, permissions),
+          ...(gpu ? gpuChanges(pkg.manifest, gpu) : []),
           ...storage.map((s) => `Use the drive's data at ${home}/volumes/${s.composeVolume} (${s.purpose})`),
+          // decision 180: settings stay with the instance on its old machine, not on the drive
+          ...(pkg.manifest.settings?.length ? ['Start its settings at the defaults (the values chosen on the other machine stay there); change them on the app page'] : []),
         ],
         warnings: ['Ports are allocated fresh on this machine; addresses differ from the previous one.'],
         releaseHashes: pkg.hashes,
@@ -1629,15 +1660,17 @@ export class ApplicationService {
       const plan: Omit<PlanRow, 'consumedOperationId'> = { id: this.ctx.ids.uuid(), actor, kind: 'install', instanceId, proposal, expectedGeneration: 0, createdAt: rfc3339(now), expiresAt };
       this.ctx.repo.insertPlan(plan);
       // Adopt reuses the install operation path: the runner sees the home
-      // resource marker below and roots volumes at the existing home instead
-      // of creating a fresh one. The passphrase was verified above (unlock
-      // succeeded) and is NOT stored; the key is held for THIS boot only so
-      // the install can unlock the kernel seal and start the app — a reboot
-      // locks it again. No machine wrapping — adopted apps unlock per-app
-      // with their own passphrase, never silently.
-      this.ctx.repo.upsertResource({ instanceId, kind: 'volume', role: '__home__', dockerId: null, name: home, token: null, metadata: { home: true, driveId: manifest.driveId, adopted: true } });
+      // resource marker (recorded by submit, with the instance it belongs to)
+      // and roots volumes at the existing home instead of creating a fresh one.
+      // The passphrase was verified above (unlock succeeded) and is NOT stored;
+      // the key is held for THIS boot only so the install can unlock the kernel
+      // seal and start the app — a reboot locks it again. No machine wrapping —
+      // adopted apps unlock per-app with their own passphrase, never silently
+      // (unless it is the Harbor login password: then the login opens it).
+      const loginWrapped = await this.loginWrapping(masterKey, passphrase);
+      if (loginWrapped) this.ctx.log.info('app home now unlocks with the Harbor login on this machine (passphrase matches)', { instanceId });
+      const homeResource = { name: home, metadata: { home: true, driveId: manifest.driveId, adopted: true, ...(loginWrapped ? { machineWrapped: loginWrapped, loginKey: true } : {}) } };
       this.holdAppUnlock(instanceId, Buffer.from(masterKey));
-      await this.backfillLoginKey(instanceId, masterKey, passphrase);
       // The adopting Harbor stamps its own card: from now on THIS machine's
       // recovery key opens the app. The previous machine's card stops working
       // for it; the app's own passphrase and words are untouched.
@@ -1652,9 +1685,13 @@ export class ApplicationService {
       // Adopt plans carry no passphrase (the operator already proved it by
       // unlocking above); pre-seed the secret check so submit() passes.
       this.submitInstallLocationSecret(plan.id, 'adopted');
-      const submit = this.submit(plan.id, this.ctx.ids.uuid(), actor);
+      try {
+        this.submit(plan.id, this.ctx.ids.uuid(), actor, { acceptPermissions: opts?.acceptPermissions === true, adoptedHome: homeResource });
+      } catch (e) {
+        this.lockApp(instanceId); // no instance: drop the held key
+        throw e;
+      }
       if (displayName) this.ctx.repo.setInstanceAppearance(instanceId, { displayName });
-      void submit;
       const fresh = this.ctx.repo.instance(instanceId)!;
       const meta = this.packageMeta(fresh);
       return instanceSummary(fresh, meta.name, meta.primaryEndpoint, [], { icon: meta.icon, category: meta.category, lanHost: this.lanPlainHost(), lanSecureHost: this.lanSecureHost(), usage: null, needsDrive: null, home: this.homeState(instanceId), hiddenFromHome: this.extraLook(fresh, meta).hiddenFromHome, apiOnly: meta.apiOnly });
@@ -1684,6 +1721,7 @@ export class ApplicationService {
       }
     }
     const lastOp = row.lastOperationId ? this.ctx.repo.operation(row.lastOperationId) : null;
+    const gpu = row.installState === 'retained' ? undefined : await this.instanceGpu(row);
     const setupEndpoint = meta.setup ? row.endpoints.find((e) => e.id === meta.setup!.endpoint) : undefined;
     return {
       ...summary,
@@ -1693,6 +1731,7 @@ export class ApplicationService {
       resources: resources.map((r, i) => ({ kind: r.kind, role: r.role, name: r.name, present: presence[i] ?? null })),
       events: this.ctx.repo.eventsForInstance(row.id, 50).map((e) => ({ cursor: String(e.cursor), at: e.at, phase: e.phase, message: e.message })),
       lastError: lastOp?.errorCode ? { code: lastOp.errorCode, message: lastOp.errorMessage ?? '', nextAction: lastOp.nextAction ?? '' } : null,
+      ...(gpu ? { gpu } : {}),
     };
   }
 
@@ -1809,6 +1848,7 @@ export class ApplicationService {
       const endpoints = await this.allocatePorts(pkg);
       const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
       const permissions = permissionsOf(pkg.manifest);
+      const gpu = await this.planGpu(pkg.manifest);
       // Install location (whole encrypted app on a drive): validated here so a
       // bad dir or weak passphrase never reaches Docker. The passphrase itself
       // is never stored in the plan — only the dir. The runner collects it at
@@ -1865,15 +1905,18 @@ export class ApplicationService {
         endpoints,
         ports: fixedPorts,
         permissions,
+        ...(gpu ? { gpu } : {}),
         storage,
         location,
         secrets: plannedSecrets(pkg.manifest),
         links,
+        ...(pkg.manifest.settings?.length ? { settings: plannedInstallSettings(pkg.manifest) } : {}),
         changes: [
           `Install ${pkg.manifest.metadata.name} (${pkg.id} revision ${pkg.revision}) as instance "${proposed.name}"`,
           `Create Compose project ${identity.project} with a private bridge network`,
           ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
           ...this.fixedPortChanges(fixedPorts, permissions),
+          ...(gpu ? gpuChanges(pkg.manifest, gpu) : []),
           ...(location
             ? [
                 location.defaultKey
@@ -1884,6 +1927,7 @@ export class ApplicationService {
           ...storage.map((s) => (s.hostPath ? `Use your folder ${s.hostPath} for ${s.purpose}${s.readOnly ? ' (read-only)' : ''}; Harbor never deletes it` : `Create retained volume ${s.volumeName} (${s.purpose})`)),
           ...(pkg.manifest.secrets ?? []).map((s) => (s.source === 'operator' ? `Store the value you provide for ${s.id} (${s.prompt ?? s.id}) as a retained secret${s.optional ? ' (optional)' : ''}` : `Generate retained secret ${s.id} (${s.bytes ?? 32} bytes)`)),
           ...this.linkChanges(links, pkg.manifest.metadata.name),
+          ...installSettingChanges(pkg.manifest),
           ...(mainExposure ? [`Publish it at ${exposureUrl(mainExposure)} and make that its main address`] : []),
           ...Object.values(pkg.release.images).map((i) => `Pull image ${i.reference} (${i.tag})`),
           ...Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => `Build ${svc} from source at commit ${b.commit.slice(0, 12)} (${b.tag})`),
@@ -1991,7 +2035,7 @@ export class ApplicationService {
           `Delete the private network ${inst.project}_default if unused`,
           ...this.ctx.repo.exposures(inst.id).map((e) => `Withdraw ${exposureUrl(e)} for now (${e.via === 'proxy' ? 'your proxy keeps its own entry' : e.via === 'public' ? 'Caddy route' : 'tailscale serve entry'}); Reinstall publishes it again`),
           ...this.linkRemovalNotes(inst).changes,
-          'Retain volumes, secrets, name and port allocations',
+          'Retain volumes, secrets, settings, name and port allocations',
         );
         break;
       case 'purge':
@@ -2000,7 +2044,7 @@ export class ApplicationService {
           ...(inst.installState !== 'retained' ? [`Stop and delete the containers of "${inst.name}" and its private network`] : []),
           ...this.linkRemovalNotes(inst).changes,
           `Delete the data volume(s) Harbor created for "${inst.name}" (ownership verified first)`,
-          'Delete its secrets and stored release',
+          'Delete its secrets, settings and stored release',
           `Free the name "${inst.name}" and its ports`,
         );
         break;
@@ -2066,6 +2110,7 @@ export class ApplicationService {
     const fixedPorts = await this.checkFixedPorts(next.manifest, inst.id);
     const heldPorts = new Set(fixedPortsOf(current.manifest).map((p) => p.hostPort));
     const addedPermissions = newPermissions(current.manifest, next.manifest);
+    const gpu = await this.planGpu(next.manifest);
     // kept: every secret the instance has, plus optional operator secrets the current release already declared (left empty on purpose)
     const keptSecrets = new Set([...inst.secrets.map((r) => r.id), ...(current.manifest.secrets ?? []).map((s) => s.id)]);
     const newSecrets = (next.manifest.secrets ?? []).filter((s) => !keptSecrets.has(s.id)).map((s) => s.id);
@@ -2079,6 +2124,8 @@ export class ApplicationService {
     ].filter((x) => x.from !== x.to);
     const fromVersion = packageVersionOf(current);
     const toVersion = packageVersionOf(next);
+    // decision 180: new settings start at their default (the submission may choose); dropped and no longer allowed ones say so
+    const settingPlan = plannedUpdateSettings(current.manifest, next.manifest, readSettingOverrides(this.ctx.config.stateDir, inst.id));
     const proposal: PlanProposal = {
       packageId: inst.packageId,
       revision: next.revision,
@@ -2087,11 +2134,13 @@ export class ApplicationService {
       endpoints,
       ports: fixedPorts,
       permissions: addedPermissions,
+      ...(gpu ? { gpu } : {}),
       opensPorts: fixedPorts.filter((p) => !heldPorts.has(p.hostPort)).map((p) => p.hostPort),
       storage: [...keptStorage, ...newStorage],
       location: null,
       secrets: plannedSecrets(next.manifest, keptSecrets),
       links,
+      ...(settingPlan.settings.length ? { settings: settingPlan.settings } : {}),
       changes: [
         `Update ${pkgName} "${inst.name}" from revision ${inst.revision}${fromVersion ? ` (${fromVersion})` : ''} to revision ${next.revision}${toVersion ? ` (${toVersion})` : ''}`,
         'Keep the name, addresses, ports, data volumes, your folders and secrets',
@@ -2101,8 +2150,10 @@ export class ApplicationService {
         ...newSecrets.map((id) => ((next.manifest.secrets ?? []).find((s) => s.id === id)?.source === 'operator' ? `Store the value you provide for the new secret ${id}` : `Generate retained secret ${id}`)),
         ...this.linkChanges(links, pkgName),
         ...droppedLinks.map((l) => `Remove link ${l.linkId} (this release no longer uses it) and its network ${l.networkName}`),
+        ...settingPlan.changes,
         ...fresh.map((e) => `Publish new endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
         ...this.fixedPortChanges(fixedPorts.filter((p) => !heldPorts.has(p.hostPort)), addedPermissions),
+        ...(gpu ? gpuChanges(next.manifest, gpu) : []),
         ...droppedVolumes.map((v) => `Volume ${v} is no longer used by this release; it is kept, not deleted`),
         'Pull the new images by digest, start the new containers, check readiness',
         'If the new release does not become healthy, put the previous release back and start it again',
@@ -2132,7 +2183,12 @@ export class ApplicationService {
       if (!claim) throw new HarborError('INVALID_REQUEST', `${pkgName} has no secret ${id}`);
       if (claim.source !== 'operator') throw new HarborError('INVALID_REQUEST', `secret ${id} is generated by Harbor and cannot be typed in`, { nextAction: 'Only secrets the package asks you for (source: operator) can be changed.' });
     }
-    if (!wanted.length && !Object.keys(req.links ?? {}).length) throw new HarborError('INVALID_REQUEST', 'nothing to change', { nextAction: 'Name a secret to replace (--secret id=@file) and/or a link provider (--link id=<app>).' });
+    // decision 180: setting values are checked here (they are not secret: the plan lists them as changes)
+    const settingPlan = req.settings ? plannedConfigureSettings(pkg.manifest, readSettingOverrides(this.ctx.config.stateDir, inst.id), req.settings) : null;
+    if (!wanted.length && !Object.keys(req.links ?? {}).length && !settingPlan?.changes.length) {
+      if (req.settings && Object.keys(req.settings).length) throw new HarborError('INVALID_REQUEST', `nothing to change: ${Object.keys(req.settings).length === 1 ? 'that setting already has this value' : 'those settings already have these values'}`, { nextAction: 'Choose a different value.' });
+      throw new HarborError('INVALID_REQUEST', 'nothing to change', { nextAction: 'Name a secret to replace (--secret id=@file), a link provider (--link id=<app>) and/or a setting (--set id=value).' });
+    }
     const identity = identityFor(this.ctx.installationId, inst.id);
     const keep = new Set((pkg.manifest.secrets ?? []).filter((s) => !wanted.includes(s.id)).map((s) => s.id));
     const secrets = plannedSecrets(pkg.manifest, keep);
@@ -2147,9 +2203,11 @@ export class ApplicationService {
       location: null,
       secrets,
       links,
+      ...(settingPlan?.settings.length ? { settings: settingPlan.settings, settingValues: settingPlan.values } : {}),
       changes: [
         ...wanted.map((id) => `Replace the stored value of ${id} with the one you provide (kept as a retained secret, never shown)`),
         ...this.linkChanges(links, pkgName),
+        ...(settingPlan?.changes ?? []),
         `Re-render the private Compose file of "${inst.name}" and recreate the containers whose configuration changed (same volumes and ports), then check readiness`,
       ],
       warnings: [],
@@ -2333,7 +2391,7 @@ export class ApplicationService {
         `Stop ${pkgName} ("${inst.name}") and delete its containers`,
         `Keep its current data aside at ${home.name}.before-restore-… (delete it later from the Backups tab)`,
         `Create a fresh sealed home at ${home.name} with the same key and restore the data of ${point.snapshot.time} from ${point.target.name} into it`,
-        `Put back its secrets and release as they were then, start it and check it answers (same name, ports, addresses and links)`,
+        `Put back its secrets, settings and release as they were then, start it and check it answers (same name, ports, addresses and links)`,
       ],
       warnings: [`Everything ${pkgName} saved after ${point.snapshot.time} is only in the copy kept aside.`, `${pkgName} is down while the data is restored.`, 'Needs free space for a second copy of the app at the same place.'],
       releaseHashes: inst.releaseHashes,
@@ -2393,6 +2451,7 @@ export class ApplicationService {
     const endpoints = await this.allocatePorts(pkg);
     const fixedPorts = await this.checkFixedPorts(pkg.manifest, null);
     const permissions = permissionsOf(pkg.manifest);
+    const gpu = await this.planGpu(pkg.manifest);
     const storage = this.resolveStorage(pkg, identity, {}, instances);
     const dir = this.resolveInstallLocation(req.location.dir, instances, pkg.id);
     const target = path.posix.join(dir, proposed.name);
@@ -2406,6 +2465,7 @@ export class ApplicationService {
       endpoints,
       ports: fixedPorts,
       permissions,
+      ...(gpu ? { gpu } : {}),
       storage,
       location: { dir, defaultKey: true },
       secrets: (pkg.manifest.secrets ?? []).map((s) => ({ id: s.id })),
@@ -2413,8 +2473,11 @@ export class ApplicationService {
         `Restore ${pkg.manifest.metadata.name} as it was at ${point.snapshot.time}, from ${point.target.name}`,
         `Create a sealed home at ${target}/ with the app's own key; this machine unlocks it when you log in, and your Harbor recovery key opens it anywhere`,
         `Put back its secrets, then create Compose project ${identity.project}`,
+        // decision 180: the restore point carries the settings the app had (none stored = the defaults)
+        ...(pkg.manifest.settings?.length ? ['Put back the settings it had at the restore point (any it never changed follow this release\'s defaults)'] : []),
         ...endpoints.map((e) => `Publish endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
         ...this.fixedPortChanges(fixedPorts, permissions),
+        ...(gpu ? gpuChanges(pkg.manifest, gpu) : []),
       ],
       warnings: ['Ports are allocated fresh on this machine; addresses differ from the previous one.', ...(tagValue(point.snapshot.tags, 'pkg') && pkg.revision ? [`It runs package revision ${pkg.revision} here; the app updates its own data if that is newer than the one it was backed up with.`] : [])],
       releaseHashes: pkg.hashes,
@@ -2726,6 +2789,34 @@ export class ApplicationService {
     return wanted;
   }
 
+  // Decision 179: the graphics card apps granted gpu get on this machine (Settings overview, `harbor gpu`)
+  async hostGpu(): Promise<GpuDto> {
+    return gpuDto(await this.ctx.gpu.detect());
+  }
+
+  // Decision 179: the graphics card found now, recorded in plans of packages that grant gpu (undefined otherwise)
+  private async planGpu(manifest: Manifest): Promise<PlanProposal['gpu']> {
+    if (!gpuServicesOf(manifest).length) return undefined;
+    return gpuDto(await this.ctx.gpu.detect());
+  }
+
+  // What the machine offers an installed app granted gpu, and whether its current Compose file hands it over
+  private async instanceGpu(i: InstanceRow): Promise<InstanceDetail['gpu']> {
+    let manifest: Manifest;
+    try {
+      manifest = loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'release'), i.packageId).manifest;
+    } catch {
+      return undefined;
+    }
+    const services = gpuServicesOf(manifest);
+    if (!services.length) return undefined;
+    const model = readRuntimeModel(path.join(instanceDir(this.ctx.config.stateDir, i.id), 'runtime'));
+    const found = await this.ctx.gpu.detect();
+    // in use = the containers have the card found NOW (one rendered with another kind needs a Restart to switch)
+    const rendered = gpuFromRendered(model, services).kind;
+    return { ...gpuDto(found), inUse: found.kind !== 'none' && rendered === found.kind };
+  }
+
   // plan lines for fixed ports and permissions (decision 163)
   private fixedPortChanges(ports: FixedPortDto[], perms: { service: string; permission: ManifestPermission }[]): string[] {
     return [
@@ -2780,9 +2871,20 @@ export class ApplicationService {
     return v;
   }
 
-  submit(planId: string, idempotencyKey: string, actor: string, opts: { secrets?: Record<string, string>; acceptPermissions?: boolean } = {}): SubmitResult {
+  // Decision 180: setting values chosen at submission (install review → Options, an update's new settings, CLI
+  // --set). Not secret, but like the values above they belong to this one submission: held by plan id, taken by
+  // the runner when the operation starts (a daemon restart marks a queued operation needs_action anyway).
+  private submittedSettings = new Map<string, Record<string, SettingValue>>();
+  takeSubmittedSettings(planId: string): Record<string, SettingValue> {
+    const v = this.submittedSettings.get(planId) ?? {};
+    this.submittedSettings.delete(planId);
+    return v;
+  }
+
+  submit(planId: string, idempotencyKey: string, actor: string, opts: { secrets?: Record<string, string>; settings?: Record<string, SettingValue>; acceptPermissions?: boolean; adoptedHome?: { name: string; metadata: Record<string, unknown> } } = {}): SubmitResult {
     const { repo, ids } = this.ctx;
     let checked: { store: Record<string, string>; clear: string[] } | null = null;
+    let chosen: Record<string, SettingValue> = {};
     const result = repo.transaction((): SubmitResult => {
       const existing = repo.operationByIdempotencyKey(idempotencyKey);
       if (existing) {
@@ -2797,6 +2899,7 @@ export class ApplicationService {
       }
       if (new Date(plan.expiresAt).getTime() <= this.ctx.clock.now().getTime()) throw new HarborError('PLAN_EXPIRED', `plan ${planId} expired at ${plan.expiresAt}`);
       checked = checkSubmittedSecrets((plan.proposal.secrets ?? []) as PlannedSecret[], opts.secrets);
+      chosen = checkSubmittedSettings(plan.proposal.settings ?? [], opts.settings);
       // Decision 163: permissions are accepted by the person approving, never by default. Update-all, auto-update
       // and git redeploys submit without it, so an update that asks for more stops here and waits for a person.
       // Decision 165: so does an update that opens fixed ports the current release does not publish (a release from
@@ -2856,6 +2959,8 @@ export class ApplicationService {
         });
         for (const e of plan.proposal.endpoints) repo.claimPort(e.hostPort, plan.instanceId, e.id);
         fixedClaims(plan.instanceId);
+        // adopt (adoptApp): the drive's home, recorded with the instance it belongs to, before the runner looks for it
+        if (opts.adoptedHome) repo.upsertResource({ instanceId: plan.instanceId, kind: 'volume', role: '__home__', dockerId: null, name: opts.adoptedHome.name, token: null, metadata: opts.adoptedHome.metadata });
       } else {
         const inst = repo.instance(plan.instanceId);
         if (!inst) throw new HarborError('NOT_FOUND', `instance ${plan.instanceId} no longer exists`);
@@ -2867,9 +2972,15 @@ export class ApplicationService {
       repo.insertOperation({ id: operationId, idempotencyKey, planId, actor, kind: plan.kind, instanceId: plan.instanceId });
       repo.consumePlan(planId, operationId);
       repo.addEvent({ operationId, instanceId: plan.instanceId, phase: 'queued', message: `${plan.kind} accepted for instance ${plan.proposal.name}` });
+      const chosenLines = Object.entries(chosen).map(([id, v]) => {
+        const def = (plan.proposal.settings ?? []).find((x) => x.id === id)!;
+        return `${def.label}: ${formatSettingValue(def, v)}`;
+      });
+      if (chosenLines.length) repo.addEvent({ operationId, instanceId: plan.instanceId, phase: 'queued', message: `with the settings you chose: ${chosenLines.join(', ')}` });
       return { operation: repo.operation(operationId)!, created: true };
     });
     if (result.created && checked) this.operatorValues.set(planId, checked);
+    if (result.created && Object.keys(chosen).length) this.submittedSettings.set(planId, chosen);
     if (result.created) {
       // decision 177: the operator withdrew an app's tailnet address: the every-app policy leaves it off (now or later)
       const plan = repo.plan(planId);

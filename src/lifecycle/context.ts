@@ -5,6 +5,7 @@ import type { DeviceMountService } from '../system/device-mount.js';
 import type { DaemonConfig } from '../config.js';
 import type { ComposeRunner, DockerAdapter } from '../docker/adapter.js';
 import type { PortObserver } from '../docker/ports.js';
+import type { GpuObserver } from '../system/gpu.js';
 import type { Repo } from '../state/repo.js';
 import type { Clock, Ids } from '../util.js';
 import type { TailscaleProvider } from '../exposure/tailscale.js';
@@ -35,6 +36,8 @@ export interface Ctx {
   docker: DockerAdapter;
   compose: ComposeRunner;
   ports: PortObserver;
+  // decision 179: the graphics card apps granted `gpu` get (real host facts in the daemon; FakeGpu in fake mode)
+  gpu: GpuObserver;
   clock: Clock;
   ids: Ids;
   log: Logger;

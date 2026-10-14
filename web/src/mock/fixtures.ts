@@ -15,6 +15,7 @@ import type {
   SystemDto,
   SystemHostDto,
   SystemMetricsDto,
+  SettingDto,
   UiExposureDto,
 } from '../../../src/contracts/api';
 
@@ -151,6 +152,35 @@ export function mockCatalog(): CatalogItemDto[] {
         hasWidget: false,
       },
     }),
+    // decisions 179/180: a model server that asks for the graphics card and has settings
+    app('ollama', 'Ollama', 'Run language models on your own machine', {
+      multiInstance: false,
+      presentation: {
+        tagline: 'Run language models on your own machine',
+        category: 'ai',
+        icon: null,
+        gallery: [],
+        developer: 'Mock developer',
+        website: null,
+        source: null,
+        releaseNotes: null,
+        sizeHint: 'About 1 GB, plus your models',
+        hasWidget: false,
+      },
+    }),
+  ];
+}
+
+// Decision 180: Ollama's server settings as its package would declare them (values as an install would have them).
+export function mockOllamaSettings(): SettingDto[] {
+  const s = (x: Partial<SettingDto> & Pick<SettingDto, 'id' | 'label' | 'type' | 'default'>): SettingDto => ({ help: null, value: x.default, overridden: false, min: null, max: null, maxLength: null, choices: null, ...x });
+  return [
+    s({ id: 'context-length', label: 'Context length (tokens)', help: 'How much text a model keeps in mind. More uses more memory.', type: 'integer', default: 8192, value: 16384, overridden: true, min: 2048, max: 131072 }),
+    s({ id: 'keep-alive', label: 'Keep models loaded', help: 'How long a model stays in memory after a request, e.g. 5m or 1h.', type: 'string', default: '5m', maxLength: 16 }),
+    s({ id: 'parallel', label: 'Parallel requests', type: 'integer', default: 1, min: 1, max: 8 }),
+    s({ id: 'max-loaded', label: 'Models loaded at once', type: 'integer', default: 1, min: 1, max: 4 }),
+    s({ id: 'flash-attention', label: 'Flash attention', help: 'Faster, uses less memory on supported cards.', type: 'boolean', default: false, value: true, overridden: true }),
+    s({ id: 'kv-cache', label: 'Memory cache precision', type: 'choice', default: 'f16', choices: [{ value: 'f16', label: 'Full (f16)' }, { value: 'q8_0', label: 'Half (q8_0)' }, { value: 'q4_0', label: 'Quarter (q4_0)' }] }),
   ];
 }
 
@@ -309,6 +339,20 @@ export function mockInstances(): InstanceSummary[] {
       endpoints: [],
       hasRetainedData: true,
     },
+    {
+      ...base,
+      id: 'inst-ollama',
+      name: 'ollama',
+      packageId: 'ollama',
+      packageName: 'Ollama',
+      category: 'ai',
+      installState: 'installed',
+      runtime: 'running',
+      readiness: 'healthy',
+      endpoints: [endpoint(18088)],
+      usage: { cpuPercent: 8, memoryBytes: 2048 * MiB, sampledAt: t },
+      settings: mockOllamaSettings(),
+    },
   ];
 }
 
@@ -349,6 +393,7 @@ export function mockHost(): SystemHostDto {
     arch: 'x64',
     cpuModel: 'Intel Core i7 (mock)',
     power: { available: true, note: null },
+    gpu: { kind: 'nvidia', detail: 'NVIDIA GeForce RTX 3090' },
   };
 }
 

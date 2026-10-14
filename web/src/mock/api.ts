@@ -37,6 +37,7 @@ import {
   mockInstances,
   mockMetrics,
   mockNotifications,
+  mockOllamaSettings,
   mockStorage,
   mockStorageUsage,
   mockSystem,
@@ -139,6 +140,7 @@ function mockFormatDevice(name: string, mp: string, label: string): void {
   };
 }
 
+const GPU_APPS = new Set(['ollama', 'open-webui']);
 const planFor = (kind: PlanDto['kind'], instanceId: string, packageId: string, name: string): PlanDto => ({
   id: `plan-mock-${kind}`,
   kind,
@@ -151,10 +153,14 @@ const planFor = (kind: PlanDto['kind'], instanceId: string, packageId: string, n
   changes: [`Mock plan: ${kind} ${name || packageId} (nothing runs in design mode)`],
   endpoints: [],
   ports: [],
-  permissions: [],
+  // decision 179: the local-AI apps ask for the graphics card; the mock machine has an NVIDIA one
+  permissions: kind === 'install' && GPU_APPS.has(packageId) ? [{ service: 'ollama', permission: 'gpu', label: "Use this machine's graphics card (GPU)" }] : [],
+  ...(GPU_APPS.has(packageId) && (kind === 'install' || kind === 'update') ? { gpu: mockHost().gpu! } : {}),
   storage: [],
   location: null,
   secrets: [],
+  // decision 180: the install review's Options for an app with settings (at their defaults)
+  ...(packageId === 'ollama' && kind === 'install' ? { settings: mockOllamaSettings().map((x) => ({ ...x, value: x.default, overridden: false, change: 'new' as const, ask: true, previous: null })) } : {}),
   links: [],
   warnings: [],
   notes: [],
@@ -183,6 +189,7 @@ const detailFor = (inst: InstanceSummary): InstanceDetail => ({
   resources: [],
   events: [],
   lastError: null,
+  ...(GPU_APPS.has(inst.packageId) ? { gpu: { ...mockHost().gpu!, inUse: true } } : {}),
 });
 
 // Backups (decisions 149–154): two places, one app on, a week of restore points.
@@ -280,10 +287,19 @@ export const mockApi = {
     tailnetAll = { ...tailnetAll, except: included ? tailnetAll.except.filter((x) => x !== id) : [...new Set([...tailnetAll.except, id])] };
     return mockTailnetAll();
   },
-  plan: async (req: { kind: PlanDto['kind']; packageId?: string; instanceId?: string; name?: string; location?: { dir: string } }): Promise<PlanDto> => {
+  plan: async (req: { kind: PlanDto['kind']; packageId?: string; instanceId?: string; name?: string; location?: { dir: string }; settings?: Record<string, string | number | boolean> }): Promise<PlanDto> => {
     await beat();
     const inst = req.instanceId ? (instances.find((i) => i.id === req.instanceId) ?? instances[0]!) : instances[0]!;
     const p = planFor(req.kind, req.instanceId ?? inst.id, req.packageId ?? inst.packageId, req.name ?? inst.name);
+    // decision 180: a configure plan lists each setting it changes, "old -> new"
+    if (req.kind === 'configure' && req.settings) {
+      const defs = inst.settings ?? [];
+      p.settings = Object.entries(req.settings).flatMap(([id, v]) => {
+        const d = defs.find((x) => x.id === id);
+        return d ? [{ ...d, value: v, overridden: v !== d.default, change: 'set' as const, ask: false, previous: d.value }] : [];
+      });
+      p.changes = [...p.changes, ...p.settings.map((x) => `${x.label}: ${String(x.previous)} -> ${String(x.value)}${x.value === x.default ? ' (back to the default)' : ''}`)];
+    }
     // decision 170: the daemon's copyNote (src/planner/identity.ts), branch for branch, with its proposed name
     if (req.kind === 'install' && req.packageId) {
       const mine = instances.filter((i) => i.packageId === req.packageId);
@@ -324,6 +340,8 @@ export const mockApi = {
   },
   foundApps: async () => [
     { home: '/mnt/photos/harbor-apps/immich/immich-2', name: 'immich-2', displayName: 'Immich (2)', packageId: 'immich', packageRevision: '1', instanceId: null, drive: 'Photos', adopted: false, error: null },
+    // decision 179: adopting it asks for the graphics card first
+    { home: '/mnt/photos/harbor-apps/ollama/ollama', name: 'ollama', displayName: 'Ollama', packageId: 'ollama', packageRevision: '3', instanceId: null, drive: 'Photos', adopted: false, error: null, permissions: [{ service: 'ollama', permission: 'gpu' as const, label: "Use this machine's graphics card (GPU)" }] },
   ],
   adoptFoundApp: async (home: string) => {
     await beat();

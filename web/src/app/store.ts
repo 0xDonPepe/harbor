@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LinkChoice } from '../../../src/contracts/api';
+import type { LinkChoice, SettingValue } from '../../../src/contracts/api';
 import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, PlanDto, PlanRequest, PlatformToolDto, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
 import { ApiError, api, newIdempotencyKey } from '../api';
 
@@ -17,8 +17,9 @@ export interface Data {
 
 export type Action =
   | { kind: 'install'; packageId: string; name: string; storage?: Record<string, { hostPath: string }>; location?: { dir: string; passphrase?: string }; main?: InstallMainAddress; links?: Record<string, LinkChoice> }
-  // decisions 125/126: replace typed-in secrets (values asked in the review dialog) and/or change link providers
-  | { kind: 'configure'; instance: InstanceSummary; secrets?: string[]; links?: Record<string, LinkChoice | null> }
+  // decisions 125/126/180: replace typed-in secrets (values asked in the review dialog), change link providers
+  // and/or settings (the new values, from the app page's Settings → Change…)
+  | { kind: 'configure'; instance: InstanceSummary; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue> }
   | { kind: 'start' | 'stop' | 'restart' | 'remove' | 'reinstall' | 'purge' | 'update' | 'seal'; instance: InstanceSummary }
   | { kind: 'expose'; instance: InstanceSummary; via: 'tailnet' | 'public' | 'proxy'; hostname: string; protection: 'none' | 'basic'; makePrimary: boolean; proxyFrom?: string }
   // decision 127: hostname names one of several public names (withdraw it / make it the main address)
@@ -39,7 +40,7 @@ export function planRequestFor(a: Action): PlanRequest {
       // with the submission (see submitPassphraseFor).
       return { kind: 'install', packageId: a.packageId, ...(a.name ? { name: a.name } : {}), ...(a.storage && Object.keys(a.storage).length ? { storage: a.storage } : {}), ...(a.location ? { location: a.location } : {}), ...(a.main ? { main: a.main } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}) };
     case 'configure':
-      return { kind: 'configure', instanceId: a.instance.id, ...(a.secrets?.length ? { secrets: a.secrets } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}) };
+      return { kind: 'configure', instanceId: a.instance.id, ...(a.secrets?.length ? { secrets: a.secrets } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.settings && Object.keys(a.settings).length ? { settings: a.settings } : {}) };
     case 'expose':
       return { kind: 'expose', instanceId: a.instance.id, via: a.via, ...(a.via === 'public' ? { hostname: a.hostname, protection: a.protection } : {}), ...(a.via === 'proxy' ? { hostname: a.hostname, proxyFrom: a.proxyFrom ?? '' } : {}), makePrimary: a.makePrimary };
     case 'unexpose':
@@ -79,7 +80,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const startToken = useRef(0);
   // decision 164: the daemon restarted and this machine's key is locked; the review dialog asks for the password
   const [locked, setLocked] = useState(false);
-  const lastApprove = useRef<{ secrets?: Record<string, string>; acceptPermissions: boolean }>({ acceptPermissions: false });
+  const lastApprove = useRef<{ secrets?: Record<string, string>; acceptPermissions: boolean; settings?: Record<string, SettingValue> }>({ acceptPermissions: false });
   const [watching, setWatching] = useState<OperationDto | null>(null);
   const [lastDone, setLastDone] = useState<OperationDto | null>(null);
   const key = useRef<string | null>(null);
@@ -201,15 +202,16 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   };
 
   // secrets: values typed in the review dialog for operator-provided secrets (decision 125); in memory only.
-  const approve = async (secrets?: Record<string, string>, acceptPermissions = false) => {
+  // settings: values changed under Options in the review (decision 180), only ids the plan asks about.
+  const approve = async (secrets?: Record<string, string>, acceptPermissions = false, settings?: Record<string, SettingValue>) => {
     if (!plan || submitting.current) return;
     submitting.current = true;
-    lastApprove.current = { ...(secrets ? { secrets } : {}), acceptPermissions };
+    lastApprove.current = { ...(secrets ? { secrets } : {}), acceptPermissions, ...(settings ? { settings } : {}) };
     try {
       const k = key.current ?? (key.current = newIdempotencyKey());
       let r;
       try {
-        r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions);
+        r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions, settings);
       } catch (e) {
         // Another operation started on the app since the review was made: wait for it, then review again.
         if (e instanceof ApiError && e.code === 'BUSY' && pending) {
@@ -244,7 +246,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const unlockAndRetry = async (password: string) => {
     await api.unlockMachine(password);
     setLocked(false);
-    if (plan) await approve(lastApprove.current.secrets, lastApprove.current.acceptPermissions);
+    if (plan) await approve(lastApprove.current.secrets, lastApprove.current.acceptPermissions, lastApprove.current.settings);
     else if (pending) await start(pending);
   };
 

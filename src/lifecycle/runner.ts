@@ -7,6 +7,7 @@ import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
 import { LABELS } from '../naming.js';
 import { defaultNetworkName, identityFor, ownedVolumeName, volumeLabels, type InstanceIdentity } from '../planner/identity.js';
 import { renderCompose, type ConsumerLink } from '../planner/render.js';
+import { gpuChanges, gpuFromRendered, gpuServicesOf } from '../planner/gpu.js';
 import { linkAlias, linkAliasesDrift, linkExtraNames, linkNetworkLabels, linkValue } from '../planner/links.js';
 import { aliasesOn, linkMembers, ownsLinkNetwork } from './link-members.js';
 import type { NetworkInfo } from '../docker/adapter.js';
@@ -16,9 +17,11 @@ import { verifyBindMarker, writeBindMarker } from '../storage/bind-marker.js';
 import { createAppHome, describeAppHome, stampInstallationRecovery, unlockAppHome, unwrapMasterKeyForMachine, wrapMasterKeyForMachine, zeroKey, type MachineWrappedKey } from '../storage/app-home.js';
 import { protectorFor } from '../storage/crypto-provider.js';
 import { zeroMachineKey } from '../auth/machine-key.js';
-import type { LoadedPackage, Manifest } from '../contracts/types.js';
+import type { HostGpu, LoadedPackage, Manifest } from '../contracts/types.js';
 import type { InstanceRow, OperationRow, PlanRow, ResourceRow } from '../state/repo.js';
-import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapshot, readOperatorSecret, readSecret, removeSecret, secretExists, writeOperatorSecret, writeReleaseSnapshot, writeRuntimeCompose } from './instance-dir.js';
+import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapshot, readOperatorSecret, readSecret, readSettingOverrides, readSettingsBytes, removeSecret, secretExists, SETTINGS_FILE, writeOperatorSecret, writeReleaseSnapshot, writeRuntimeCompose, writeSettingOverrides, writeSettingsBytes, readRuntimeModel } from './instance-dir.js';
+import { applySettingValues, formatSettingValue, settingsOf } from '../planner/settings.js';
+import type { SettingValue } from '../contracts/types.js';
 import { waitReady } from './readiness.js';
 import { appAuthorities, exposureCheck, exposureUrl, primaryUrlFor } from '../exposure/urls.js';
 import { retainedExposures, setRetainedExposures, toRetained } from './retained-exposures.js';
@@ -52,6 +55,8 @@ export class OperationRunner {
   private opResult: Record<string, unknown> | null = null; // set by an operation to enrich the success result
   // Decision 125: operator-typed secret values handed over with this operation's submission (memory only).
   private supplied: { store: Record<string, string>; clear: string[] } = { store: {}, clear: [] };
+  // Decision 180: setting values chosen with this operation's submission (install review Options, CLI --set)
+  private chosenSettings: Record<string, SettingValue> = {};
 
   constructor(private readonly ctx: Ctx) {}
 
@@ -129,6 +134,7 @@ export class OperationRunner {
     // Taken first, whatever happens next: values never outlive their operation.
     this.supplied = this.ctx.service.takeOperatorSecrets(op.planId);
     secretValues.push(...Object.values(this.supplied.store));
+    this.chosenSettings = this.ctx.service.takeSubmittedSettings(op.planId);
     try {
       if (this.stopping) throw new InterruptedError();
       switch (op.kind) {
@@ -383,6 +389,23 @@ export class OperationRunner {
     this.ctx.repo.updateInstance(inst.id, { secrets: refs });
   }
 
+  // Decision 180: merge chosen values into the stored overrides for this release and say what changed.
+  private storeSettings(op: OperationRow, manifest: LoadedPackage['manifest'], values: Record<string, SettingValue>, opts: { quietWhenSame?: boolean } = {}): void {
+    const stateDir = this.ctx.config.stateDir;
+    const before = readSettingOverrides(stateDir, op.instanceId);
+    const after = applySettingValues(manifest, before, values);
+    writeSettingOverrides(stateDir, op.instanceId, after);
+    const lines: string[] = [];
+    for (const st of settingsOf(manifest)) {
+      if (before[st.id] === after[st.id]) continue;
+      lines.push(st.id in after ? `${st.label} = ${formatSettingValue(st, after[st.id]!)}` : `${st.label} back to the default (${formatSettingValue(st, st.default)})`);
+    }
+    const dropped = Object.keys(before).filter((id) => !settingsOf(manifest).some((st) => st.id === id));
+    if (dropped.length) lines.push(`dropped ${dropped.join(', ')} (not part of this release)`);
+    if (lines.length) this.event(op, 'preparing', `stored the settings: ${lines.join('; ')}`);
+    else if (!opts.quietWhenSame) this.event(op, 'preparing', 'the settings already had these values');
+  }
+
   private readSecrets(pkg: LoadedPackage, secretsDir: string, sink: string[]): Record<string, string> {
     const values: Record<string, string> = {};
     for (const s of pkg.manifest.secrets ?? []) {
@@ -477,7 +500,7 @@ export class OperationRunner {
 
   // `binding`: how the ports are published. Default = what the settings want now (LAN mode, HTTPS only); a
   // re-render with no restart (rewriteCompose) passes the binding the running containers already have.
-  private async renderAndValidate(op: OperationRow, pkg: LoadedPackage, identity: InstanceIdentity, inst: InstanceRow, runtimeDir: string, secretValues: Record<string, string>, primary?: PrimaryExposure, provisioned?: { username: string; password: string } | null, binding?: { bindHost: string; lanRelay: boolean }): Promise<string> {
+  private async renderAndValidate(op: OperationRow, pkg: LoadedPackage, identity: InstanceIdentity, inst: InstanceRow, runtimeDir: string, secretValues: Record<string, string>, primary?: PrimaryExposure, provisioned?: { username: string; password: string } | null, binding?: { bindHost: string; lanRelay: boolean }, keepGpu?: HostGpu): Promise<string> {
     const externalStorage = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'bind').map((r) => [r.role, { hostPath: r.name, readOnly: Boolean(r.metadata?.['readOnly']) }]));
     const builtImages = Object.fromEntries(Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => [svc, b.tag]));
     // Decision 126: every active link network exists before the containers start (Restart re-applies);
@@ -486,7 +509,14 @@ export class OperationRunner {
     const consumerLinks = this.consumerLinkInputs(inst, pkg);
     const volumeNames = Object.fromEntries(this.ctx.repo.resources(inst.id).filter((r) => r.kind === 'volume' && r.role !== '__home__').map((r) => [r.role, r.name]));
     const bind = binding ?? { bindHost: this.ctx.config.lan.enabled && !httpsOnlyOn(this.ctx) ? '0.0.0.0' : '127.0.0.1', lanRelay: httpsOnlyOn(this.ctx) };
-    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: bind.bindHost, lanRelay: bind.lanRelay, provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks });
+    // Decision 179: fresh host facts on every render, so a toolkit installed (or a card added) since the last one
+    // is used by the next operation that re-renders (Restart, update, configure, move, seal, restore)
+    const gpuServices = gpuServicesOf(pkg.manifest);
+    const gpu = gpuServices.length ? (keepGpu ?? (await this.ctx.gpu.detect())) : undefined;
+    // decision 180: the operator's setting overrides, read from the instance directory on every render
+    const settingOverrides = settingsOf(pkg.manifest).length ? readSettingOverrides(this.ctx.config.stateDir, inst.id) : {};
+    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: bind.bindHost, lanRelay: bind.lanRelay, provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, ...(gpu ? { gpu } : {}), settingOverrides });
+    if (gpu && !keepGpu) this.event(op, 'preparing', gpuChanges(pkg.manifest, gpu).join('; '));
     const file = writeRuntimeCompose(runtimeDir, rendered.yaml);
     try {
       await this.ctx.compose.config({ projectDir: runtimeDir, projectName: identity.project, file }, 60_000);
@@ -899,7 +929,9 @@ export class OperationRunner {
       const identity = identityFor(this.ctx.installationId, fresh.id);
       const access = runtimeLanAccess(this.ctx.config.stateDir, fresh.id);
       const binding = access === null ? undefined : { bindHost: access === 'lan' ? '0.0.0.0' : '127.0.0.1', lanRelay: access === 'relay' };
-      await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink), undefined, undefined, binding);
+      // decision 179: and the graphics card they run with (a toolkit installed since is used by the next Restart)
+      const keepGpu = gpuServicesOf(pkg.manifest).length ? gpuFromRendered(readRuntimeModel(dirs.runtime), gpuServicesOf(pkg.manifest)) : undefined;
+      await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink), undefined, undefined, binding, keepGpu);
       this.event(op, 'preparing', `updated the private Compose file of ${fresh.name} for its links`);
     } catch (e) {
       if (!bestEffort) throw e;
@@ -1044,6 +1076,8 @@ export class OperationRunner {
       this.event(op, 'preparing', `cleared the optional secret ${id}; its variable is no longer set`);
     }
     repo.updateInstance(inst.id, { secrets: refs.filter((r) => !this.supplied.clear.includes(r.id)) });
+    // decision 180: the setting values the plan lists (a value equal to the default removes the override)
+    if (plan.proposal.settingValues && Object.keys(plan.proposal.settingValues).length) this.storeSettings(op, pkg.manifest, plan.proposal.settingValues);
     await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
     const identity = identityFor(this.ctx.installationId, inst.id);
     const fresh = repo.instance(inst.id) ?? inst;
@@ -1081,6 +1115,8 @@ export class OperationRunner {
     }
     await this.createOwnedVolumes(op, pkg, identity, inst, plan.proposal.storage, homeDir);
     this.generateSecrets(op, pkg, inst, dirs.secrets, { restored: Boolean(plan.proposal.restore) });
+    // decision 180: the values chosen in the review (a restore brought back the ones it had instead)
+    if (!plan.proposal.restore && Object.keys(this.chosenSettings).length) this.storeSettings(op, pkg.manifest, this.chosenSettings);
     await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
     const values = this.readSecrets(pkg, dirs.secrets, sink);
     const provisioned = this.readProvisioned(pkg, dirs.secrets, sink);
@@ -1189,6 +1225,11 @@ export class OperationRunner {
       this.event(op, 'restoring', 'restored the data');
       writeRestoredTree(this.dirs(inst).secrets, meta, 'secrets/');
       this.event(op, 'restoring', 'put back the app\'s secrets');
+      const settingsBytes = meta.get(SETTINGS_FILE);
+      if (settingsBytes) {
+        writeSettingsBytes(this.ctx.config.stateDir, inst.id, settingsBytes);
+        this.event(op, 'restoring', 'put back the settings it had');
+      }
       const defaultKey = manifest.encryption?.recovery === undefined;
       const machineKey = defaultKey ? this.ctx.machineKey.take() : null;
       let wrapped: MachineWrappedKey | null = null;
@@ -1651,7 +1692,7 @@ export class OperationRunner {
     rmSync(previousDir, { recursive: true, force: true });
     cpSync(dirs.release, previousDir, { recursive: true });
     this.event(op, 'preparing', `kept revision ${inst.revision} at release-previous for rollback`);
-    const before = { revision: inst.revision, releaseHashes: inst.releaseHashes, endpoints: inst.endpoints, desired: inst.desired };
+    const before = { revision: inst.revision, releaseHashes: inst.releaseHashes, endpoints: inst.endpoints, desired: inst.desired, settings: readSettingsBytes(this.ctx.config.stateDir, inst.id) };
 
     this.phase(op, 'applying', 'stopping', 'stopping and deleting the current containers (data stays)');
     await this.teardownContainers(op, inst, 'stopping');
@@ -1695,6 +1736,8 @@ export class OperationRunner {
         this.event(op, 'preparing', 'generated the admin credential this release provisions (an app that is already set up keeps its own accounts)');
       }
       repo.updateInstance(inst.id, { secrets: refs });
+      // Decision 180: kept overrides stay; ones this release drops or no longer allows go; new ones as chosen.
+      this.storeSettings(op, next.manifest, this.chosenSettings, { quietWhenSame: true });
       // Decision 126: links this release adds get their provider; links it dropped are removed.
       await this.pruneLinks(op, inst, next, sink);
       await this.applyPlannedLinks(op, inst, (plan.proposal.links ?? []).filter((l) => l.change !== 'keep'), sink);
@@ -1729,6 +1772,7 @@ export class OperationRunner {
         await this.teardownContainers(op, { ...inst, endpoints: plan.proposal.endpoints }, 'rollback');
         for (const f of readdirSync(dirs.release)) rmSync(path.join(dirs.release, f), { force: true, recursive: true });
         cpSync(previousDir, dirs.release, { recursive: true });
+        writeSettingsBytes(this.ctx.config.stateDir, inst.id, before.settings);
         repo.updateInstanceRelease(inst.id, { revision: before.revision, releaseHashes: before.releaseHashes, endpoints: before.endpoints });
         const restored: InstanceRow = { ...inst, revision: before.revision, releaseHashes: before.releaseHashes, endpoints: before.endpoints };
         await this.pruneLinks(op, restored, current, sink);
@@ -2035,7 +2079,7 @@ export class OperationRunner {
     const meta = restoredFiles(await backups.engine.restoreMeta(call, r.snapshotId, r.sourceStage));
     const masterKey = restoredKey(meta);
     const dirs = this.dirs(inst);
-    const before = { secrets: snapshotTree(dirs.secrets), release: snapshotTree(dirs.release), revision: inst.revision, releaseHashes: inst.releaseHashes };
+    const before = { secrets: snapshotTree(dirs.secrets), release: snapshotTree(dirs.release), settings: readSettingsBytes(this.ctx.config.stateDir, inst.id), revision: inst.revision, releaseHashes: inst.releaseHashes };
     const stamp = this.ctx.clock.now().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '');
     const aside = `${home}.before-restore-${stamp}`;
     let movedAside = false;
@@ -2058,6 +2102,8 @@ export class OperationRunner {
       await backups.engine.restoreData(call, { instanceId: inst.id, snapshotId: r.snapshotId, sourceHome: r.sourceHome, destHome: home });
       replaceTree(dirs.secrets, meta, 'secrets/', false);
       replaceTree(dirs.release, meta, 'release/', true);
+      // decision 180: the settings as they were at the restore point (none stored there = every default)
+      writeSettingsBytes(this.ctx.config.stateDir, inst.id, meta.get(SETTINGS_FILE) ?? null);
       const pkg = loadReleaseSnapshot(dirs.release, inst.packageId);
       if (pkg.revision !== inst.revision) {
         repo.updateInstanceRelease(inst.id, { revision: pkg.revision, releaseHashes: pkg.hashes, endpoints: inst.endpoints });
@@ -2084,6 +2130,7 @@ export class OperationRunner {
         }
         restoreTree(dirs.secrets, before.secrets);
         restoreTree(dirs.release, before.release);
+        writeSettingsBytes(this.ctx.config.stateDir, inst.id, before.settings);
         repo.updateInstanceRelease(inst.id, { revision: before.revision, releaseHashes: before.releaseHashes, endpoints: inst.endpoints });
         const pkg = loadReleaseSnapshot(dirs.release, inst.packageId);
         const file = await this.renderAndValidate(op, pkg, identity, inst, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink));

@@ -1,9 +1,9 @@
 import { Command, Option } from 'commander';
 import { randomUUID } from 'node:crypto';
-import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto, TailnetAllDto } from '../contracts/api.js';
+import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundAppDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto, TailnetAllDto } from '../contracts/api.js';
 import { defaultInstallLocation } from '../storage/install-location.js';
 import { validatePackageFolder } from '../packages/validate-folder.js';
-import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, SystemHostDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
 import { loadConfig } from '../config.js';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
@@ -16,7 +16,10 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { confirm, promptHidden, promptVisible, readStdinAll } from './prompt.js';
 import { exitAfterFlush } from './exit.js';
-import { planSummary } from './plan-summary.js';
+import { gpuFact, planSummary } from './plan-summary.js';
+import { gpuStatusLine } from '../planner/gpu.js';
+import { formatSettingValue, parseSettingInput } from '../planner/settings.js';
+import type { SettingDto, SettingValue } from '../contracts/api.js';
 
 interface Globals {
   url: string;
@@ -31,7 +34,7 @@ program
   .version(productVersion())
   .option('--url <url>', 'daemon URL', process.env['HARBOR_URL'] ?? readCliState()?.url ?? `http://localhost:${PRODUCT.defaults.managementPort}`)
   .option('--json', 'machine-readable output', false)
-  .option('--accept-permissions', 'accept the permissions a plan lists (a VPN app asking to create network tunnels); needed with --yes', false)
+  .option('--accept-permissions', 'accept the permissions a plan lists (a VPN app asking to create network tunnels, an app asking for the graphics card); needed with --yes', false)
   .showHelpAfterError();
 
 function globals(): Globals {
@@ -86,6 +89,28 @@ async function readSecretFlags(flags: string[], stdinTaken = false): Promise<Rec
     } else {
       throw new HarborError('INVALID_REQUEST', `--secret ${id}: pass the value from a file (${id}=@path) or stdin (${id}=-), never on the command line`, { nextAction: 'Command lines end up in shell history and process lists.' });
     }
+  }
+  return out;
+}
+
+// Decision 180: --set <id>=<value> (repeatable). Setting values are not secret, so the command line is fine.
+function readSetFlags(flags: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of flags) {
+    const eq = f.indexOf('=');
+    if (eq <= 0) throw new HarborError('SETTING_INVALID', `--set expects <setting>=<value>, got ${f}`);
+    out[f.slice(0, eq)] = f.slice(eq + 1);
+  }
+  return out;
+}
+
+// The typed values for settings the plan (or the app) knows: numbers as numbers, on/off as booleans.
+function typedSettings(defs: Pick<SettingDto, 'id' | 'label' | 'type'>[], raw: Record<string, string>, what: string, elsewhere?: string): Record<string, SettingValue> {
+  const out: Record<string, SettingValue> = {};
+  for (const [id, text] of Object.entries(raw)) {
+    const def = defs.find((d) => d.id === id);
+    if (!def) throw new HarborError('SETTING_INVALID', `${what} has no setting ${id} to choose`, { nextAction: `${defs.length ? `It has: ${defs.map((d) => d.id).join(', ')}.` : 'It has none to choose here.'}${elsewhere ? ` ${elsewhere}` : ''}` });
+    out[id] = parseSettingInput(def, text);
   }
   return out;
 }
@@ -175,8 +200,10 @@ async function waitOperation(api: ApiClient, id: string, follow: boolean): Promi
   }
 }
 
-async function approveAndApply(api: ApiClient, plan: PlanDto, opts: { yes?: boolean; wait?: boolean; idempotencyKey?: string; passphrase?: string | undefined; secrets?: Record<string, string>; credentialsFile?: string }): Promise<void> {
+async function approveAndApply(api: ApiClient, plan: PlanDto, opts: { yes?: boolean; wait?: boolean; idempotencyKey?: string; passphrase?: string | undefined; secrets?: Record<string, string>; settings?: Record<string, string>; credentialsFile?: string }): Promise<void> {
   if (opts.credentialsFile && existsSync(opts.credentialsFile)) throw new HarborError('INVALID_REQUEST', `${opts.credentialsFile} already exists`, { nextAction: 'Name a new file: one-time values are never written over another file.' });
+  // decision 180: --set values for the settings this plan asks about (install: all; update: the new ones)
+  const settings = typedSettings((plan.settings ?? []).filter((x) => x.ask), opts.settings ?? {}, plan.kind === 'update' ? 'this update' : 'this plan', plan.kind === 'update' ? `An update only asks about settings it adds; change the others with ${PRODUCT.cliName} configure ${plan.name} --set <id>=<value>.` : undefined);
   if (!globals().json) process.stderr.write(planSummary(plan) + '\n');
   if (!opts.yes) {
     const ok = await confirm('Apply this plan?');
@@ -195,7 +222,7 @@ async function approveAndApply(api: ApiClient, plan: PlanDto, opts: { yes?: bool
   let submitted: { operationId: string; created: boolean } | null = null;
   for (let attempt = 0; attempt < 3 && !submitted; attempt++) {
     try {
-      submitted = await api.post<{ operationId: string; created: boolean }>('/v1/operations', { planId: plan.id, ...(opts.passphrase ? { passphrase: opts.passphrase } : {}), ...(Object.keys(secrets).length ? { secrets } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }, { 'idempotency-key': key });
+      submitted = await api.post<{ operationId: string; created: boolean }>('/v1/operations', { planId: plan.id, ...(opts.passphrase ? { passphrase: opts.passphrase } : {}), ...(Object.keys(secrets).length ? { secrets } : {}), ...(Object.keys(settings).length ? { settings } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }, { 'idempotency-key': key });
     } catch (e) {
       // Transport failures retry with the same key; API errors do not.
       if (HarborError.is(e, 'STATE_UNAVAILABLE') && attempt < 2) continue;
@@ -313,6 +340,7 @@ program
         d.home ? `  encrypted: yes — sealed at ${d.home.path} (${d.home.state}${d.home.defaultKey ? ', Harbor\'s own key' : ', own passphrase'})` : '  encrypted: no — plain Docker volumes (readable on disk, starts on its own after a reboot); encrypt it with: harbor seal ' + d.name,
         ...d.endpoints.map((e) => `  endpoint ${e.id} (container port ${e.containerPort}, primary ${e.primary}): loopback ${e.urls.loopback}${e.urls.tailnet ? `, tailnet ${e.urls.tailnet}` : ''}${e.urls.public ? `, public ${e.urls.public}` : ''}`),
         ...(d.ports ?? []).map((x) => `  port ${x.id}: ${x.protocol.toUpperCase()} ${x.hostPort} on every network -> ${x.service}:${x.containerPort} (${x.purpose}); forward it on your router to reach it from outside`),
+        ...(d.gpu ? [`  graphics card: ${gpuStatusLine(d.gpu)}`] : []),
         ...(d.setup ? [`  setup: ${d.setup.instructions} -> ${d.setup.browserUrl}`] : []),
         ...(d.lastError ? [`  last error ${d.lastError.code}: ${d.lastError.message}`, `  next: ${d.lastError.nextAction}`] : []),
         '  resources:',
@@ -379,12 +407,13 @@ program
   .option('--yes', 'approve without prompting', false)
   .option('--passphrase-stdin', 'read the app encryption passphrase from stdin (for plans with an install location; not needed for default-key plans)', false)
   .option('--secret <id=@file|id=->', 'a value the plan asks for (decision 125), from a file or stdin (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
-  .action(async (planId: string, opts: { idempotencyKey: string; wait: boolean; yes: boolean; passphraseStdin?: boolean; secret: string[] }) => {
+  .option('--set <id=value>', 'a value for a setting the plan lists (decision 180; install: any, update: the new ones) (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .action(async (planId: string, opts: { idempotencyKey: string; wait: boolean; yes: boolean; passphraseStdin?: boolean; secret: string[]; set: string[] }) => {
     const api = client();
     const plan = await api.get<PlanDto>(`/v1/plans/${planId}`);
     const passphrase = plan.location && opts.passphraseStdin ? (await readStdinAll()).trim() || undefined : undefined;
     const secrets = await readSecretFlags(opts.secret, Boolean(opts.passphraseStdin));
-    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, idempotencyKey: opts.idempotencyKey, passphrase, secrets });
+    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, idempotencyKey: opts.idempotencyKey, passphrase, secrets, settings: readSetFlags(opts.set) });
   });
 
 program
@@ -397,10 +426,11 @@ program
   .option('--unencrypted', 'install on plain Docker volumes instead of the sealed Harbor data folder (not encrypted; starts on its own after a reboot)', false)
   .option('--secret <id=@file|id=->', 'a value the app asks for (operator-provided secret), from a file or stdin; prompted on a terminal otherwise (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--link <id=app[/endpoint]>', 'which installed app satisfies a link of this app (repeatable; the only candidate is picked by itself)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .option('--set <id=value>', 'choose a setting of the app instead of its default, e.g. --set context-length=16384 (repeatable; `harbor settings <app>` lists them once installed)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--credentials-file <path>', 'write one-time values (admin login, shown-once secrets) to this new file (0600) instead of the terminal')
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return the operation ID instead of waiting')
-  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; credentialsFile?: string; yes: boolean; wait: boolean }) => {
+  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; set: string[]; credentialsFile?: string; yes: boolean; wait: boolean }) => {
     const api = client();
     const storage: Record<string, { hostPath: string }> = {};
     for (const s of opts.storage) {
@@ -418,8 +448,9 @@ program
     const secrets = await readSecretFlags(opts.secret, Boolean(opts.passphraseStdin));
     const links = await readLinkFlags(api, opts.link);
     if (Object.keys(links).length) extra['links'] = links;
+    const settings = readSetFlags(opts.set);
     const plan = await createPlan(api, 'install', pkg, opts.name, extra);
-    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, passphrase, secrets, ...(opts.credentialsFile ? { credentialsFile: opts.credentialsFile } : {}) });
+    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, passphrase, secrets, settings, ...(opts.credentialsFile ? { credentialsFile: opts.credentialsFile } : {}) });
   });
 
 program
@@ -428,9 +459,10 @@ program
   .option('--storage <claim=/host/path>', 'folder for a storage claim the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--secret <id=@file|id=->', 'a value for an operator-provided secret the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--link <id=app[/endpoint]>', 'provider for a link the new release adds (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .option('--set <id=value>', 'a value for a setting the new release adds (repeatable; change existing ones with harbor configure --set)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return after submission')
-  .action(async (ref: string, opts: { storage: string[]; secret: string[]; link: string[]; yes: boolean; wait: boolean }) => {
+  .action(async (ref: string, opts: { storage: string[]; secret: string[]; link: string[]; set: string[]; yes: boolean; wait: boolean }) => {
     const api = client();
     const storage: Record<string, { hostPath: string }> = {};
     for (const s of opts.storage) {
@@ -440,26 +472,46 @@ program
     }
     const links = await readLinkFlags(api, opts.link);
     const secrets = await readSecretFlags(opts.secret);
+    const settings = readSetFlags(opts.set);
     const plan = await createPlan(api, 'update', ref, undefined, { ...(Object.keys(storage).length ? { storage } : {}), ...(Object.keys(links).length ? { links } : {}) });
-    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets });
+    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets, settings });
   });
 
 program
   .command('configure <instance>')
-  .description('change what an installed app was given at install: a value you provided (operator secret) and/or which app a link points to; recreates only what changed')
+  .description('change what an installed app was given at install: a value you provided (operator secret), which app a link points to and/or a setting (--set); recreates only what changed')
   .option('--secret <id=@file|id=->', 'new value for an operator-provided secret, from a file or stdin; an empty file clears an optional one (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--link <id=app[/endpoint]>', 'point a link at another installed app (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--unlink <id>', 'remove an optional link (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .option('--set <id=value>', 'a new value for a setting, e.g. --set context-length=16384; the default value removes your override (repeatable; harbor settings <app> lists them)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return after submission')
-  .action(async (ref: string, opts: { secret: string[]; link: string[]; unlink: string[]; yes: boolean; wait: boolean }) => {
+  .action(async (ref: string, opts: { secret: string[]; link: string[]; unlink: string[]; set: string[]; yes: boolean; wait: boolean }) => {
     const api = client();
     const inst = await resolveInstance(api, ref);
     const secrets = await readSecretFlags(opts.secret);
     const links: Record<string, LinkChoice | null> = { ...(await readLinkFlags(api, opts.link)), ...Object.fromEntries(opts.unlink.map((id) => [id, null])) };
-    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}) });
+    const settings = typedSettings(inst.settings ?? [], readSetFlags(opts.set), inst.name);
+    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}), ...(Object.keys(settings).length ? { settings } : {}) });
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets });
   });
+
+program
+  .command('settings <instance>')
+  .description('the settings of an installed app (decision 180): id, label, current value and default; change them with harbor configure <app> --set id=value')
+  .action(async (ref: string) => {
+    const inst = await resolveInstance(client(), ref);
+    const items = inst.settings ?? [];
+    out(items, () => (items.length ? table([['ID', 'SETTING', 'VALUE', 'DEFAULT', 'ALLOWED'], ...items.map((x) => [x.id, x.label, `${formatSettingValue(x, x.value)}${x.overridden ? '' : ' (default)'}`, formatSettingValue(x, x.default), allowedCell(x)])]) : `${inst.name} has no settings.`));
+  });
+
+function allowedCell(x: SettingDto): string {
+  if (x.type === 'boolean') return 'on/off';
+  if (x.type === 'choice') return (x.choices ?? []).map((c) => c.value).join(' | ');
+  if (x.type === 'string') return `text, max ${x.maxLength ?? 256}`;
+  const kind = x.type === 'integer' ? 'whole number' : 'number';
+  return x.min !== null && x.max !== null ? `${kind} ${x.min}..${x.max}` : x.min !== null ? `${kind} >= ${x.min}` : x.max !== null ? `${kind} <= ${x.max}` : kind;
+}
 
 program
   .command('links')
@@ -615,9 +667,9 @@ program
   .command('found-apps')
   .description('list encrypted apps found on attached drives that are not installed here yet')
   .action(async () => {
-    const { items } = await client().get<{ items: Array<{ home: string; displayName: string; packageId: string; drive: string; adopted: boolean; error: string | null }> }>('/v1/found-apps');
+    const { items } = await client().get<{ items: FoundAppDto[] }>('/v1/found-apps');
     const fresh = items.filter((i) => !i.adopted);
-    out(items, () => (fresh.length ? table([['APP', 'PACKAGE', 'DRIVE', 'HOME'], ...fresh.map((i) => [i.displayName, i.packageId, i.drive, i.home])]) : 'No apps waiting on your drives.'));
+    out(items, () => (fresh.length ? table([['APP', 'PACKAGE', 'DRIVE', 'HOME', 'PERMISSIONS'], ...fresh.map((i) => [i.displayName, i.packageId, i.drive, i.home, (i.permissions ?? []).map((p) => `${p.service}: ${p.label}`).join('; ') || '-'])]) : 'No apps waiting on your drives.'));
   });
 
 program
@@ -625,11 +677,12 @@ program
   .description('adopt an encrypted app from a drive with its passphrase (works on any Harbor machine)')
   .option('--name <slug>', 'instance name')
   .option('--passphrase-stdin', 'read the app passphrase from stdin', false)
+  .option('--accept-permissions', 'accept the permissions its package asks for (harbor found-apps lists them)', false)
   .option('--no-wait', 'return the operation ID instead of waiting')
-  .action(async (home: string, opts: { name?: string; passphraseStdin?: boolean; wait: boolean }) => {
+  .action(async (home: string, opts: { name?: string; passphraseStdin?: boolean; acceptPermissions?: boolean; wait: boolean }) => {
     const api = client();
     const passphrase = opts.passphraseStdin ? (await readStdinAll()).trim() : await promptHidden('App passphrase: ');
-    const inst = await api.post<InstanceSummary>('/v1/found-apps/adopt', opts.name ? { home, passphrase, name: opts.name } : { home, passphrase });
+    const inst = await api.post<InstanceSummary>('/v1/found-apps/adopt', { home, passphrase, ...(opts.name ? { name: opts.name } : {}), ...(opts.acceptPermissions ? { acceptPermissions: true } : {}) });
     out(inst, () => `Adopted ${inst.displayName ?? inst.name} (${inst.packageId}) from ${home}.`);
     if (opts.wait !== false && inst.operationId) await waitOperation(api, inst.operationId, true);
   });
@@ -1368,6 +1421,15 @@ powerCmd
     if (!opts.yes && (await promptVisible('Shut this machine down now? You will need physical access (or your provider console) to turn it back on. [y/N] ')).trim().toLowerCase() !== 'y') return;
     await client().post('/v1/system/power', { action: 'poweroff' });
     out({ action: 'poweroff' }, () => 'Shutting down…');
+  });
+
+program
+  .command('gpu')
+  .description('the graphics card apps that ask for one get on this machine (NVIDIA needs the NVIDIA container toolkit)')
+  .action(async () => {
+    const host = await client().get<SystemHostDto>('/v1/system/host');
+    const g = host.gpu ?? null;
+    out(g, () => (g ? `Graphics card: ${gpuFact(g)}` : 'This Harbor daemon does not report graphics cards (it is older than 0.34.0).'));
   });
 
 program

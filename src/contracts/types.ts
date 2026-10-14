@@ -18,6 +18,7 @@ export interface Manifest {
   secrets?: SecretClaim[];
   configuration?: ConfigurationBinding[];
   links?: LinkClaim[];
+  settings?: ManifestSetting[]; // decision 180
   setup?: { endpoint: string; instructions: string };
   presentation?: PackagePresentation;
   defaultCredentials?: { username: string; password: string; note?: string };
@@ -62,7 +63,24 @@ export interface ManifestPort {
   protocol: 'udp';
   purpose: string;
 }
-export type ManifestPermission = 'net-admin' | 'tun' | 'ip-forwarding';
+// Decision 179: gpu = this machine's graphics card (Harbor renders the device access from host facts)
+export type ManifestPermission = 'net-admin' | 'tun' | 'ip-forwarding' | 'gpu';
+
+// Decision 179: what the GpuObserver found on this machine; a planner input (the planner never probes the host).
+// nvidia: an NVIDIA card Docker can hand to a container (driver + NVIDIA container toolkit). dri: an Intel/AMD
+// render node (/dev/dri/renderD*; an nvidia-drm node does not count): only that node and its group reach the
+// container (never the card's primary node, so no display/KMS access). none: the app runs on the CPU.
+// problem (informational): NVIDIA_TOOLKIT_MISSING = an NVIDIA card is present, but the NVIDIA container toolkit is
+// not installed; NVIDIA_DOCKER_RESTART_NEEDED = the toolkit is installed, but Docker has not restarted since, so it
+// cannot hand the card over yet.
+export type GpuProblem = 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED';
+export interface HostGpu {
+  kind: 'nvidia' | 'dri' | 'none';
+  problem?: GpuProblem;
+  renderNode?: string; // dri: the render node's name, e.g. renderD128
+  renderGid?: number;
+  detail: string; // "NVIDIA GeForce RTX 3090", "Intel graphics", "No graphics card found"
+}
 
 export interface ManifestEndpoint {
   service: string;
@@ -110,6 +128,25 @@ export interface LinkClaim {
   optional?: boolean;
   provider?: { packages?: string[]; endpoint?: string };
   bindings: { service: string; environment: string; format?: LinkFormat }[];
+}
+// Decision 180: a typed, non-secret value the operator can see and change (install review → Options, app page →
+// Settings → Change…). Rendered as environment literals of the bound services; the default comes from the release.
+export type SettingType = 'integer' | 'number' | 'boolean' | 'string' | 'choice';
+export type SettingValue = string | number | boolean;
+export interface ManifestSetting {
+  id: string;
+  label: string;
+  help?: string;
+  type: SettingType;
+  default: SettingValue;
+  min?: number; // integer/number only
+  max?: number; // integer/number only
+  maxLength?: number; // string only (default 256)
+  choices?: { value: string; label?: string }[]; // choice only
+  onValue?: string; // boolean only (default "true")
+  offValue?: string; // boolean only (default "false")
+  // template: a literal with one {{value}} where the value goes (same rules as secret templates)
+  bindings: { service: string; environment: string; template?: string }[];
 }
 export type ConfigurationFormat = 'url' | 'origin' | 'authority' | 'host' | 'scheme';
 export interface ConfigurationBinding { service: string; environment: string; endpoint: string; format?: ConfigurationFormat }

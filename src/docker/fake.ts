@@ -36,6 +36,8 @@ export interface FakeBehaviour {
   stats?: Record<string, ContainerStats>;
   // Volume sizes reported by diskUsage(); keyed by volume name, fallback default.
   volumeSizes?: Record<string, number>;
+  // decision 179: runtimes `docker info` lists (default: runc only, no NVIDIA toolkit)
+  runtimes?: string[];
 }
 
 export class FakeDocker implements DockerAdapter, ComposeRunner {
@@ -63,6 +65,10 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   async ping(): Promise<EngineInfo> {
     if (this.behaviour.engineDown) return { available: false, version: null, apiVersion: null, error: 'fake engine down' };
     return { available: true, version: 'fake-29.0', apiVersion: '1.51', error: null };
+  }
+  async info(): Promise<{ runtimes: string[] }> {
+    this.assertUp();
+    return { runtimes: [...(this.behaviour.runtimes ?? ['runc'])] };
   }
   async listContainers(opts: { all: boolean; labels?: Record<string, string> }): Promise<ContainerInfo[]> {
     this.assertUp();

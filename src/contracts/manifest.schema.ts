@@ -145,13 +145,13 @@ export const MANIFEST_SCHEMA = {
       },
     },
     // Decision 163: per service, from a fixed list Harbor renders itself (compose keeps refusing cap_add/devices/
-    // sysctls); the operator accepts them when approving the plan
+    // sysctls); the operator accepts them when approving the plan. Decision 179 adds gpu (Harbor 0.34.0).
     permissions: {
       type: 'object',
       minProperties: 1,
       maxProperties: 16,
       propertyNames: { pattern: ID_PATTERN },
-      additionalProperties: { type: 'array', minItems: 1, maxItems: 3, uniqueItems: true, items: { enum: ['net-admin', 'tun', 'ip-forwarding'] } },
+      additionalProperties: { type: 'array', minItems: 1, maxItems: 4, uniqueItems: true, items: { enum: ['net-admin', 'tun', 'ip-forwarding', 'gpu'] } },
     },
     health: {
       type: 'object',
@@ -267,6 +267,54 @@ export const MANIFEST_SCHEMA = {
               additionalProperties: false,
               required: ['service', 'environment'],
               properties: { service: idString, environment: envKey, format: { enum: ['url', 'authority', 'host', 'port'] } },
+            },
+          },
+        },
+      },
+    },
+    // Decision 180 (Harbor 0.34.0): typed, non-secret values the operator can change, rendered as environment
+    // literals. The per-type rules (default within limits, min/max only for numbers, …) live in
+    // validateManifestReferences.
+    settings: {
+      type: 'array',
+      maxItems: 32,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'label', 'type', 'default', 'bindings'],
+        properties: {
+          id: { type: 'string', pattern: '^[a-z][a-z0-9-]{0,39}$' },
+          label: plainText(80),
+          help: plainText(300),
+          type: { enum: ['integer', 'number', 'boolean', 'string', 'choice'] },
+          // one line, no control characters (a string default); numbers and booleans as such
+          default: { type: ['number', 'boolean', 'string'], maxLength: 1024, pattern: '^[^\\u0000-\\u001F\\u007F]*$' },
+          min: { type: 'number' },
+          max: { type: 'number' },
+          maxLength: { type: 'integer', minimum: 1, maximum: 1024 },
+          choices: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 32,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['value'],
+              properties: { value: { type: 'string', minLength: 1, maxLength: 128, pattern: '^[^\\u0000-\\u001F\\u007F]*$' }, label: plainText(80) },
+            },
+          },
+          onValue: { type: 'string', minLength: 1, maxLength: 32, pattern: '^[^\\u0000-\\u001F\\u007F]*$' },
+          offValue: { type: 'string', minLength: 1, maxLength: 32, pattern: '^[^\\u0000-\\u001F\\u007F]*$' },
+          bindings: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 8,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['service', 'environment'],
+              // template: as for secrets (decision 139), one {{value}} and no `$`
+              properties: { service: idString, environment: envKey, template: { type: 'string', minLength: 9, maxLength: 500, pattern: '^[^$\\u0000-\\u001F]*$' } },
             },
           },
         },

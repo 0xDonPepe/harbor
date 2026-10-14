@@ -66,6 +66,17 @@ plaintext on disk.
       card and drawer) while the rest of the console stays usable. Open points: re-check a queued plan's assumptions
       (ports, state) when its turn comes instead of at approval; cancel a queued action before it starts; what happens to
       later queued actions when one fails (keep going unless they depend on it, e.g. a link to the failed app). CLI mirrors it.
+- [x] *(0.34.0, decision 179)* **Apps can use the graphics card** (`permissions: [gpu]`): NVIDIA through the container
+      toolkit, Intel/AMD through `/dev/dri`, CPU otherwise; the review, app page, Settings and `harbor gpu` say which.
+- [ ] **`harbor-bootstrap --with-nvidia`** (asked with decision 179): install the NVIDIA container toolkit for the
+      operator (NVIDIA's apt repository + key, `nvidia-container-toolkit`, `nvidia-ctk runtime configure`, a Docker
+      restart that restarts every app). Needs its own decision: it adds a third-party repository and OS packages as root.
+      Until then the Operator Guide (GPU) lists the commands.
+- [ ] **A package way to keep one file an app writes outside its volumes** (found with the AnythingLLM Ollama link,
+      2026-10-14): AnythingLLM saves its provider choices and API keys in `/app/server/.env` inside the image, so every
+      container recreate (a link set later, Restart, update) resets them; upstream bind-mounts the file. Harbor's
+      Compose subset has no file mount. Options: a `storage` claim that maps a single file inside a managed volume, or
+      a per-package symlink at start. Needs a format decision (the format only grows). Until then its README warns.
 
 
 - [x] *(0.23.0, decision 133: own port)* **Tailnet exposure collides with the LAN app port.** In LAN mode an app's host port (e.g.

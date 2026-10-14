@@ -10,6 +10,7 @@ import { enrollAdministrator, initState } from './maintenance.js';
 import { openState } from './state/db.js';
 import { Repo } from './state/repo.js';
 import { systemClock } from './util.js';
+import { devGpu } from './system/gpu.js';
 import { homedir } from 'node:os';
 
 const root = path.resolve(process.env['HARBOR_DEV_ROOT'] ?? '.harbor-dev');
@@ -70,7 +71,8 @@ if (!existsSync(path.join(stateDir, 'harbor.db'))) {
   }
 }
 
-const daemon = await startDaemon(config);
+// decision 179: HARBOR_DEV_GPU=nvidia|dri|toolkit-missing|none picks the fake machine's graphics card (fake mode only)
+const daemon = await startDaemon(config, socket ? {} : { gpu: devGpu(process.env['HARBOR_DEV_GPU']) });
 console.error(`[dev] ${daemon.url}  docker=${daemon.ctx.docker.description}  ui=${config.uiDir ?? '(not built; run pnpm build:web)'}`);
 const stop = () => void daemon.close().then(() => process.exit(0));
 process.on('SIGINT', stop);

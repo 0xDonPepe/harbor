@@ -74,6 +74,8 @@ export interface DockerDiskUsage {
 export interface DockerAdapter {
   readonly description: string;
   ping(): Promise<EngineInfo>;
+  // decision 179: `docker info` facts the GPU probe needs (registered runtimes, e.g. runc, nvidia)
+  info(): Promise<{ runtimes: string[] }>;
   listContainers(opts: { all: boolean; labels?: Record<string, string> }): Promise<ContainerInfo[]>;
   inspectContainer(id: string): Promise<ContainerInfo | null>;
   startContainer(id: string): Promise<void>;

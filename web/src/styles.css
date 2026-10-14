@@ -493,6 +493,41 @@ pre.code {
   padding: 8px 16px 12px;
   margin: 16px 0;
 }
+/* decision 180: settings (install review Options, app page Change…) */
+.options {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 16px 8px;
+  margin: 16px 0;
+}
+.options > summary {
+  margin: 8px 0;
+}
+.setting-fields {
+  display: grid;
+  gap: 16px;
+  margin: 8px 0;
+}
+.setting-field .setting-help {
+  margin: 4px 0 0;
+}
+.setting-field input[type='number'],
+.setting-field input[type='text'],
+.setting-field select {
+  width: 100%;
+  max-width: 320px;
+}
+.setting-check {
+  align-items: center;
+  gap: 8px;
+}
+.setting-help .btn.small {
+  padding: 0 8px;
+  min-height: 24px;
+}
+.error-text {
+  color: var(--bad);
+}
 .permissions legend {
   font-weight: 600;
   padding: 0 8px;

@@ -6,7 +6,7 @@ export type InstallState = 'installing' | 'installed' | 'failed' | 'needs_action
 export type Runtime = 'running' | 'stopped' | 'starting' | 'unavailable' | 'unknown';
 export type Readiness = 'healthy' | 'unhealthy' | 'checking' | 'unknown';
 export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action';
-// configure (decisions 125/126): change an installed app's operator-provided secrets and/or link providers.
+// configure (decisions 125/126/180): change an installed app's operator-provided secrets, link providers and/or settings.
 // backup/restore (decisions 151, 153): the cold pass of a backup run, and restoring an app in place.
 export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | 'purge' | 'update' | 'expose' | 'unexpose' | 'reconfigure' | 'restart' | 'configure' | 'seal' | 'move' | 'backup' | 'restore' | 'relink';
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
@@ -39,8 +39,44 @@ export interface FixedPortDto {
 // Decision 163: a privilege the operator accepts when approving (label: what it lets the app do)
 export interface PermissionDto {
   service: string;
-  permission: 'net-admin' | 'tun' | 'ip-forwarding';
+  permission: 'net-admin' | 'tun' | 'ip-forwarding' | 'gpu';
   label: string;
+}
+// Decision 179: the graphics card this machine offers apps that ask for `gpu` (never group ids or paths).
+// problem (informational, never a refusal): NVIDIA_TOOLKIT_MISSING = an NVIDIA card is present, but Docker cannot
+// use it until the operator installs the NVIDIA container toolkit; NVIDIA_DOCKER_RESTART_NEEDED = the toolkit is
+// installed, but Docker has not restarted since. With kind dri, the problem is about an NVIDIA card next to the
+// Intel/AMD graphics the app uses.
+export interface GpuDto {
+  kind: 'nvidia' | 'dri' | 'none';
+  detail: string;
+  problem?: 'NVIDIA_TOOLKIT_MISSING' | 'NVIDIA_DOCKER_RESTART_NEEDED';
+}
+
+// Decision 180: a setting the operator can change (not a secret: values appear in plans, events and logs).
+// value = the effective value (the operator's override, else the current release's default); overridden = an
+// override is stored. min/max: integer/number; maxLength: string; choices: choice.
+export type SettingValue = string | number | boolean;
+export interface SettingDto {
+  id: string;
+  label: string;
+  help: string | null;
+  type: 'integer' | 'number' | 'boolean' | 'string' | 'choice';
+  default: SettingValue;
+  value: SettingValue;
+  overridden: boolean;
+  min: number | null;
+  max: number | null;
+  maxLength: number | null;
+  choices: { value: string; label: string }[] | null;
+}
+// In a plan. new: install (every setting) or a setting an update adds — ask: the submission may carry a value
+// (`settings` of POST /v1/operations); set: a configure plan changes it (previous = the value before); reset: an
+// update no longer allows the stored value and puts back the default; dropped: the update no longer has it.
+export interface PlanSettingDto extends SettingDto {
+  change: 'new' | 'set' | 'reset' | 'dropped';
+  ask: boolean;
+  previous: SettingValue | null;
 }
 
 export interface ExposureDto {
@@ -101,6 +137,8 @@ export interface InstanceSummary {
   linkedBy: { instanceId: string; name: string; linkId: string; state: AppLinkState }[];
   // decision 125: secrets the operator typed (never their values); set = a value is stored
   operatorSecrets: { id: string; prompt: string; optional: boolean; set: boolean }[];
+  // decision 180: the app's settings with their effective values (absent when the package declares none)
+  settings?: SettingDto[];
   // decision 131: not shown on Home (the operator's choice, else the package's presentation.hideFromHome)
   hiddenFromHome: boolean;
   // decision 141: the main endpoint is machine-facing (kind api): addresses to copy, no Open button
@@ -247,6 +285,10 @@ export interface InstanceDetail extends InstanceSummary {
   resources: ResourceDto[];
   events: EventDto[];
   lastError: { code: string; message: string; nextAction: string } | null;
+  // decision 179: for an app whose package grants gpu: what this machine offers now, and whether the app's
+  // current Compose file hands THAT card to its containers (false = found after it last started, or it runs with a
+  // different one: Restart uses the one found now)
+  gpu?: GpuDto & { inUse: boolean };
 }
 
 export interface StorageDto {
@@ -307,6 +349,8 @@ export interface PlanDto {
   permissions: PermissionDto[];
   // decision 165: update plans: fixed ports the update newly opens on every interface; accepted like permissions
   opensPorts?: number[];
+  // decision 179: the graphics card found when planning (only for a package that grants gpu to a service)
+  gpu?: GpuDto;
   storage: StorageDto[];
   // install-location plans: where the whole app will live (null = system disk). Decision 157: onDrive =
   // not the Harbor data folder; defaultKey = Harbor's own key (unlocks at sign-in), false = own passphrase
@@ -315,6 +359,8 @@ export interface PlanDto {
   secrets: { id: string; state: 'new' | 'existing'; source: 'generated' | 'operator'; prompt: string | null; optional: boolean; minLength: number | null; maxLength: number | null; ask: 'required' | 'optional' | null }[];
   // decision 126: links this plan sets up or changes
   links: { id: string; purpose: string; optional: boolean; provider: { instanceId: string; name: string; endpointId: string; url: string } | null; alias: string; network: string; change: 'set' | 'keep' | 'clear' }[];
+  // decision 180: settings this plan sets or asks about (absent when there are none)
+  settings?: PlanSettingDto[];
   warnings: string[];
   // decision 157: plain facts worth reading before approving (how it opens, what happens next) — not warnings
   notes: string[];
@@ -449,7 +495,8 @@ export type PlanRequest =
   | { kind: 'update'; instanceId: string; storage?: Record<string, { hostPath: string }>; links?: Record<string, LinkChoice> }
   // decisions 125/126: secrets listed in `secrets` are replaced by the values the submission carries;
   // links: a provider per link id, or null to unlink an optional one
-  | { kind: 'configure'; instanceId: string; secrets?: string[]; links?: Record<string, LinkChoice | null> }
+  // decision 180: settings: new values by setting id (a value equal to the default removes the override)
+  | { kind: 'configure'; instanceId: string; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue> }
   | { kind: 'expose'; instanceId: string; endpointId?: string; via: ExposureVia; hostname?: string; protection?: 'none' | 'basic'; makePrimary?: boolean; proxyFrom?: string }
   // decision 127: hostname picks one of several public names (required when there are several)
   | { kind: 'unexpose'; instanceId: string; endpointId?: string; via: ExposureVia; hostname?: string }
@@ -525,6 +572,9 @@ export interface FoundAppDto {
   drive: string; // mountpoint the home was found under
   adopted: boolean; // this machine already has an instance for it
   error: string | null; // manifest unreadable (corrupt home)
+  // decision 163/179: what adopting asks the operator to accept (absent: nothing, or the package is not on this
+  // machine); the adopt request must carry acceptPermissions: true when present
+  permissions?: PermissionDto[];
 }
 
 export interface FolderListingDto {
@@ -605,6 +655,8 @@ export interface SystemHostDto {
   arch: string;
   cpuModel: string | null;
   power: { available: boolean; note: string | null };
+  // decision 179: the graphics card apps that ask for `gpu` get (absent from daemons before 0.34.0)
+  gpu?: GpuDto;
 }
 
 // ---- diagnostics bundle for beta testers (`harbor diagnostics`): versions,

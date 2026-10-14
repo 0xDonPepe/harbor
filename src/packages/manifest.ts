@@ -4,6 +4,8 @@ import type { ComposeSource, Manifest } from '../contracts/types.js';
 import { compile, formatErrors } from '../contracts/validate.js';
 import { HarborError } from '../errors.js';
 import { declaredMinHarborProblem } from './min-harbor.js';
+import { NVIDIA_RESERVED_ENV } from '../planner/gpu.js';
+import { settingValueProblem } from '../planner/settings.js';
 
 export function validateManifestShape(value: unknown, label = 'manifest.yaml'): Manifest {
   const validate = compile<Manifest>(MANIFEST_SCHEMA);
@@ -72,7 +74,7 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
   // already set as a literal in the Compose source.
   const targets = new Map<string, string>();
   const secretIds = new Set<string>();
-  const claimTarget = (service: string, env: string, who: string) => {
+  const claimTarget = (service: string, env: string, who: string, literalHint = '') => {
     if (!(service in manifest.deployment.services)) {
       problems.push(`${who} references unknown service ${service}`);
       return;
@@ -82,7 +84,7 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
     if (prior) problems.push(`${who} and ${prior} both target ${service}.${env}`);
     targets.set(key, who);
     if (compose.services[service]?.environment && env in compose.services[service].environment) {
-      problems.push(`${who} targets ${service}.${env}, which compose.yaml already sets literally`);
+      problems.push(`${who} targets ${service}.${env}, which compose.yaml already sets literally${literalHint}`);
     }
   };
   for (const s of manifest.secrets ?? []) {
@@ -113,6 +115,31 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
     for (const b of l.bindings) claimTarget(b.service, b.environment, `links.${l.id}`);
     if (INTERPOLATION_RE.test(l.purpose)) problems.push(`links.${l.id} purpose must not contain interpolation expressions`);
   }
+  // Decision 180: settings the operator can change. Each one's default fits its own rules, and the variables it
+  // binds are its alone (not a compose literal, a secret, a link or a configuration binding).
+  const settingIds = new Set<string>();
+  for (const st of manifest.settings ?? []) {
+    const who = `settings.${st.id}`;
+    if (settingIds.has(st.id)) problems.push(`setting id ${st.id} is duplicated`);
+    settingIds.add(st.id);
+    const numeric = st.type === 'integer' || st.type === 'number';
+    if (!numeric && (st.min !== undefined || st.max !== undefined)) problems.push(`${who}: min and max apply to integer and number settings only`);
+    if (st.type === 'integer' && ((st.min !== undefined && !Number.isInteger(st.min)) || (st.max !== undefined && !Number.isInteger(st.max)))) problems.push(`${who}: min and max of an integer setting must be whole numbers`);
+    if (numeric && st.min !== undefined && st.max !== undefined && st.min > st.max) problems.push(`${who}: min is larger than max`);
+    if (st.type !== 'string' && st.maxLength !== undefined) problems.push(`${who}: maxLength applies to string settings only`);
+    if (st.type !== 'choice' && st.choices !== undefined) problems.push(`${who}: choices apply to choice settings only`);
+    if (st.type === 'choice' && !st.choices?.length) problems.push(`${who}: a choice setting needs choices`);
+    if (st.type === 'choice' && st.choices && new Set(st.choices.map((c) => c.value)).size !== st.choices.length) problems.push(`${who}: a choice value is listed twice`);
+    if (st.type !== 'boolean' && (st.onValue !== undefined || st.offValue !== undefined)) problems.push(`${who}: onValue and offValue apply to boolean settings only`);
+    if (st.type === 'boolean' && (st.onValue ?? 'true') === (st.offValue ?? 'false')) problems.push(`${who}: onValue and offValue must differ`);
+    const defaultProblem = settingValueProblem(st, st.default);
+    if (defaultProblem) problems.push(`${who}: the default ${JSON.stringify(st.default)} does not fit: ${defaultProblem}`);
+    for (const text of [st.label, st.help ?? '']) if (INTERPOLATION_RE.test(text)) problems.push(`${who} label/help must not contain interpolation expressions`);
+    for (const b of st.bindings) {
+      claimTarget(b.service, b.environment, who, ' (move that value into the setting\'s default and drop it from compose.yaml)');
+      if (b.template !== undefined && b.template.split(SECRET_TEMPLATE_SLOT).length !== 2) problems.push(`${who} binding ${b.service}.${b.environment}: template must contain ${SECRET_TEMPLATE_SLOT} exactly once`);
+    }
+  }
   for (const c of manifest.configuration ?? []) {
     requireEndpoint(c.endpoint, `configuration ${c.service}.${c.environment}`);
     claimTarget(c.service, c.environment, `configuration.${c.endpoint}`);
@@ -139,6 +166,15 @@ export function validateManifestReferences(manifest: Manifest, compose: ComposeS
   if (fixedPorts.size && manifest.deployment.multiInstance) problems.push('ports: an app with fixed host ports must set deployment.multiInstance: false (two copies cannot share a port)');
   for (const svc of Object.keys(manifest.permissions ?? {})) {
     if (!(svc in manifest.deployment.services)) problems.push(`permissions references unknown service ${svc}`);
+  }
+  // Decision 179: on a service granted gpu, the NVIDIA toolkit's device and capability variables are Harbor's (the
+  // renderer's device request decides them), never a compose literal or a secret, link, setting or configuration value
+  for (const svc of Object.keys(manifest.permissions ?? {}).filter((x) => manifest.permissions![x]!.includes('gpu'))) {
+    for (const env of NVIDIA_RESERVED_ENV) {
+      if (compose.services[svc]?.environment && env in compose.services[svc].environment) problems.push(`service ${svc} is granted gpu, so compose.yaml must not set ${env} (Harbor decides which card and driver features it gets)`);
+      const who = targets.get(`${svc}:${env}`);
+      if (who) problems.push(`${who} targets ${svc}.${env}, which Harbor sets for a service granted gpu`);
+    }
   }
 
   const hook = manifest.hooks?.afterStart;

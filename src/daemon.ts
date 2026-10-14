@@ -9,6 +9,7 @@ import { ComposeCli } from './docker/compose-cli.js';
 import { DockerodeAdapter } from './docker/dockerode-adapter.js';
 import { FakeDocker } from './docker/fake.js';
 import { realPortObserver, type PortObserver } from './docker/ports.js';
+import { FakeGpu, HostGpuObserver, type GpuObserver } from './system/gpu.js';
 import { HarborError } from './errors.js';
 import { jsonLogger, LOG_ORDER, type Ctx, type Logger, type LogLevel } from './lifecycle/context.js';
 import { Observer } from './lifecycle/observer.js';
@@ -56,6 +57,8 @@ export interface DaemonOverrides {
   docker?: DockerAdapter;
   compose?: ComposeRunner;
   ports?: PortObserver;
+  // decision 179: tests and `pnpm dev` inject what the machine has (fake mode default: no graphics card)
+  gpu?: GpuObserver;
   clock?: Clock;
   ids?: Ids;
   log?: Logger;
@@ -157,9 +160,10 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     const notifier = new Notifier(repo, ids, log, notifyTransport, () => repo.setting<string>('device.name') ?? hostname());
     const git = overrides.git ?? (fakeMode ? new FakeGit() : new GitCli());
     const machineKey = new MachineKeyHolder(log);
+    const gpu = overrides.gpu ?? (fakeMode ? new FakeGpu() : new HostGpuObserver({ root: '/', runtimes: async () => (await docker.info()).runtimes }));
     // The service needs the ctx and the ctx needs the service (runner secret
     // handoff): build the ctx first with a placeholder, then link both ways.
-    const ctx: Ctx = { config, repo, docker, compose, ports: overrides.ports ?? realPortObserver, clock, ids, log, installationId: installation.id, version, tailscale, caddy, verify, net, packages, catalogUpdates, logBuffer, selfUpdate, notifier, git, machineKey, service: null as unknown as ApplicationService };
+    const ctx: Ctx = { config, repo, docker, compose, ports: overrides.ports ?? realPortObserver, gpu, clock, ids, log, installationId: installation.id, version, tailscale, caddy, verify, net, packages, catalogUpdates, logBuffer, selfUpdate, notifier, git, machineKey, service: null as unknown as ApplicationService };
     const service = new ApplicationService(ctx);
     ctx.service = service;
     const runner = new OperationRunner(ctx);

@@ -9,6 +9,7 @@ import { Network } from './Network';
 import { BackupsSettings } from './Backups';
 import { Mark, PencilIcon } from '../icons';
 import { fmtBytes, fmtUptime } from '../format';
+import { gpuMachineText } from '../gpu-text';
 import type { Console } from '../store';
 import { DEFAULT_SURFACES_OPACITY, WALLPAPERS, applySurfacesOpacity, applyTheme, applyWallpaper, hasExplicitWallpaper, readSurfacesOpacity, readTheme, readWallpaper, syncWallpaperPicture, type Theme, type Wallpaper } from '../theme';
 
@@ -471,6 +472,15 @@ function Overview({ c, go }: { c: Console; go: (s: Section) => void }) {
             {host ? `${host.os} · ${host.arch}` : m ? `${m.host.os} · ${m.host.arch}` : '—'}
             {(host?.cpuModel ?? m?.host.cpuModel) ? <span className="muted"> · {host?.cpuModel ?? m?.host.cpuModel}</span> : null}
           </dd>
+          {host?.gpu && (
+            // decision 179: what apps that ask for the graphics card get here
+            <>
+              <dt>Graphics card</dt>
+              <dd>
+                {gpuMachineText(host.gpu)}
+              </dd>
+            </>
+          )}
           <dt>Up for</dt>
           <dd>{m ? fmtUptime(m.uptimeSeconds) : '—'}</dd>
         </dl>
@@ -1539,6 +1549,8 @@ function FoundApps() {
   const [adopting, setAdopting] = useState<string | null>(null);
   const [pass, setPass] = useState('');
   const [name, setName] = useState('');
+  // decision 163/179: an app whose package asks for permissions gets its own explicit yes, as at install
+  const [accepted, setAccepted] = useState(false);
   const [busyDevice, setBusyDevice] = useState<string | null>(null);
   useEffect(() => {
     api.foundApps().then(setApps, (e: Error) => setError(e.message));
@@ -1623,22 +1635,40 @@ function FoundApps() {
             {a.error && <span className="error"> · {a.error}</span>}
           </span>
           {adopting === a.home ? (
-            <span className="row wrap">
+            <div className="row wrap">
+              {a.permissions?.length ? (
+                <fieldset className="permissions">
+                  <legend>This app asks to</legend>
+                  <ul className="plain">
+                    {a.permissions.map((x) => (
+                      <li key={`${x.service}-${x.permission}`}>
+                        {x.label} <span className="muted small">· {x.service}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {a.permissions.some((x) => x.permission === 'gpu') && <p className="small muted">It uses the graphics card this machine offers (Settings → Overview), or the CPU when there is none.</p>}
+                  <label className="row small">
+                    <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} /> Allow {a.displayName} to do this
+                  </label>
+                </fieldset>
+              ) : null}
               <input value={pass} onChange={(e) => setPass(e.target.value)} type="password" autoComplete="off" placeholder="App passphrase" aria-label={`Passphrase for ${a.displayName}`} />
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" aria-label={`Name for adopted ${a.displayName}`} />
               <button
                 className="btn small primary"
-                disabled={!pass}
+                disabled={!pass || (Boolean(a.permissions?.length) && !accepted)}
+                title={a.permissions?.length && !accepted ? 'Allow the permissions first' : undefined}
                 onClick={() => {
                   setError(null);
                   void api
-                    .adoptFoundApp(a.home, pass, name.trim() || undefined)
+                    .adoptFoundApp(a.home, pass, name.trim() || undefined, Boolean(a.permissions?.length) && accepted)
                     .then(() => api.foundApps().then(setApps, (e: Error) => setError(e.message)))
                     .catch((e: Error) => setError(e.message))
                     .finally(() => {
                       setAdopting(null);
                       setPass('');
                       setName('');
+                      setAccepted(false);
                     });
                 }}
               >
@@ -1647,9 +1677,9 @@ function FoundApps() {
               <button className="btn small ghost" onClick={() => setAdopting(null)}>
                 Cancel
               </button>
-            </span>
+            </div>
           ) : (
-            <button className="btn small" onClick={() => setAdopting(a.home)} aria-label={`Adopt ${a.displayName}`}>
+            <button className="btn small" onClick={() => (setAccepted(false), setAdopting(a.home))} aria-label={`Adopt ${a.displayName}`}>
               Adopt…
             </button>
           )}

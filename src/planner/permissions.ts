@@ -6,9 +6,11 @@ export const PERMISSION_LABEL: Readonly<Record<ManifestPermission, string>> = {
   'net-admin': 'Change network settings inside the app: create network tunnels, routes and firewall rules (NET_ADMIN)',
   tun: "Use this machine's tunnel device, /dev/net/tun",
   'ip-forwarding': 'Pass traffic between networks inside the app (IP forwarding)',
+  // decision 179: what it gets depends on the machine (see planner/gpu.ts); the plan says which card
+  gpu: "Use this machine's graphics card (GPU)",
 };
 
-const ORDER: readonly ManifestPermission[] = ['net-admin', 'tun', 'ip-forwarding'];
+const ORDER: readonly ManifestPermission[] = ['net-admin', 'tun', 'ip-forwarding', 'gpu'];
 
 // Pure: every (service, permission) the manifest asks for, in a stable order
 export function permissionsOf(manifest: Manifest): { service: string; permission: ManifestPermission }[] {

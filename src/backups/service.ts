@@ -13,7 +13,7 @@ import { UUID_RE } from '../contracts/patterns.js';
 import { unwrapMasterKeyForMachine, unwrapSecretForMachine, wrapSecretForMachine, zeroKey, type MachineWrappedKey } from '../storage/app-home.js';
 import { zeroMachineKey } from '../auth/machine-key.js';
 import { INSTALLATION_RECOVERY_SETTING } from '../storage/installation-recovery.js';
-import { instanceDir } from '../lifecycle/instance-dir.js';
+import { instanceDir, readSettingsBytes, SETTINGS_FILE } from '../lifecycle/instance-dir.js';
 import { backupErrorCode, type BackupEngine, type TargetCall } from './engine.js';
 import { cardKeyLabel, cardPassword, KEY_LABEL_BACKUP, snapshotTags, tagValue, type SnapshotInfo, type TargetRuntime } from './restic.js';
 import { checkTargetValues, loadTargetPackages, REDACTED, type LoadedTargetPackage } from './targets.js';
@@ -667,6 +667,9 @@ export class BackupService {
       ...readStageTree(path.join(dir, 'secrets'), 'secrets'),
       ...readStageTree(path.join(dir, 'release'), 'release'),
     ];
+    // decision 180: the operator's setting overrides go with the app (restore puts them back)
+    const settings = readSettingsBytes(this.ctx.config.stateDir, inst.id);
+    if (settings) files.push({ path: SETTINGS_FILE, base64: settings.toString('base64') });
     return files;
   }
 

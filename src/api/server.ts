@@ -33,6 +33,8 @@ import { existsSync as fsExists, accessSync, constants as fsConstants, mkdirSync
 
 // App links (decision 126): a provider choice per link id.
 const LINK_ID_PATTERN = '^[a-z][a-z0-9-]{0,29}$';
+// decision 180: setting values by setting id (the daemon checks each against the app's own rules)
+const SETTING_VALUES = { type: 'object', maxProperties: 32, propertyNames: { pattern: '^[a-z][a-z0-9-]{0,39}$' }, additionalProperties: { anyOf: [{ type: 'number' }, { type: 'boolean' }, { type: 'string', maxLength: 1024 }] } } as const;
 const LINK_CHOICE = { type: 'object', additionalProperties: false, required: ['instanceId'], properties: { instanceId: { type: 'string', minLength: 1, maxLength: 64 }, endpointId: { type: 'string', pattern: ID_PATTERN } } } as const;
 const LINK_CHOICES = { type: 'object', maxProperties: 8, propertyNames: { pattern: LINK_ID_PATTERN }, additionalProperties: LINK_CHOICE } as const;
 
@@ -840,9 +842,9 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
   );
 
   // --- the machine: facts for the Settings overview, restart / shut down
-  app.get('/v1/system/host', { preHandler: requireAuth, schema: { description: 'Hostname, OS, CPU and whether Harbor may restart or shut down this machine.' } }, async () => {
+  app.get('/v1/system/host', { preHandler: requireAuth, schema: { description: 'Hostname, OS, CPU, the graphics card apps that ask for one get (decision 179), and whether Harbor may restart or shut down this machine.' } }, async () => {
     const p = await power.available();
-    return { ...hostFacts(), power: { available: p.ok, note: p.note } };
+    return { ...hostFacts(), power: { available: p.ok, note: p.note }, gpu: await service.hostGpu() };
   });
   app.post(
     '/v1/system/power',
@@ -927,7 +929,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     {
       preHandler: requireAuth,
       schema: {
-        description: 'Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?}. Configure: {kind, instanceId, secrets?, links?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.',
+        description: 'Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?}. Configure: {kind, instanceId, secrets?, links?, settings?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.',
         body: {
           oneOf: [
             {
@@ -984,6 +986,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
                 secrets: { type: 'array', maxItems: 16, uniqueItems: true, items: { type: 'string', pattern: ID_PATTERN } },
                 // decision 126: a new provider per link id, or null to unlink an optional one
                 links: { type: 'object', maxProperties: 8, propertyNames: { pattern: LINK_ID_PATTERN }, additionalProperties: { oneOf: [{ type: 'null' }, LINK_CHOICE] } },
+                // decision 180: new setting values (not secret: the plan lists them as changes)
+                settings: SETTING_VALUES,
               },
             },
             {
@@ -1021,16 +1025,16 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     {
       preHandler: requireAuth,
       schema: {
-        description: 'Submit an exact plan ID. Requires Idempotency-Key. Install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Returns 202 with the (possibly existing) operation.',
+        description: 'Submit an exact plan ID. Requires Idempotency-Key. Install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Plans that list settings with ask (decision 180: install, the settings an update adds) may carry chosen values in `settings` (not secret; SETTING_INVALID when a value is not allowed). Returns 202 with the (possibly existing) operation.',
         headers: { type: 'object', properties: { 'idempotency-key': { type: 'string', pattern: IDEMPOTENCY_KEY_RE.source } }, required: ['idempotency-key'] },
-        body: { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } }, acceptPermissions: { type: 'boolean', description: 'Decision 163: true accepts the permissions the plan lists (required when it lists any).' } } },
+        body: { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } }, settings: SETTING_VALUES, acceptPermissions: { type: 'boolean', description: 'Decision 163: true accepts the permissions the plan lists (required when it lists any).' } } },
       },
     },
     async (req, reply) => {
       const key = req.headers['idempotency-key'] as string;
-      const { planId, passphrase, secrets, acceptPermissions } = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string>; acceptPermissions?: boolean };
+      const { planId, passphrase, secrets, settings, acceptPermissions } = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string>; settings?: Record<string, string | number | boolean>; acceptPermissions?: boolean };
       if (typeof passphrase === 'string' && passphrase) service.submitInstallLocationSecret(planId, passphrase);
-      const result = service.submit(planId, key, req.actor!, { ...(secrets ? { secrets } : {}), ...(acceptPermissions === true ? { acceptPermissions: true } : {}) });
+      const result = service.submit(planId, key, req.actor!, { ...(secrets ? { secrets } : {}), ...(settings ? { settings } : {}), ...(acceptPermissions === true ? { acceptPermissions: true } : {}) });
       return reply.status(202).send({ operationId: result.operation.id, created: result.created, operation: service.operation(result.operation.id) });
     },
   );
@@ -1041,13 +1045,13 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     {
       preHandler: requireAuth,
       schema: {
-        description: 'Adopt an app home from a drive with its encryption passphrase: unlock, wrap for silent unlock here, create the instance and start it. Ports allocate fresh on this machine.',
-        body: { type: 'object', additionalProperties: false, required: ['home', 'passphrase'], properties: { home: { type: 'string', minLength: 1, maxLength: 4096 }, name: { type: 'string', pattern: ID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 } } },
+        description: 'Adopt an app home from a drive with its encryption passphrase: unlock, wrap for silent unlock here, create the instance and start it. Ports allocate fresh on this machine. An app whose package asks for permissions (decision 163/179, listed in GET /v1/found-apps) needs acceptPermissions: true, else 409 PERMISSION_REQUIRED before anything changes.',
+        body: { type: 'object', additionalProperties: false, required: ['home', 'passphrase'], properties: { home: { type: 'string', minLength: 1, maxLength: 4096 }, name: { type: 'string', pattern: ID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, acceptPermissions: { type: 'boolean' } } },
       },
     },
     async (req, reply) => {
-      const b = req.body as { home: string; name?: string; passphrase: string };
-      const summary = await service.adoptApp(b.home, b.passphrase, b.name ? { name: b.name } : undefined, req.actor!);
+      const b = req.body as { home: string; name?: string; passphrase: string; acceptPermissions?: boolean };
+      const summary = await service.adoptApp(b.home, b.passphrase, { ...(b.name ? { name: b.name } : {}), ...(b.acceptPermissions ? { acceptPermissions: true } : {}) }, req.actor!);
       return reply.status(201).send(summary);
     },
   );

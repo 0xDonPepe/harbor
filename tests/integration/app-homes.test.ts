@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FoundAppDto, InstanceDetail, InstanceSummary, PlanDto, RecoveryKeyRotationDto, SecurityDto } from '../../src/contracts/api.js';
 import Database from 'better-sqlite3';
 import { FakeCryptoProvider } from '../../src/storage/crypto-provider.js';
+import { writeZip } from '../../src/packages/zip.js';
 import { unsealMachineKey } from '../../src/auth/machine-key.js';
 import { ADMIN, startHarness, type Harness } from './harness.js';
 
@@ -504,3 +505,83 @@ describe('the Harbor recovery key', () => {
   });
 });
 
+
+// Decision 163/179: an app whose package asks for permissions (gpu: Ollama, Open WebUI) is adopted with them
+// accepted, and a request without the yes changes nothing on the drive or the adopting machine.
+describe('adopting a drive app that asks for the graphics card', () => {
+  const GPU_APP = `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: gpullm
+  name: GPU model server
+  description: A local model server
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: false
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+permissions:
+  web: [gpu]
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+`;
+  const zip = () => `data:application/zip;base64,${writeZip({ 'manifest.yaml': GPU_APP, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }, { folder: 'gpullm' }).toString('base64')}`;
+  // every file of the home outside its volumes (manifest, vault, recovery cards), to prove a refusal wrote nothing
+  const snapshot = (dir: string, rel = ''): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const e of readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+      const r = path.join(rel, e.name);
+      if (e.isDirectory()) {
+        if (r !== 'volumes') Object.assign(out, snapshot(dir, r));
+      } else out[r] = readFileSync(path.join(dir, r)).toString('base64');
+    }
+    return out;
+  };
+  let other: Harness;
+  afterAll(async () => other?.close());
+
+  it('refuses without the yes before touching anything, then adopts with it', async () => {
+    await h.api.expect(201, 'POST', '/v1/packages', { fileName: 'gpullm.zip', dataUrl: zip() });
+    const plan = await h.api.plan({ kind: 'install', packageId: 'gpullm', location: { dir: path.join(drive, 'harbor-apps', 'gpullm'), passphrase: PASS } });
+    expect(plan.permissions.map((p) => p.permission)).toEqual(['gpu']);
+    const sub = await h.api.expect<{ operationId: string }>(202, 'POST', '/v1/operations', { planId: plan.id, passphrase: PASS, acceptPermissions: true }, { 'idempotency-key': 'gpu-home-1' });
+    expect((await h.api.waitOperation(sub.operationId)).state).toBe('succeeded');
+    const home = (await h.api.instances()).find((i) => i.packageId === 'gpullm')!.home!.path;
+
+    // a second machine with the same package
+    other = await startHarness({ overrides: { crypto } });
+    await other.api.expect(201, 'POST', '/v1/packages', { fileName: 'gpullm.zip', dataUrl: zip() });
+    const before = snapshot(home);
+    const refused = await other.api.expectError(409, 'PERMISSION_REQUIRED', 'POST', '/v1/found-apps/adopt', { home, passphrase: PASS });
+    expect(JSON.stringify(refused)).toContain('web gpu');
+    expect(snapshot(home)).toEqual(before); // no recovery card stamped
+    expect((await other.api.instances()).some((i) => i.packageId === 'gpullm')).toBe(false);
+    const db = new Database(path.join(other.stateDir, 'harbor.db'), { readonly: true });
+    try {
+      expect(db.prepare('SELECT COUNT(*) AS n FROM resources').get()).toEqual({ n: 0 }); // no orphan __home__ row
+      expect(db.prepare('SELECT COUNT(*) AS n FROM plans').get()).toEqual({ n: 0 });
+    } finally {
+      db.close();
+    }
+
+    const adopted = await other.api.expect<InstanceSummary>(201, 'POST', '/v1/found-apps/adopt', { home, passphrase: PASS, acceptPermissions: true });
+    expect(adopted.packageId).toBe('gpullm');
+    const op = await other.api.waitOperation(adopted.operationId!);
+    expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+  });
+});

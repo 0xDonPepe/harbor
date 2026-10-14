@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **179**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **181**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -28,7 +28,7 @@ src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
   contracts/    JSON Schemas + DTO types — the API's source of truth
   packages/     restricted YAML parser, manifest/compose validators, catalog loader, zip import,
                 min-harbor.ts (an app's declared `release.minHarbor` gate, decision 161)
-  planner/      identity, port allocation, Compose rendering (PURE functions, no I/O)
+  planner/      identity, port allocation, Compose rendering, gpu facts → Docker keys, app settings (PURE functions, no I/O)
   state/        SQLite (better-sqlite3, SCHEMA_VERSION 12, migrations v1→v12; v9 = `links`, v10 = several public names per endpoint, v11 = `backup_runs`, v12 = recovery words stripped from operation results), repositories
   docker/       adapter interface, Dockerode adapter, Compose CLI runner, FAKE adapter, port probe
   lifecycle/    plans/operations service, serial runner, readiness, observer (drive-guard stop,
@@ -135,16 +135,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (491)
-   pnpm test:integration        # 288 + 3 live-Docker skipped (~5 min)
-   pnpm build && pnpm test:e2e  # 38 Playwright (~2 min, ports 18500/18700)
+   pnpm test                    # unit (552)
+   pnpm test:integration        # 328 + 3 live-Docker skipped (~7 min)
+   pnpm build && pnpm test:e2e  # 41 Playwright (~3 min, ports 18500/18700)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
    pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **179**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **181**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant
@@ -182,6 +182,9 @@ The non-negotiable subset:
 - **Secrets the operator types** (`source: operator` + `prompt`) and **links to another app**
   (`links:`) are data like everything else (decisions 125–126): values never enter plans, DTOs or
   logs; link networks join only the bound services and the provider's endpoint service.
+- **Settings the operator can change** (`settings:`, decision 180, `minHarbor: "0.34.0"`) are visible values, not
+  secrets: typed, with a default, bound to environment variables the compose file does not set itself. Only
+  overrides are stored (`instances/<id>/settings.json`); never put a password in a setting.
 - **Endpoints + health**: every service declared, every named volume claimed by exactly one
   `storage[]` entry, a health path that answers **before** any account exists, first run
   finishable in the browser (no CLI-only admin creation).

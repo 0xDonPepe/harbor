@@ -5,10 +5,15 @@ export type Desired = 'running' | 'stopped' | 'retained';
 export type InstallState = 'installing' | 'installed' | 'failed' | 'needs_action' | 'retained';
 export type Runtime = 'running' | 'stopped' | 'starting' | 'unavailable' | 'unknown';
 export type Readiness = 'healthy' | 'unhealthy' | 'checking' | 'unknown';
-export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action';
+// cancelled (decision 183): a waiting item cancelled before it started, or never started before a daemon restart.
+export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action' | 'cancelled';
 // configure (decisions 125/126/180): change an installed app's operator-provided secrets, link providers and/or settings.
 // backup/restore (decisions 151, 153): the cold pass of a backup run, and restoring an app in place.
 export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | 'purge' | 'update' | 'expose' | 'unexpose' | 'reconfigure' | 'restart' | 'configure' | 'seal' | 'move' | 'backup' | 'restore' | 'relink';
+// Decision 183: kinds that may be queued as an action without a plan (`POST /v1/operations {action}`); Harbor plans
+// them when their turn comes. They take no typed values, so a queued action never holds a secret.
+export const QUEUEABLE_KINDS = ['start', 'stop', 'restart', 'update', 'remove', 'reinstall', 'purge'] as const;
+export type QueueableKind = (typeof QUEUEABLE_KINDS)[number];
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
 // The address an app treats as its own, chosen at install (decision 116). Omitted = this network
@@ -382,7 +387,16 @@ export interface OperationDto {
   id: string;
   kind: PlanKind;
   instanceId: string;
-  planId: string;
+  // decision 183: the app's display name (kept when a cancelled install freed its row)
+  instanceName: string;
+  // null while a queued action waits to be planned (decision 183)
+  planId: string | null;
+  // who queued it: the session user, 'auto-update', 'drive-guard', 'link-guard', 'lock-guard', 'scheduler', …
+  actor: string;
+  // decision 183: true while it waits to be planned at its turn (queued without a plan)
+  queuedAction: boolean;
+  // decision 183: a person may cancel it now (waiting, not picked yet, not queued by Harbor to protect something)
+  cancellable: boolean;
   state: OperationState;
   phase: string;
   createdAt: string;
@@ -391,6 +405,13 @@ export interface OperationDto {
   error: { code: string; message: string; nextAction: string } | null;
   result: Record<string, unknown> | null;
   events: EventDto[];
+}
+
+// GET /v1/operations (decision 183): the queue. `active` in run order (the running one first); `recent` finished,
+// newest first. List items carry `events: []`; GET /v1/operations/:id has the events and one-time results.
+export interface OperationQueueDto {
+  active: OperationDto[];
+  recent: OperationDto[];
 }
 
 export interface CatalogItemDto {

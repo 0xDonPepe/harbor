@@ -237,25 +237,31 @@ Harbor does one thing at a time, but you never have to wait to ask for the next 
 because something else is running: what you approve joins the **queue** and runs in turn.
 
 - **Another app is busy.** Review and approve as usual; the item waits in the queue and runs when its turn comes.
-- **The same app is busy** (it is installing, updating, …). *Start*, *Stop*, *Restart*, *Update*, *Remove*,
-  *Reinstall* and *Uninstall completely* ask once (*Queue: Update Immich — it runs after Immich's install*) and join
-  the queue without a plan. When its turn comes Harbor makes the plan against the app as it is then and runs it, the
-  way automatic updates do. If that plan needs something only you can give (a new permission to accept, a value to
-  type, a passphrase), the item stops as **Needs your review** and nothing changes: open the app and choose the
-  action again to review it. Other changes (publishing, settings, moving, restoring) wait for the app in their review,
-  then show the plan.
+- **The same app is busy** (installing, updating, …). *Start*, *Stop*, *Restart*, *Update*, *Remove*, *Reinstall*
+  and *Uninstall completely* stay on its page and ask once (*Queue: Update Immich*, "Harbor is installing Immich right
+  now. Harbor will update it as soon as that finishes, planning it then."), then join the queue without a plan. When
+  its turn comes Harbor makes the plan against the app as it is then and runs it, the way automatic updates do. If
+  that plan needs something only you can give (a new permission to accept, a value to type, a passphrase), the item
+  stops as **Needs your review** and nothing changes: open the app and choose the action again to review it. The same
+  action already waiting is not queued twice (*Already queued: Update Immich*, with its Cancel). Other changes
+  (publishing, settings, moving, restoring), and any review where you already typed a value or ticked a permission,
+  wait for the app in their review, then show the plan again.
 - **The queue** sits at the bottom right: the running item with its progress, the waiting items in the order they
-  will run, and the items that finished while you watched (with their results, errors and, once, any credentials or
-  recovery words). Fold it to one line; close a finished item with ×.
-- **Cancel** takes a waiting item out before it starts; nothing is changed, and a cancelled install frees its name and
-  ports (and cancels what you queued behind it for that app). A running item cannot be stopped halfway. Items Harbor
-  queued itself to protect an app (a stop because its drive disappeared, a link repair, a backup's last pass) cannot
-  be cancelled; the queue says why.
-- **If Harbor restarts**, items that had not started yet are cancelled (nothing was changed; queue them again); the
-  one that was running stops as *Needs attention* as before.
+  will run, and finished items: what you started here (whatever happened), anything that shows a password or
+  recovery words once, and anything that failed. Background work that went fine (a nightly backup, an automatic
+  update) leaves by itself. Fold the queue to one line, close an item with ×, or **Clear finished** (a password or
+  recovery words stay until you acknowledge them).
+- **Cancel** takes a waiting item out before it starts; nothing is changed. A cancelled install frees its name and
+  ports and cancels what you queued behind it for that app; a cancelled adopt leaves the app on the drive ready to
+  adopt again. A running item cannot be stopped halfway. Items Harbor queued itself to protect an app (a stop because
+  its drive disappeared, a link repair, a lock, a backup's last pass) cannot be cancelled; the queue says why.
+- **If Harbor restarts or stops**, items that had not started yet are cancelled (nothing was changed; queue them
+  again); the one that was running stops as *Needs attention* as before.
 
 `harbor queue` shows the same list (`--json` for scripts) and `harbor queue cancel <operation>` cancels a waiting item.
-A CLI action of the kinds above on a busy app offers to queue it (`--yes` accepts); other actions wait for the app.
+On a busy app, `harbor start|stop|restart|update|remove|reinstall|purge` offers to queue the action (`--yes` accepts);
+with `--accept-permissions`, `--passphrase-stdin` or values (`--set`, `--secret`, `--link`, storage) it waits for the
+app instead, then plans and asks as before.
 
 ### Full uninstall
 

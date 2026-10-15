@@ -37,16 +37,20 @@ error codes, next action) lives in the drawer.
 **The tray is the queue (decision 183).** One quiet panel, one line on top (*Queue · 1 running, 2 waiting*) that
 collapses it. Inside, in run order: the running operation (its sentence, the phase in plain words, a progress
 bar); the waiting ones (*Update Immich · waiting*), each with **Cancel** (accessible name *Cancel update Immich*)
-or, when Harbor queued it to protect something (drive guard, link guard, lock guard, a scheduled backup), one
-quiet line saying why it cannot be cancelled; then the operations this console saw finish, each with today's
-result (Open, next step, shown-once credentials and recovery cards, error code + next action, *Technical steps*)
-and its own Dismiss. Approving something new clears finished items that showed nothing once; a password or
-recovery words stay until dismissed. No button anywhere is disabled because another operation runs: a
-Start/Stop/Restart/Update/Remove/Reinstall/Uninstall on a busy app opens the review in *queue mode* (no plan;
-"Harbor is installing Immich right now. Harbor will update it as soon as that finishes, planning it then." and
-**Queue update**); other kinds keep decision 173's wait. Home tiles show the app's own operation
-(*Updating…*, *Waiting…*, the installing pulse) and the app page adds one quiet line (*Installing… · Update
-waiting*).
+or, when Harbor queued it to protect something (drive guard, link guard, lock guard, a backup run), one
+quiet line saying why it cannot be cancelled; then the finished operations, each with today's result (Open, next
+step, shown-once credentials and recovery cards, error code + next action, *Technical steps*) and its own Dismiss.
+The tray keeps what this console accepted (any outcome), anything that shows a value once, and failures of any
+actor; background successes this console only watched (a nightly backup, an auto-update) leave on their own.
+**Clear finished** clears everything except a password or recovery words, which stay until acknowledged. No button
+anywhere is disabled because another operation runs: a Start/Stop/Restart/Update/Remove/Reinstall/Uninstall on a
+busy app (installing included) opens the review in *queue mode* (no plan; "Harbor is installing Immich right now.
+Harbor will update it as soon as that finishes, planning it then." or "Immich is waiting to restart first. …", and
+**Queue update**); the same action already waiting shows *Already queued: Update Immich* with its Cancel and
+*Keep it*. A review where you typed values, accepted permissions or changed settings never drops them into queue
+mode: it waits for the app and shows the review again (decision 173), as do the other kinds. Home tiles show the
+app's own operation (*Updating…*, *Waiting…*, the installing pulse) and the app page adds one quiet line
+(*Installing… · Update waiting*).
 
 ## 3. Package presentation metadata (small, optional schema extension)
 

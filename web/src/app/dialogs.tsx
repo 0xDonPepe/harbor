@@ -9,7 +9,7 @@ import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './form
 import { gpuAppText, gpuReviewText } from './gpu-text';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
-import { DOING, VERB, appQueueLine, capitalize as cap, isRunning, whoOf } from './queue';
+import { DOING, VERB, appActionGates, appQueueLine, capitalize as cap, isRunning, notCancellableReason, whoOf } from './queue';
 import { SettingFields, SettingsDialog } from './settings-fields';
 import { changedValues, draftOf, optionsSummary, settingText, type SettingDraft } from './setting-draft';
 
@@ -78,6 +78,35 @@ export function PlanDialog({ c }: { c: Console }) {
     const who = whoOf(c.data.instances.find((i) => i.id === pending.instance.id) ?? pending.instance, pending.instance.name);
     const v = VERB[pending.kind] ?? pending.kind;
     const now = isRunning(behind) ? `Harbor is ${(DOING[behind.kind] ?? behind.kind).toLowerCase()} ${who} right now.` : `${who} is waiting to ${VERB[behind.kind] ?? behind.kind} first.`;
+    const dup = c.duplicate;
+    if (dup) {
+      // The same action already waits for this app: show it (with its Cancel) instead of queueing it twice.
+      return (
+        <Dialog title={`Already queued: ${cap(v)} ${who}`} onClose={c.cancel}>
+          {planError && (
+            <p className="error" role="alert">
+              {planError}
+            </p>
+          )}
+          <div className="plan">
+            <p className="lead">
+              {cap(v)} {who} is already waiting in the queue. Harbor {dup.queuedAction ? `plans and runs it at its turn` : 'runs it at its turn'}.
+            </p>
+            {!dup.cancellable && <p className="muted">{notCancellableReason(dup)}</p>}
+          </div>
+          <div className="row end">
+            {dup.cancellable && (
+              <button className="btn danger" onClick={() => void c.cancelDuplicate()} aria-label={`Cancel ${v} ${who}`}>
+                Cancel {v}
+              </button>
+            )}
+            <button className="btn primary" onClick={c.cancel}>
+              Keep it
+            </button>
+          </div>
+        </Dialog>
+      );
+    }
     return (
       <Dialog title={`Queue: ${cap(v)} ${who}`} onClose={c.cancel}>
         {planError && (
@@ -1559,8 +1588,9 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
   const [locking, setLocking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // decision 180
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && !need && !locked;
-  const canStop = (inst.installState === 'installed' || inst.installState === 'needs_action' || inst.installState === 'failed') && inst.runtime !== 'stopped';
   const canStart = inst.installState === 'installed' && inst.desired === 'stopped' && !need;
+  // decision 183: a busy app (its install included) still offers what makes sense after its operation; it queues
+  const gate = appActionGates(inst, ops);
   return (
     <Dialog title={appLabel(inst, instances)} onClose={onClose} wide>
       <div className="app-head">
@@ -1676,7 +1706,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
             </span>
             <p className="muted small">Your data, addresses and ports stay. If the new version does not start, Harbor puts the current one back.</p>
           </div>
-          <button className="btn primary" disabled={inst.installState !== 'installed'} onClick={() => onAction({ kind: 'update', instance: inst })} aria-label={`Update ${inst.name}`}>
+          <button className="btn primary" disabled={!gate.update} onClick={() => onAction({ kind: 'update', instance: inst })} aria-label={`Update ${inst.name}`}>
             Update
           </button>
         </div>
@@ -1730,7 +1760,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
             Start
           </button>
         )}
-        {canStop && inst.installState === 'installed' && inst.runtime === 'running' && (
+        {gate.restart && (
           <button className="btn" onClick={() => onAction({ kind: 'restart', instance: inst })} aria-label={`Restart ${inst.name}`} title="Restart with the current addresses, for example after changing network settings">
             Restart
           </button>
@@ -1740,7 +1770,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
             Repair
           </button>
         )}
-        {canStop && inst.installState !== 'installing' && (
+        {gate.stop && (
           <button className="btn" onClick={() => onAction({ kind: 'stop', instance: inst })} aria-label={`Stop ${inst.name}`}>
             Stop
           </button>
@@ -1764,7 +1794,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
             {locking ? 'Locking…' : 'Lock'}
           </button>
         )}
-        {!retained && inst.installState !== 'installing' && (
+        {gate.remove && (
           <button className="btn danger" onClick={() => onAction({ kind: 'remove', instance: inst })} aria-label={`Remove ${inst.name}`}>
             Remove
           </button>
@@ -1948,7 +1978,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
       {home && !retained && !locked && inst.installState === 'installed' && <MovePanel inst={inst} current={home.path} onMove={(dir) => onAction({ kind: 'move', instance: inst, dir })} />}
       {detail?.defaultCredentials && !retained && <DefaultLogin creds={detail.defaultCredentials} />}
       {retained && <p className="muted">Removed. Data volumes and secrets are retained; Reinstall restores the exact same release.</p>}
-      {inst.installState !== 'installing' && (
+      {gate.purge && (
         <details className="danger-zone" open={purgeOpen} onToggle={(e) => setPurgeOpen((e.target as HTMLDetailsElement).open)}>
           <summary className="small">Uninstall completely…</summary>
           <p className="small">

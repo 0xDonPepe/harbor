@@ -18,7 +18,7 @@ import { Palette, usePaletteShortcut } from './app/Palette';
 import { SetupWizard } from './app/Setup';
 import type { SetupStatusDto } from '../../src/contracts/api';
 import { useConsole, type Console } from './app/store';
-import { PHASE, VERB, isRunning, notCancellableReason, opTitle, queueSummary, whoOf } from './app/queue';
+import { PHASE, VERB, hasShownOnce, isRunning, notCancellableReason, opTitle, queueSummary, whoOf } from './app/queue';
 
 type View = { kind: 'login' } | { kind: 'console' };
 applyTheme(readTheme());
@@ -693,6 +693,14 @@ function Tray({ c }: { c: ReturnType<typeof useConsole> }) {
             <p className="error small" role="alert">
               {cancelError}
             </p>
+          )}
+          {finished.some((f) => !hasShownOnce(f)) && (
+            // every finished item at once; those showing a value once still need their own acknowledgment
+            <div className="row end tray-clear">
+              <button className="btn ghost small" onClick={c.clearFinished}>
+                Clear finished
+              </button>
+            </div>
           )}
           {finished.map((op) => (
             <FinishedItem key={op.id} c={c} op={op} who={who(op)} />

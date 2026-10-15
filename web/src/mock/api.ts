@@ -351,6 +351,9 @@ export const mockApi = {
   queueAction: async (kind: OperationDto['kind'], instanceId: string) => {
     await beat();
     const inst = instances.find((i) => i.id === instanceId);
+    // like the engine: the same action already waiting for the app is returned instead of a second one
+    const same = queueState.find((o) => o.instanceId === instanceId && o.kind === kind && o.state === 'queued' && o.startedAt === null);
+    if (same) return { operationId: same.id, created: false, operation: same };
     const op: OperationDto = { ...opFor(kind, instanceId, ''), id: `op-mock-q-${kind}-${Date.now()}`, planId: null, queuedAction: true, cancellable: true, state: 'queued', phase: 'queued', startedAt: null, finishedAt: null, events: [], instanceName: inst?.displayName ?? inst?.name ?? instanceId };
     queueState = [...queueState, op];
     return { operationId: op.id, created: true, operation: op };

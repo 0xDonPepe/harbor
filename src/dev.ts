@@ -11,7 +11,7 @@ import { openState } from './state/db.js';
 import { Repo } from './state/repo.js';
 import { systemClock } from './util.js';
 import { devGpu } from './system/gpu.js';
-import { FakeDocker } from './docker/fake.js';
+import { FakeDocker, holdPull } from './docker/fake.js';
 import { homedir } from 'node:os';
 
 const root = path.resolve(process.env['HARBOR_DEV_ROOT'] ?? '.harbor-dev');
@@ -74,20 +74,20 @@ if (!existsSync(path.join(stateDir, 'harbor.db'))) {
 
 // decisions 179, 181: HARBOR_DEV_GPU picks the fake machine's graphics card (fake mode only; values: devGpu in src/system/gpu.ts)
 const daemon = await startDaemon(config, socket ? {} : { gpu: devGpu(process.env['HARBOR_DEV_GPU']) });
-// decision 183 (e2e): HARBOR_DEV_FAKE_CONTROL=<file> makes fake pulls slow, read on every pull so a test can change it
-// while the daemon runs: {"pullDelayMs": 8000, "match": "<image substring>"} (no file, bad JSON or no match = instant).
+// decision 183 (e2e, fake mode only): HARBOR_DEV_FAKE_CONTROL=<file> holds fake pulls. The file is read when a pull
+// starts and again every 150 ms while it waits, so a test releases a pull that already started:
+// {"hold": true, "match": "<image substring>"} holds until the file no longer matches (write {} to release);
+// {"pullDelayMs": 8000, "match": "…"} holds at most that long. No file, bad JSON or no match = instant.
 const control = process.env['HARBOR_DEV_FAKE_CONTROL'];
 if (control && daemon.ctx.docker instanceof FakeDocker) {
-  daemon.ctx.docker.behaviour.pullDelay = (images) => {
+  const read = (): unknown => {
     try {
-      const c = JSON.parse(readFileSync(control, 'utf8')) as { pullDelayMs?: unknown; match?: unknown };
-      const ms = typeof c.pullDelayMs === 'number' ? c.pullDelayMs : 0;
-      const match = typeof c.match === 'string' ? c.match : '';
-      return images.some((i) => i.includes(match)) ? ms : 0;
+      return JSON.parse(readFileSync(control, 'utf8'));
     } catch {
-      return 0;
+      return null;
     }
   };
+  daemon.ctx.docker.behaviour.pullWait = (images) => holdPull(images, read);
 }
 console.error(`[dev] ${daemon.url}  docker=${daemon.ctx.docker.description}  ui=${config.uiDir ?? '(not built; run pnpm build:web)'}`);
 const stop = () => void daemon.close().then(() => process.exit(0));

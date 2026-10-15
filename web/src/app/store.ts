@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LinkChoice, SettingValue } from '../../../src/contracts/api';
 import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, OperationQueueDto, PlanDto, PlanRequest, PlatformToolDto, QueueableKind, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
 import { ApiError, api, newIdempotencyKey } from '../api';
-import { hasShownOnce, isFinal, isQueueable } from './queue';
+import { REFRESH_MS, alreadyQueued, clearFinished as withoutPlainFinished, isFinal, isQueueable, isRunning, keepFinished, queuePollMs, reviewHasValues } from './queue';
 
 export interface Data {
   system: SystemDto | null;
@@ -83,6 +83,9 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   // Decision 183: the review is in queue mode — the app is busy with this operation, and the action joins the queue
   // without a plan (Harbor plans it at its turn). Null for a normal review.
   const [queuedBehind, setQueuedBehind] = useState<OperationDto | null>(null);
+  // Decision 183: the same action already waits for this app — the dialog shows it (with its Cancel) instead of
+  // queueing it twice. Null otherwise.
+  const [duplicate, setDuplicate] = useState<OperationDto | null>(null);
   const startToken = useRef(0);
   // decision 164: the daemon restarted and this machine's key is locked; the review dialog asks for the password
   const [locked, setLocked] = useState(false);
@@ -95,6 +98,8 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const [finished, setFinished] = useState<OperationDto[]>([]);
   const [trayCollapsed, setTrayCollapsed] = useState(false);
   const tracked = useRef(new Set<string>());
+  // accepted from this console: their results stay in the tray until dismissed, whatever the outcome
+  const acceptedHere = useRef(new Set<string>());
   const cancelledHere = useRef(new Set<string>());
   const polling = useRef<Promise<void> | null>(null);
   const pollAgain = useRef(false);
@@ -145,7 +150,10 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     }
     setQueue({ active: [...(q?.active ?? []), ...extra], recent: q?.recent ?? [] });
     if (done.length) {
-      setFinished((prev) => [...done.filter((d) => !prev.some((p) => p.id === d.id)).reverse(), ...prev]);
+      // a background operation this console only watched drops out when it went well (keepFinished)
+      const kept = done.filter((d) => keepFinished(d, acceptedHere.current.has(d.id)));
+      for (const d of done) if (!kept.includes(d)) acceptedHere.current.delete(d.id);
+      if (kept.length) setFinished((prev) => [...kept.filter((d) => !prev.some((p) => p.id === d.id)).reverse(), ...prev]);
       void refresh();
     }
   };
@@ -167,27 +175,29 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const pollRef = useRef(pollQueue);
   pollRef.current = pollQueue;
 
-  // Every 2 s while anything runs or waits, else with the normal 10 s refresh.
+  // The full refresh every 10 s; the queue every 2 s while anything runs or waits, else with the refresh. A tracked
+  // operation that finishes refreshes at once (pollQueueOnce).
   const anyActive = queue.active.length > 0;
   useEffect(() => {
     void refresh();
-    void pollRef.current();
-    const t = setInterval(() => {
-      void refresh();
-      void pollRef.current();
-    }, anyActive ? 2000 : 10000);
+    const t = setInterval(() => void refresh(), REFRESH_MS);
     return () => clearInterval(t);
-  }, [refresh, anyActive]);
+  }, [refresh]);
+  useEffect(() => {
+    void pollRef.current();
+    const t = setInterval(() => void pollRef.current(), queuePollMs(anyActive));
+    return () => clearInterval(t);
+  }, [anyActive]);
 
   // The first operation of an app that is still running or waiting, in run order.
   const activeFor = (instanceId: string): OperationDto | null => queue.active.find((o) => o.instanceId === instanceId) ?? null;
 
-  // An operation was accepted here: track it, show it at once, and clear finished items that showed nothing once
-  // (an unacknowledged password or recovery words stay until dismissed).
+  // An operation was accepted here: track it and show it at once. Finished items stay until dismissed (or Clear
+  // finished): approving something new never hides a result or an error the operator has not seen.
   const accepted = (op: OperationDto) => {
     tracked.current.add(op.id);
+    acceptedHere.current.add(op.id);
     setQueue((q) => (q.active.some((x) => x.id === op.id) ? q : { ...q, active: [...q.active, op] }));
-    setFinished((prev) => prev.filter(hasShownOnce));
     setTrayCollapsed(false);
     void pollQueue();
   };
@@ -221,23 +231,29 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
 
   // Decision 183: a queueable action on a busy app joins the queue without a plan.
   const queueKind = (action: Action): QueueableKind | null => (isQueueable(action.kind) && 'instance' in action ? action.kind : null);
-  const enterQueueMode = (behind: OperationDto) => {
+  // `active`: the queue as known now; when the same action already waits for the app, show that one instead.
+  const enterQueueMode = (behind: OperationDto, kind: QueueableKind, active: OperationDto[]) => {
     setPlan(null);
     setQueuedBehind(behind);
+    setDuplicate(alreadyQueued(behind.kind === kind && !isRunning(behind) ? [behind, ...active] : active, behind.instanceId, kind));
     key.current = newIdempotencyKey();
   };
 
-  const start = async (action: Action) => {
+  // opts.wait: never queue — wait for the app and review again (decision 173). approve() asks for it when the review
+  // carries values the operator gave (typed secrets, accepted permissions, changed settings): a queued action would
+  // drop them.
+  const start = async (action: Action, opts: { wait?: boolean } = {}) => {
     const token = ++startToken.current;
     setPending(action);
     setPlan(null);
     setPlanError(null);
     setWaitingFor(null);
     setQueuedBehind(null);
+    setDuplicate(null);
     setLocked(false);
-    const qk = queueKind(action);
+    const qk = opts.wait ? null : queueKind(action);
     const behind = qk && 'instance' in action ? activeFor(action.instance.id) : null;
-    if (behind) return enterQueueMode(behind);
+    if (qk && behind) return enterQueueMode(behind, qk, queue.active);
     try {
       for (;;) {
         try {
@@ -250,7 +266,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
               const id = e.operationId;
               const op = await api.operation(id).catch(() => null);
               if (startToken.current !== token) return;
-              if (op && !isFinal(op)) return enterQueueMode(op);
+              if (op && !isFinal(op)) return enterQueueMode(op, qk, queue.active);
               continue; // it finished meanwhile: plan again
             }
             if (!(await waitTurn(e.operationId, token))) return;
@@ -316,10 +332,10 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
         r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions, settings);
       } catch (e) {
         // Another operation started on the app since the review was made: queue it (decision 183), or wait for it
-        // and review again (the kinds that need a plan).
+        // and review again (the kinds that need a plan, and any review the operator gave values in).
         if (e instanceof ApiError && e.code === 'BUSY' && pending) {
           submitting.current = false;
-          return void start(pending);
+          return void start(pending, { wait: reviewHasValues(lastApprove.current) });
         }
         throw e;
       }
@@ -339,6 +355,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     startToken.current++;
     setWaitingFor(null);
     setQueuedBehind(null);
+    setDuplicate(null);
     setPending(null);
     setPlan(null);
     setPlanError(null);
@@ -378,8 +395,26 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   // Small settings writes (launcher order, an app's look, wallpaper) apply optimistically and re-sync.
   const patchData = useCallback((fn: (d: Data) => Data) => setData(fn), []);
 
-  const dismiss = (id: string) => setFinished((prev) => prev.filter((x) => x.id !== id));
-  return { data, loaded, loadError, pending, plan, planError, waitingFor, queuedBehind, locked, unlockAndRetry, queue, activeFor, finished, dismiss, cancelOperation, trayCollapsed, setTrayCollapsed, start, approve, cancel, refresh, patchData };
+  // The same action already waited: take that one out of the queue from the dialog, or say why it could not be.
+  const cancelDuplicate = async () => {
+    if (!duplicate) return;
+    const err = await cancelOperation(duplicate.id);
+    if (err) setPlanError(err);
+    else cancel();
+  };
+
+  const dismiss = (id: string) => {
+    acceptedHere.current.delete(id);
+    setFinished((prev) => prev.filter((x) => x.id !== id));
+  };
+  // Clear finished: every finished item, except those still showing a value once (each needs its own yes).
+  const clearFinished = () =>
+    setFinished((prev) => {
+      const left = withoutPlainFinished(prev);
+      for (const p of prev) if (!left.includes(p)) acceptedHere.current.delete(p.id);
+      return left;
+    });
+  return { data, loaded, loadError, pending, plan, planError, waitingFor, queuedBehind, duplicate, cancelDuplicate, clearFinished, locked, unlockAndRetry, queue, activeFor, finished, dismiss, cancelOperation, trayCollapsed, setTrayCollapsed, start, approve, cancel, refresh, patchData };
 }
 
 export type Console = ReturnType<typeof useConsole>;

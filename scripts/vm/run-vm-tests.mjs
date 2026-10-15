@@ -354,7 +354,7 @@ const A06 = step('A06', 'Refresh, logout, CLI disconnect and duplicate submissio
   await uiLogin(page, 'home', { ephemeral: true });
   const op = await waitFor(() => {
     const o = cliOk(target, ['operation', s1.operationId]);
-    return ['succeeded', 'failed', 'needs_action'].includes(o.state) ? o : null;
+    return ['succeeded', 'failed', 'needs_action', 'cancelled'].includes(o.state) ? o : null;
   }, { timeoutMs: 300_000, what: 'pdf-b install' });
   if (op.state !== 'succeeded') throw new Error(`pdf-b install ${op.state}`);
   const count = listInstances().filter((i) => i.name === 'pdf-b').length;

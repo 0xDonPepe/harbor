@@ -28,6 +28,9 @@ export type ErrorCode =
   | 'MACHINE_KEY_LOCKED'
   | 'HOST_KEY_UNCONFIRMED'
   | 'BUSY'
+  | 'NOT_CANCELLABLE'
+  | 'REVIEW_NEEDED'
+  | 'CANCELLED'
   | 'OPERATION_FAILED'
   | 'INTERNAL';
 
@@ -45,6 +48,9 @@ const HTTP_STATUS: Record<ErrorCode, number> = {
   MACHINE_KEY_LOCKED: 409,
   HOST_KEY_UNCONFIRMED: 409,
   BUSY: 409,
+  NOT_CANCELLABLE: 409,
+  REVIEW_NEEDED: 409,
+  CANCELLED: 409,
   DATA_MISSING: 409,
   SECRET_MISSING: 409,
   PERMISSION_REQUIRED: 409,
@@ -80,6 +86,9 @@ const EXIT_CODE: Record<ErrorCode, number> = {
   MACHINE_KEY_LOCKED: 3,
   HOST_KEY_UNCONFIRMED: 3,
   BUSY: 3,
+  NOT_CANCELLABLE: 3,
+  REVIEW_NEEDED: 3,
+  CANCELLED: 3,
   DATA_MISSING: 3,
   SECRET_MISSING: 3,
   PERMISSION_REQUIRED: 3,
@@ -165,7 +174,22 @@ function defaultNextAction(code: ErrorCode): string {
     case 'MACHINE_KEY_LOCKED': return 'Type your password once to unlock this machine\'s key (harbor account unlock), then retry.';
     case 'HOST_KEY_UNCONFIRMED': return 'Compare the server key fingerprint with the one the server itself shows, then confirm it.';
     case 'BUSY': return 'Wait for the running operation to finish.';
+    case 'NOT_CANCELLABLE': return 'Only a waiting item can be cancelled; let it finish (harbor queue shows it).';
+    case 'REVIEW_NEEDED': return 'Open the app and choose the action again to review it.';
+    case 'CANCELLED': return 'Nothing was changed; queue it again if you still want it.';
     case 'OPERATION_FAILED': return 'Inspect the operation events and the instance.';
     case 'INTERNAL': return 'Check the daemon log.';
   }
+}
+
+// Decision 183: a plan-time refusal only a person can resolve (a passphrase to type, a key to unlock, a permission to
+// accept, a value to give). A queued action planned at its turn that hits one stops as "needs your review"
+// (REVIEW_NEEDED) instead of failing with it.
+export function personCanResolve<E extends HarborError>(e: E): E {
+  return Object.assign(e, { personCanResolve: true });
+}
+export function needsReview(e: unknown): boolean {
+  if (!(e instanceof HarborError)) return false;
+  if ((e as { personCanResolve?: boolean }).personCanResolve === true) return true;
+  return e.code === 'REVIEW_NEEDED' || e.code === 'SECRET_MISSING' || e.code === 'PERMISSION_REQUIRED' || e.code === 'MACHINE_KEY_LOCKED' || e.code === 'SETTING_INVALID';
 }

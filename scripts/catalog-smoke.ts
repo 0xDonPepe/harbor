@@ -126,7 +126,7 @@ class Client {
     const start = Date.now();
     for (;;) {
       const op = await this.call<OperationDto>('GET', `/v1/operations/${sub.operationId}`);
-      if (['succeeded', 'failed', 'needs_action'].includes(op.state)) return { plan, op };
+      if (['succeeded', 'failed', 'needs_action', 'cancelled'].includes(op.state)) return { plan, op };
       if (Date.now() - start > timeoutMs) throw new Error(`operation ${op.kind} did not finish in ${Math.round(timeoutMs / 60000)} min`);
       await sleep(1000);
     }

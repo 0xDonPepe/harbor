@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { AppBackupsDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundAppDto, FoundBackupAppDto, HostStorageDto, LinkChoice, LinkDto, TailnetAllDto } from '../contracts/api.js';
 import { defaultInstallLocation } from '../storage/install-location.js';
 import { validatePackageFolder } from '../packages/validate-folder.js';
-import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, SystemDto, SystemHostDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, DiagnosticsDto, DomainDto, DomainsDto, ExposureDto, InstanceDetail, InstanceSummary, OperationDto, PackageSourceDto, PlanDto, PlatformToolDto, OperationQueueDto, QueueableKind, SystemDto, SystemHostDto, UiExposureDto, AppearanceDto, PackageImportResultDto, SelfUpdateStatusDto, CatalogStatusDto } from '../contracts/api.js';
 import { loadConfig } from '../config.js';
 import { HarborError } from '../errors.js';
 import { PRODUCT } from '../naming.js';
@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { confirm, promptHidden, promptVisible, readStdinAll } from './prompt.js';
 import { exitAfterFlush } from './exit.js';
 import { gpuFact, planSummary } from './plan-summary.js';
+import { busyQuestion, queueStatusLine, queueText } from './queue-view.js';
 import { gpuStatusLine } from '../planner/gpu.js';
 import { formatSettingValue, parseSettingInput } from '../planner/settings.js';
 import type { SettingDto, SettingValue } from '../contracts/api.js';
@@ -195,7 +196,7 @@ async function waitOperation(api: ApiClient, id: string, follow: boolean): Promi
       }
       if (op.events.length) lastCursor = op.events[op.events.length - 1]!.cursor;
     }
-    if (op.state === 'succeeded' || op.state === 'failed' || op.state === 'needs_action') return op;
+    if (op.state === 'succeeded' || op.state === 'failed' || op.state === 'needs_action' || op.state === 'cancelled') return op;
     await new Promise((r) => setTimeout(r, 2000));
   }
 }
@@ -399,6 +400,42 @@ async function createPlan(api: ApiClient, kind: string, target: string | undefin
   return planWhenFree(api, { kind, instanceId: inst.id, ...extra });
 }
 
+// Decision 183: a queueable action (start, stop, restart, update, remove, reinstall, purge) on a busy app is queued
+// instead of waited for: Harbor plans it when its turn comes. Returns the plan when the app is free (review it as
+// usual), or null once the action was queued (and followed, unless --no-wait). `confirmQueue` runs before queueing
+// (purge asks for the typed name there).
+async function planOrQueue(api: ApiClient, kind: QueueableKind, ref: string, opts: { yes: boolean; wait: boolean; confirmQueue?: (name: string) => Promise<void> }): Promise<PlanDto | null> {
+  const inst = await resolveInstance(api, ref);
+  let busyId: string;
+  try {
+    return await api.post<PlanDto>('/v1/plans', { kind, instanceId: inst.id });
+  } catch (e) {
+    if (!(e instanceof HarborError && e.code === 'BUSY' && e.operationId)) throw e;
+    busyId = e.operationId;
+  }
+  const busy = await api.get<OperationDto>(`/v1/operations/${busyId}`);
+  const label = inst.displayName ?? inst.name;
+  const question = busyQuestion(label, kind, busy);
+  if (!opts.yes) {
+    if (!process.stdin.isTTY || globals().json) throw new HarborError('BUSY', `${label} is busy (${busy.kind}); nothing was queued`, { operationId: busyId, nextAction: `Re-run with --yes to queue the ${kind} after it (Harbor plans it when its turn comes), or wait: ${PRODUCT.cliName} operation ${busyId} --follow.` });
+    if (!(await confirm(question))) throw new HarborError('INVALID_REQUEST', 'not queued; nothing was done', { nextAction: `Run it again once ${label} is free (${PRODUCT.cliName} queue shows the queue).` });
+  } else if (!globals().json) process.stderr.write(`${question} Yes (--yes).\n`);
+  if (opts.confirmQueue) await opts.confirmQueue(inst.name);
+  const submitted = await api.post<{ operationId: string; created: boolean }>('/v1/operations', { action: { kind, instanceId: inst.id } }, { 'idempotency-key': `cli-${randomUUID()}` });
+  if (opts.wait === false) {
+    out({ operationId: submitted.operationId, queued: true }, () => `Queued ${kind} of ${label} as operation ${submitted.operationId} (not waiting). See it with: ${PRODUCT.cliName} queue`);
+    return null;
+  }
+  if (!globals().json) process.stderr.write(`Queued ${kind} of ${label} (operation ${submitted.operationId}); following it…\n`);
+  const op = await waitOperation(api, submitted.operationId, true);
+  out(op, () => operationSummary(op));
+  if (op.state !== 'succeeded') {
+    alreadyReported = true;
+    throw new HarborError((op.error?.code as HarborError['code']) ?? 'OPERATION_FAILED', op.error?.message ?? `${op.kind} ${op.state}`, { nextAction: op.error?.nextAction ?? '', operationId: op.id });
+  }
+  return null;
+}
+
 program
   .command('apply <plan-id>')
   .description('submit an existing plan by ID')
@@ -473,7 +510,10 @@ program
     const links = await readLinkFlags(api, opts.link);
     const secrets = await readSecretFlags(opts.secret);
     const settings = readSetFlags(opts.set);
-    const plan = await createPlan(api, 'update', ref, undefined, { ...(Object.keys(storage).length ? { storage } : {}), ...(Object.keys(links).length ? { links } : {}) });
+    // decision 183: a plain update of a busy app is queued (asked once); one with values to give waits for the app, then plans
+    const plain = !Object.keys(storage).length && !Object.keys(links).length && !Object.keys(secrets).length && !Object.keys(settings).length;
+    const plan = plain ? await planOrQueue(api, 'update', ref, { yes: opts.yes, wait: opts.wait }) : await createPlan(api, 'update', ref, undefined, { ...(Object.keys(storage).length ? { storage } : {}), ...(Object.keys(links).length ? { links } : {}) });
+    if (!plan) return;
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets, settings });
   });
 
@@ -628,7 +668,14 @@ program
   .option('--no-wait', 'return after submission')
   .action(async (ref: string, opts: { yes: boolean; wait: boolean }) => {
     const api = client();
-    const plan = await createPlan(api, 'purge', ref);
+    const typedName = async (name: string) => {
+      if (opts.yes) return;
+      const typed = await promptVisible(`This deletes the data of "${name}" for good. Type the instance name to confirm: `);
+      if (typed.trim() !== name) throw new HarborError('INVALID_REQUEST', 'confirmation did not match; nothing was done');
+    };
+    // decision 183: a busy app gets the full uninstall queued (asked once, then the typed name)
+    const plan = await planOrQueue(api, 'purge', ref, { yes: opts.yes, wait: opts.wait, confirmQueue: typedName });
+    if (!plan) return;
     if (!opts.yes) {
       const typed = await promptVisible(`This deletes the data of "${plan.name}" for good. Type the instance name to confirm: `);
       if (typed.trim() !== plan.name) throw new HarborError('INVALID_REQUEST', 'confirmation did not match; nothing was done');
@@ -998,7 +1045,9 @@ for (const kind of ['start', 'stop', 'restart', 'remove', 'reinstall'] as const)
     .option('--passphrase-stdin', 'read the app encryption passphrase from stdin (for starting a locked app)', false)
     .action(async (ref: string, opts: { yes: boolean; wait: boolean; passphraseStdin?: boolean }) => {
       const api = client();
-      const plan = await createPlan(api, kind, ref);
+      // decision 183: a busy app gets the action queued (asked once; --yes accepts)
+      const plan = await planOrQueue(api, kind, ref, { yes: opts.yes, wait: opts.wait });
+      if (!plan) return;
       // A locked custom app refuses the start plan with INVALID_STATE; retry
       // with the passphrase so `harbor start immich` just works after a prompt.
       let passphrase: string | undefined;
@@ -1045,6 +1094,25 @@ program
     const op = opts.follow ? await waitOperation(api, id, true) : await api.get<OperationDto>(`/v1/operations/${id}`);
     out(op, () => operationSummary(op));
     if (opts.follow && op.state !== 'succeeded') process.exitCode = op.state === 'failed' ? 1 : 3;
+  });
+
+// Decision 183: the operation queue, in run order (the running item first), and the newest finished items.
+const queueCmd = program
+  .command('queue')
+  .description('list the operation queue in run order (running, waiting) and the newest finished items; cancel a waiting one with `queue cancel <id>`')
+  .option('--recent <n>', 'how many finished items to show (0-50)', '10');
+queueCmd.action(async (opts: { recent: string }) => {
+  const n = Number(opts.recent);
+  if (!Number.isInteger(n) || n < 0 || n > 50) throw new HarborError('INVALID_REQUEST', '--recent takes a whole number from 0 to 50');
+  const q = await client().get<OperationQueueDto>(`/v1/operations?recent=${n}`);
+  out(q, () => queueText(q));
+});
+queueCmd
+  .command('cancel <operation-id>')
+  .description('cancel a waiting item before it starts (nothing was done for it; a running step cannot be stopped)')
+  .action(async (id: string) => {
+    const op = await client().post<OperationDto>(`/v1/operations/${id}/cancel`, {});
+    out(op, () => `Cancelled ${op.kind} of ${op.instanceName || op.instanceId} (operation ${op.id}); nothing was changed.`);
   });
 
 const exposuresTable = (items: ExposureDto[], ui: UiExposureDto | null) =>
@@ -1477,21 +1545,23 @@ program
     const live = await api.healthz();
     let system: SystemDto | null = null;
     let authError: string | null = null;
+    let queue: OperationQueueDto | null = null;
     if (live && api.token) {
       try {
         system = await api.get<SystemDto>('/v1/system');
       } catch (e) {
         authError = (e as Error).message;
       }
+      if (system) queue = await api.get<OperationQueueDto>('/v1/operations?recent=0').catch(() => null); // an older daemon has no queue route
     }
-    out({ url: api.baseUrl, live, loggedIn: Boolean(api.token), system, authError }, () => {
+    out({ url: api.baseUrl, live, loggedIn: Boolean(api.token), system, authError, queue }, () => {
       const lines = [`Daemon ${api.baseUrl}: ${live ? 'live' : 'NOT REACHABLE'}`];
       if (!api.token) lines.push('Not logged in.');
       if (authError) lines.push(`Session check failed: ${authError} (run login)`);
       if (system) {
         lines.push(`Version ${system.version} profile ${system.profile}, installation ${system.installationId}`);
         lines.push(`Docker: ${system.docker.available ? `available (${system.docker.version})` : `unavailable (${system.docker.error ?? 'no observation yet'})`} observed ${system.docker.observedAt ?? '-'}`);
-        lines.push(`Busy operation: ${system.busyOperationId ?? 'none'}`);
+        lines.push(queue ? queueStatusLine(queue) : `Busy operation: ${system.busyOperationId ?? 'none'}`);
       }
       return lines.join('\n');
     });

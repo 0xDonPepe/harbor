@@ -14,6 +14,8 @@ export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | '
 // them when their turn comes. They take no typed values, so a queued action never holds a secret.
 export const QUEUEABLE_KINDS = ['start', 'stop', 'restart', 'update', 'remove', 'reinstall', 'purge'] as const;
 export type QueueableKind = (typeof QUEUEABLE_KINDS)[number];
+// The actor names Harbor itself writes on plans and operations (background work nobody clicked); no login may use one.
+export const INTERNAL_ACTORS = ['drive-guard', 'link-guard', 'lock-guard', 'scheduler', 'auto-update', 'git-source', 'tailnet-policy'] as const;
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
 // The address an app treats as its own, chosen at install (decision 116). Omitted = this network

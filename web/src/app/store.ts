@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LinkChoice, SettingValue } from '../../../src/contracts/api';
 import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, OperationQueueDto, PlanDto, PlanRequest, PlatformToolDto, QueueableKind, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
 import { ApiError, api, newIdempotencyKey } from '../api';
-import { REFRESH_MS, alreadyQueued, clearFinished as withoutPlainFinished, isFinal, isQueueable, isRunning, keepFinished, queuePollMs, reviewHasValues } from './queue';
+import { REFRESH_MS, alreadyQueued, clearFinished as withoutPlainFinished, isFinal, isQueueable, keepFinished, queuePollMs, reviewHasValues } from './queue';
 
 export interface Data {
   system: SystemDto | null;
@@ -150,7 +150,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     }
     setQueue({ active: [...(q?.active ?? []), ...extra], recent: q?.recent ?? [] });
     if (done.length) {
-      // a background operation this console only watched drops out when it went well (keepFinished)
+      // a background operation (Harbor's own actor) drops out when it went well (keepFinished); a person's stays
       const kept = done.filter((d) => keepFinished(d, acceptedHere.current.has(d.id)));
       for (const d of done) if (!kept.includes(d)) acceptedHere.current.delete(d.id);
       if (kept.length) setFinished((prev) => [...kept.filter((d) => !prev.some((p) => p.id === d.id)).reverse(), ...prev]);
@@ -200,6 +200,8 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     setQueue((q) => (q.active.some((x) => x.id === op.id) ? q : { ...q, active: [...q.active, op] }));
     setTrayCollapsed(false);
     void pollQueue();
+    // the app list too: an Update that started clears its "update available" without waiting for the 10 s refresh
+    void refresh();
   };
 
   const failed = (e: unknown) => {
@@ -235,7 +237,8 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const enterQueueMode = (behind: OperationDto, kind: QueueableKind, active: OperationDto[]) => {
     setPlan(null);
     setQueuedBehind(behind);
-    setDuplicate(alreadyQueued(behind.kind === kind && !isRunning(behind) ? [behind, ...active] : active, behind.instanceId, kind));
+    // `behind` (the app's first item) may be newer than the list: put it first, in run order
+    setDuplicate(alreadyQueued(active.some((o) => o.id === behind.id) ? active : [behind, ...active], behind.instanceId, kind));
     key.current = newIdempotencyKey();
   };
 
@@ -342,7 +345,6 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       accepted(r.operation);
       setPending(null);
       setPlan(null);
-      void refresh();
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) return onAuthLost();
       failed(e);

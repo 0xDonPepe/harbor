@@ -82,17 +82,24 @@ export function PlanDialog({ c }: { c: Console }) {
     if (dup) {
       // The same action already waits for this app: show it (with its Cancel) instead of queueing it twice.
       return (
-        <Dialog title={`Already queued: ${cap(v)} ${who}`} onClose={c.cancel}>
+        <Dialog title={`${isRunning(dup) ? 'Already running' : 'Already queued'}: ${cap(v)} ${who}`} onClose={c.cancel}>
           {planError && (
             <p className="error" role="alert">
               {planError}
             </p>
           )}
           <div className="plan">
-            <p className="lead">
-              {cap(v)} {who} is already waiting in the queue. Harbor {dup.queuedAction ? `plans and runs it at its turn` : 'runs it at its turn'}.
-            </p>
-            {!dup.cancellable && <p className="muted">{notCancellableReason(dup)}</p>}
+            {isRunning(dup) ? (
+              // a running Update counts too (decision 183): a second one would only fail at its turn
+              <p className="lead">
+                Harbor is {(DOING[dup.kind] ?? dup.kind).toLowerCase()} {who} right now. Nothing more to queue.
+              </p>
+            ) : (
+              <p className="lead">
+                {cap(v)} {who} is already waiting in the queue. Harbor {dup.queuedAction ? `plans and runs it at its turn` : 'runs it at its turn'}.
+              </p>
+            )}
+            {!dup.cancellable && !isRunning(dup) && <p className="muted">{notCancellableReason(dup)}</p>}
           </div>
           <div className="row end">
             {dup.cancellable && (
@@ -1588,9 +1595,9 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
   const [locking, setLocking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // decision 180
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && !need && !locked;
-  const canStart = inst.installState === 'installed' && inst.desired === 'stopped' && !need;
-  // decision 183: a busy app (its install included) still offers what makes sense after its operation; it queues
+  // decision 183: a busy app (its install included) still offers what makes sense after its operations; it queues
   const gate = appActionGates(inst, ops);
+  const canStart = gate.start && !need;
   return (
     <Dialog title={appLabel(inst, instances)} onClose={onClose} wide>
       <div className="app-head">

@@ -733,7 +733,7 @@ function FinishedItem({ c, op, who }: { c: ReturnType<typeof useConsole>; op: Op
   const openUrl = inst ? appOpenUrl(inst) : null;
   const dismiss = () => c.dismiss(op.id);
   return (
-    <section className={`tray-item done ${op.state}`} aria-label={title}>
+    <section className={`tray-item done ${op.state}`} aria-label={title} data-op={op.id}>
       <div className="row between">
         <h3>
           <span className={`dot tone-${op.state === 'succeeded' ? 'ok' : op.state === 'cancelled' ? 'muted' : 'bad'}`} aria-hidden="true" /> {title}

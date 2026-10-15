@@ -1092,6 +1092,25 @@ Every bundled package is installed with the CLI on the designated droplet (fresh
 | uptime-kuma | **PASS** | catalog-2026-09-15T00-40-44 | healthy after 23s; page title "Uptime Kuma"; health 302<br>removed after the check; volumes and folders retained |
 | vaultwarden | **PASS** | catalog-2026-09-15T00-13-13 | healthy after 85s; page title "Vaultwarden Web"; health 200<br>removed after the check; volumes and folders retained |
 
+## 3s. The operation queue (2026-10-15, Harbor 0.35.0, decision 183)
+
+**Local only: fake Docker adapter, no live run yet.** What this proves is the contract, not real Docker behavior
+(AGENTS.md §3.1).
+
+| Gate (macOS dev loop, branch `queue` merged to `main`) | Result |
+|---|---|
+| `pnpm lint`, `pnpm typecheck` | clean |
+| `pnpm test` (unit) | 604 passed, 2 skipped (+36 since 0.34.1: `queue.test.ts`, `web-queue.test.ts`, `fake-pull-hold.test.ts`, migration v12→v13) |
+| `pnpm test:integration` | 351 passed, 3 live-Docker skipped (`queue.test.ts`: different-app approval while busy, same-app action planned at its turn, `REVIEW_NEEDED`, cancel of a waiting install frees name/ports/follow-ups, running → `NOT_CANCELLABLE`, guard items protected, restart and shutdown cancel never-run items and leave apps alone, fixed-port release, dedupe rule, generation guard, Update all, a waiting backup cold pass across a restart; `app-homes.test.ts`: cancelled adopt adopts again, `harbor start` on a locked app free/busy/meant-to-run; `tailnet-all.test.ts`: a cancelled withdrawal leaves the policy) |
+| `pnpm build && pnpm test:e2e` | 42 passed (`queue`: a held install, buttons stay enabled, *Uninstall completely* queued behind the install and cancelled, a second install and a same-app Stop in run order, *Already queued*, Cancel, release, results, Clear finished) |
+| `catalog:verify` / `catalog:hash --check` (fixtures), `openapi -- --check` | ok / ok / current (3 routes added) |
+
+Integration runs while two other suites ran on the same machine timed out in unrelated long tests (6–16 min per test
+under load); the same suite passed in full on a quiet machine. Recorded so a red run under load is not misread.
+
+Still to do live (harbor-old, never .192): queue an install behind another app's install, a same-app Update
+behind an install, cancel one, restart the daemon with items waiting (they end `cancelled`, apps untouched).
+
 ## 4. Qualified versions
 
 | Component | Version | Source |

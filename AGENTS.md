@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **183**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **184**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -29,7 +29,7 @@ src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
   packages/     restricted YAML parser, manifest/compose validators, catalog loader, zip import,
                 min-harbor.ts (an app's declared `release.minHarbor` gate, decision 161)
   planner/      identity, port allocation, Compose rendering, gpu facts → Docker keys, app settings (PURE functions, no I/O)
-  state/        SQLite (better-sqlite3, SCHEMA_VERSION 12, migrations v1→v12; v9 = `links`, v10 = several public names per endpoint, v11 = `backup_runs`, v12 = recovery words stripped from operation results), repositories
+  state/        SQLite (better-sqlite3, SCHEMA_VERSION 13, migrations v1→v13; v9 = `links`, v10 = several public names per endpoint, v11 = `backup_runs`, v12 = recovery words stripped from operation results, v13 = the operation queue: `cancelled`, nullable `plan_id`, `request_json`, `seq`), repositories
   docker/       adapter interface, Dockerode adapter, Compose CLI runner, FAKE adapter, port probe
   lifecycle/    plans/operations service, serial runner, readiness, observer (drive-guard stop,
               auto-mount on insert, auto-start on return, lock-guard start once a sealed app's
@@ -135,16 +135,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (568 + 2 skipped)
-   pnpm test:integration        # 331 + 3 live-Docker skipped (~7 min)
-   pnpm build && pnpm test:e2e  # 41 Playwright (~3 min, ports 18500/18700)
+   pnpm test                    # unit (604 + 2 skipped)
+   pnpm test:integration        # 351 + 3 live-Docker skipped (~9 min)
+   pnpm build && pnpm test:e2e  # 42 Playwright (~3 min, ports 18500/18700; HARBOR_E2E_PORT moves them)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
    pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **183**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **184**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant

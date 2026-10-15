@@ -628,7 +628,7 @@ export class ApplicationService {
   }
 
   system(): SystemDto {
-    const active = this.ctx.repo.activeOperations().find((o) => o.state !== 'queued') ?? this.ctx.repo.activeOperations()[0];
+    const active = this.ctx.repo.activeOperations().find((o) => o.state !== 'queued' || o.startedAt !== null) ?? this.ctx.repo.activeOperations()[0];
     return {
       version: this.ctx.version,
       profile: 'local-preview',
@@ -1822,6 +1822,8 @@ export class ApplicationService {
     const { repo } = this.ctx;
     const req = op.request;
     if (!req) throw new HarborError('STATE_CHANGED', 'this queued item has no action to plan');
+    const target = repo.instance(req.instanceId);
+    if (!target || target.purgedAt) throw new HarborError('NOT_FOUND', 'the app was removed completely before this item\'s turn', { nextAction: 'Nothing to do: the app is gone.' });
     const dto = await this.createPlan({ kind: req.kind, instanceId: req.instanceId } as PlanRequest, op.actor, { forOperation: op.id });
     const plan = repo.plan(dto.id)!;
     const record = () =>

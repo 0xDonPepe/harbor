@@ -120,7 +120,7 @@ export class Api {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const op = await this.expect<OperationDto>(200, 'GET', `/v1/operations/${id}`);
-      if (['succeeded', 'failed', 'needs_action'].includes(op.state)) return op;
+      if (['succeeded', 'failed', 'needs_action', 'cancelled'].includes(op.state)) return op;
       await new Promise((r) => setTimeout(r, 50));
     }
     throw new Error(`operation ${id} did not finish`);

@@ -232,7 +232,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     service.onSubmit(() => runner.wake());
 
     const recovered = runner.recoverOnStartup();
-    if (recovered) log.warn(`marked ${recovered} interrupted operation(s) needs_action`);
+    if (recovered) log.warn(`recovered ${recovered} operation(s) left by the previous run: never-run ones cancelled, interrupted ones needs_action`);
     repo.purgeExpiredSessions();
 
     const setup = new SetupService(repo, sessions, config.stateDir);

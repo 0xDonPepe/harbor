@@ -70,7 +70,8 @@ export class OperationRunner {
     for (const op of stale) {
       repo.transaction(() => {
         touched.add(op.instanceId);
-        if (op.startedAt === null) {
+        // applying/verifying means it was picked even without started_at (a row written before v13)
+        if (op.startedAt === null && op.state === 'queued') {
           repo.finishOperation(op.id, 'cancelled', { errorCode: 'CANCELLED', errorMessage: 'Harbor restarted before this ran; nothing was changed.', nextAction: 'Queue it again.' });
           repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: 'daemon restarted before the operation ran; nothing was changed' });
           const inst = repo.instance(op.instanceId);

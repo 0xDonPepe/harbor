@@ -438,6 +438,29 @@ async function planOrQueue(api: ApiClient, kind: QueueableKind, ref: string, opt
   return null;
 }
 
+// A locked custom-passphrase app refuses its start while the plan is MADE (decision 183 review R2), busy or free: read
+// the passphrase (--passphrase-stdin, or a hidden prompt on a terminal), unlock the app with it for this boot, then plan
+// again (nothing is left to hand over, so a busy app gets the start queued). Without a terminal and without
+// --passphrase-stdin it stops with the refusal and says how to hand the passphrase over.
+async function startPlanOrQueue(api: ApiClient, ref: string, opts: { yes: boolean; wait: boolean; handover: { passphraseStdin: boolean } }): Promise<PlanDto | null> {
+  try {
+    return await planOrQueue(api, 'start', ref, opts);
+  } catch (e) {
+    if (!HarborError.is(e, 'INVALID_STATE') || !/is locked/.test(e.message)) throw e;
+    const inst = await resolveInstance(api, ref);
+    // a home opened by Harbor's own key unlocks at login, not with a passphrase: its refusal already says so
+    if (inst.home?.defaultKey) throw e;
+    if (!opts.handover.passphraseStdin && !process.stdin.isTTY) {
+      throw new HarborError('INVALID_STATE', e.message, { nextAction: `Pipe its passphrase (or 12-word recovery key) with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name} first, then start it again.` });
+    }
+    const passphrase = opts.handover.passphraseStdin ? (await readStdinAll()).trim() : await promptHidden('App passphrase (or 12-word recovery key): ');
+    if (!passphrase) throw new HarborError('INVALID_REQUEST', 'no passphrase was given; nothing was done', { nextAction: `Pipe its passphrase with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name}.` });
+    await api.post<InstanceSummary>(`/v1/instances/${inst.id}/unlock`, { passphrase });
+    if (!globals().json) process.stderr.write(`${inst.displayName ?? inst.name} unlocked for this boot.\n`);
+    return planOrQueue(api, 'start', ref, { yes: opts.yes, wait: opts.wait });
+  }
+}
+
 program
   .command('apply <plan-id>')
   .description('submit an existing plan by ID')
@@ -1049,20 +1072,10 @@ for (const kind of ['start', 'stop', 'restart', 'remove', 'reinstall'] as const)
     .action(async (ref: string, opts: { yes: boolean; wait: boolean; passphraseStdin?: boolean }) => {
       const api = client();
       // decision 183: a busy app gets the action queued (asked once; --yes accepts), unless a passphrase comes with it
-      const plan = await planOrQueue(api, kind, ref, { yes: opts.yes, wait: opts.wait, handover: { passphraseStdin: opts.passphraseStdin === true } });
+      const queueOpts = { yes: opts.yes, wait: opts.wait, handover: { passphraseStdin: opts.passphraseStdin === true } };
+      const plan = kind === 'start' ? await startPlanOrQueue(api, ref, queueOpts) : await planOrQueue(api, kind, ref, queueOpts);
       if (!plan) return;
-      // A locked custom app refuses the start plan with INVALID_STATE; retry
-      // with the passphrase so `harbor start immich` just works after a prompt.
-      let passphrase: string | undefined;
-      try {
-        await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait });
-        return;
-      } catch (e) {
-        if (kind !== 'start' || !HarborError.is(e, 'INVALID_STATE') || !/is locked/.test(e.message)) throw e;
-        passphrase = opts.passphraseStdin ? (await readStdinAll()).trim() : await promptHidden('App passphrase (or 12-word recovery key): ');
-      }
-      const retry = await createPlan(api, kind, ref);
-      await approveAndApply(api, retry, { yes: true, wait: opts.wait, passphrase });
+      await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait });
     });
 }
 

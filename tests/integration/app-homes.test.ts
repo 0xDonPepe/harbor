@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -44,6 +46,8 @@ beforeAll(async () => {
 afterAll(async () => h.close());
 
 const PASS = 'correct horse battery staple';
+const ROOT = path.resolve(import.meta.dirname, '..', '..');
+const TSX = createRequire(import.meta.url).resolve('tsx');
 
 describe('install to an encrypted app home', () => {
   let plan: PlanDto;
@@ -278,6 +282,58 @@ describe('install to an encrypted app home', () => {
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
     expect(kernelUnlocked(drivePath)).toBe(true);
     expect((await h.api.instances()).find((i) => i.id === driveInstanceId)!.home).toMatchObject({ state: 'unlocked', sealed: true });
+  });
+
+  // Decision 183 review R2: the locked refusal comes while the start is PLANNED, so the CLI must read the passphrase
+  // there (it never reached the old retry around the approval), unlock the app with it and plan again.
+  it('`harbor start <locked> --passphrase-stdin` reads the passphrase, unlocks and starts; without it and no TTY a clear error', async () => {
+    const stop = await h.api.plan({ kind: 'stop', instanceId: driveInstanceId });
+    expect((await h.api.waitOperation((await h.api.submit(stop.id)).operationId)).state).toBe('succeeded');
+    await h.api.expect<InstanceSummary>(200, 'POST', `/v1/instances/${driveInstanceId}/lock`, {});
+    const name = (await h.api.instances()).find((i) => i.id === driveInstanceId)!.name;
+    const cliDir = mkdtempSync(path.join(tmpdir(), 'harbor-cli-'));
+    writeFileSync(path.join(cliDir, 'cli.json'), JSON.stringify({ url: h.baseUrl, token: h.api.token }));
+    const cli = (args: string[], stdin: string) =>
+      new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+        const c = spawn(process.execPath, ['--import', TSX, path.join(ROOT, 'src', 'cli', 'main.ts'), ...args], { cwd: ROOT, env: { ...process.env, HARBOR_CLI_CONFIG_DIR: cliDir, HARBOR_URL: h.baseUrl }, stdio: ['pipe', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        c.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
+        c.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+        c.on('close', (code) => resolve({ code, stdout, stderr }));
+        c.stdin.end(stdin);
+      });
+    const refused = await cli(['start', name, '--yes'], '');
+    expect(refused.code).not.toBe(0);
+    expect(refused.stderr).toMatch(/is locked/);
+    expect(refused.stderr).toMatch(/--passphrase-stdin/);
+    expect((await h.api.instances()).find((i) => i.id === driveInstanceId)!.home).toMatchObject({ state: 'locked' });
+    const started = await cli(['start', name, '--yes', '--passphrase-stdin'], `${PASS}\n`);
+    expect(started.code, started.stderr).toBe(0);
+    const after = (await h.api.instances()).find((i) => i.id === driveInstanceId)!;
+    expect(after.home).toMatchObject({ state: 'unlocked', sealed: true });
+    expect(after.runtime).toBe('running');
+
+    // busy: the CLI waits out what the app has queued, then meets the same refusal and handles it the same way
+    const stop2 = await h.api.plan({ kind: 'stop', instanceId: driveInstanceId });
+    expect((await h.api.waitOperation((await h.api.submit(stop2.id)).operationId)).state).toBe('succeeded');
+    await h.api.expect<InstanceSummary>(200, 'POST', `/v1/instances/${driveInstanceId}/lock`, {});
+    h.fake.behaviour.respond = () => 503;
+    try {
+      const other = await h.api.submit((await h.api.plan({ kind: 'install', packageId: 'bentopdf', name: 'r2-busy' })).id);
+      await until(async () => (await h.api.expect<{ phase: string }>(200, 'GET', `/v1/operations/${other.operationId}`)).phase === 'checking', 'the other install in its readiness check', 20_000);
+      await h.api.expect(202, 'POST', '/v1/operations', { action: { kind: 'restart', instanceId: driveInstanceId } }, { 'idempotency-key': 'r2-busy-restart' });
+      const pending = cli(['start', name, '--yes', '--passphrase-stdin'], `${PASS}\n`);
+      await new Promise((r) => setTimeout(r, 1500));
+      delete h.fake.behaviour.respond;
+      const busy = await pending;
+      expect(busy.code, busy.stderr).toBe(0);
+      expect(busy.stderr).toMatch(/Waiting for the running/);
+      expect((await h.api.instances()).find((i) => i.id === driveInstanceId)!).toMatchObject({ runtime: 'running', home: { state: 'unlocked' } });
+      expect((await h.api.waitOperation(other.operationId)).state).toBe('succeeded');
+    } finally {
+      delete h.fake.behaviour.respond;
+    }
   });
 });
 

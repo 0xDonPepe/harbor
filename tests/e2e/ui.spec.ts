@@ -6,6 +6,7 @@ import path from 'node:path';
 const ADMIN = { username: 'admin', password: 'e2e-fixture-password' };
 
 async function login(page: Page) {
+  trackOperations(page);
   await page.goto('/#/home');
   await expect(page.getByRole('heading', { name: 'Log in' })).toBeVisible();
   await page.getByLabel('Username', { exact: true }).fill(ADMIN.username);
@@ -25,11 +26,34 @@ async function approve(page: Page, label: string | RegExp) {
 }
 // Tray titles are human sentences; map the operation kind to the wording that proves success.
 const DONE_RE: Record<string, RegExp> = { Update: /is up to date$/, Install: /is ready$/, Start: /is running again$/, Stop: /is stopped$/, Remove: /was removed \(data kept\)$/, Reinstall: /is back$/, Purge: /was uninstalled completely$/, Expose: /is published$/, Unexpose: /address withdrawn$/, Restart: /restarted$/, Restore: /is restored$/ };
-// Decision 183: finished items stay in the tray until dismissed (newest first), so once the result shows, the plain
-// ones are cleared and the next wait sees only new results (values shown once stay; dismissRecovery takes those).
+// Every operation the console accepts on this page (POST /v1/operations answers with it), in order. login() starts it.
+const acceptedOps = new WeakMap<Page, { ids: string[]; waited: number }>();
+function trackOperations(page: Page) {
+  if (acceptedOps.has(page)) return;
+  const t = { ids: [] as string[], waited: 0 };
+  acceptedOps.set(page, t);
+  page.on('response', (r) => {
+    if (r.request().method() !== 'POST' || new URL(r.url()).pathname !== '/v1/operations' || !r.ok()) return;
+    void r.json().then(
+      (j: { operation?: { id?: string } }) => {
+        if (j.operation?.id) t.ids.push(j.operation.id);
+      },
+      () => undefined,
+    );
+  });
+}
+// Decision 183: finished items stay in the tray until dismissed (values shown once stay even after Clear finished), so
+// the wait is for the result of the operation it follows: the last one accepted since the previous wait, by its id
+// (FinishedItem's data-op). No older result, shown-once leftovers included, can satisfy it. Then plain ones are cleared.
 async function trayDone(page: Page, kind: string) {
-  await expect(page.getByRole('heading', { name: DONE_RE[kind]! }).first()).toBeVisible({ timeout: 30_000 });
-  const clear = page.locator('aside.tray').getByRole('button', { name: 'Clear finished', exact: true });
+  const t = acceptedOps.get(page);
+  if (!t) throw new Error('trayDone needs login(page) first (it tracks the accepted operations)');
+  await expect.poll(() => t.ids.length > t.waited, { message: `an operation accepted for ${kind}`, timeout: 10_000 }).toBe(true);
+  const id = t.ids[t.ids.length - 1]!;
+  t.waited = t.ids.length;
+  const tray = page.locator('aside.tray');
+  await expect(tray.locator(`section.tray-item.done[data-op="${id}"]`).getByRole('heading', { name: DONE_RE[kind]! })).toBeVisible({ timeout: 30_000 });
+  const clear = tray.getByRole('button', { name: 'Clear finished', exact: true });
   if (await clear.count()) await clear.click();
 }
 
@@ -1787,7 +1811,11 @@ test.describe('queue', () => {
     await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toContainText('planned at its turn');
     // a second Stop says it is already queued (with its Cancel) instead of queueing it twice
     await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Stop n8n', exact: true }).click();
+    drawer = page.getByRole('dialog');
+    // after the waiting Stop the app will be stopped: Start makes sense, Restart does not (R8)
+    await expect(drawer.getByRole('button', { name: 'Start n8n', exact: true })).toBeEnabled();
+    await expect(drawer.getByRole('button', { name: 'Restart n8n', exact: true })).toHaveCount(0);
+    await drawer.getByRole('button', { name: 'Stop n8n', exact: true }).click();
     ask = page.getByRole('dialog');
     await expect(ask.getByRole('heading', { name: 'Already queued: Stop n8n', exact: true })).toBeVisible();
     await expect(ask.getByRole('button', { name: 'Cancel stop n8n', exact: true })).toBeVisible();

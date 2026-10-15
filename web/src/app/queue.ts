@@ -1,4 +1,4 @@
-import { QUEUEABLE_KINDS, type InstanceSummary, type OperationDto, type QueueableKind } from '../../../src/contracts/api.js';
+import { INTERNAL_ACTORS, QUEUEABLE_KINDS, type InstanceSummary, type OperationDto, type QueueableKind } from '../../../src/contracts/api.js';
 
 // Decision 183: the words the queue speaks in (tray, Home tiles, the queue-mode review). Pure: no DOM, no relative imports.
 
@@ -72,10 +72,18 @@ export function whoOf(inst: Pick<InstanceSummary, 'displayName' | 'name' | 'pack
   return inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} (${inst.name})`);
 }
 
+// Background work Harbor queued itself (guards, the backup scheduler, auto-update, git sources, the tailnet policy).
+export const byHarbor = (actor: string) => (INTERNAL_ACTORS as readonly string[]).includes(actor.toLowerCase());
+
 // The same action already waits for this app (a second click shows it, with its Cancel, instead of queueing it twice).
-// A running one is not "waiting": it can no longer be cancelled, and the dialog says what runs right now.
+// The engine's rule (queueAction), the same here: only the app's LAST not-final item, of the same kind, queued by a
+// person (never a guard's or the scheduler's item: those follow their own rules, a guard stop keeps `desired`), and
+// still waiting. A running one is no duplicate, except a running Update: a second one would fail at its turn.
 export function alreadyQueued(active: OperationDto[], instanceId: string, kind: string): OperationDto | null {
-  return active.find((o) => o.instanceId === instanceId && o.kind === kind && !isRunning(o)) ?? null;
+  const mine = active.filter((o) => o.instanceId === instanceId && !isFinal(o));
+  const last = mine[mine.length - 1];
+  if (!last || last.kind !== kind || byHarbor(last.actor)) return null;
+  return kind === 'update' || !isRunning(last) ? last : null;
 }
 
 // A review the operator gave values in (typed secrets, accepted permissions, changed settings). Approving it while
@@ -84,11 +92,12 @@ export function reviewHasValues(v: { secrets?: Record<string, string>; acceptPer
   return v.acceptPermissions || Object.keys(v.secrets ?? {}).length > 0 || Object.keys(v.settings ?? {}).length > 0;
 }
 
-// What the tray keeps once an operation finishes: everything accepted from this console (any outcome, until
-// dismissed), anything with values shown once, and failures of any actor. A background operation this console only
-// watched (scheduler, auto-update, guards) that went well drops out by itself (it stays in the queue's recent list).
-export function keepFinished(op: Pick<OperationDto, 'state' | 'result'>, acceptedHere: boolean): boolean {
-  return acceptedHere || hasShownOnce(op) || op.state === 'failed' || op.state === 'needs_action';
+// What the tray keeps once an operation finishes: a person's operations (any outcome, until dismissed; decided by the
+// actor, so Update all, an adopt, another tab or a reload count too), anything accepted from this console, anything
+// with values shown once, and failures of any actor. A background operation (scheduler, auto-update, guards) that
+// went well drops out by itself (it stays in the queue's recent list).
+export function keepFinished(op: Pick<OperationDto, 'state' | 'result' | 'actor'>, acceptedHere = false): boolean {
+  return acceptedHere || !byHarbor(op.actor) || hasShownOnce(op) || op.state === 'failed' || op.state === 'needs_action';
 }
 
 // "Clear finished": every finished item goes, except those still showing a value once (they need their own yes).
@@ -101,22 +110,46 @@ export function clearFinished<T extends Pick<OperationDto, 'result'>>(list: T[])
 export const REFRESH_MS = 10_000;
 export const queuePollMs = (anyActive: boolean) => (anyActive ? 2000 : REFRESH_MS);
 
+// Kinds that leave the app running once they are done; install, reinstall and restart (a repair) also leave it installed.
+const LEAVES_RUNNING = new Set(['install', 'reinstall', 'restart', 'start', 'update']);
+const LEAVES_INSTALLED = new Set(['install', 'reinstall', 'restart']);
+
 // The app page's queueable actions. A free app keeps its own gating; a busy one (an operation of its own runs or
-// waits, its install included) also offers what makes sense after that operation, through queue mode. Nothing makes
-// sense after a waiting Uninstall completely, and after a Remove only Uninstall completely does.
-export function appActionGates(inst: Pick<InstanceSummary, 'installState' | 'runtime'>, ops: Pick<OperationDto, 'kind'>[]): { stop: boolean; restart: boolean; remove: boolean; purge: boolean; update: boolean } {
+// waits, its install included) also offers what makes sense after the operations ahead, through queue mode: each
+// action is judged against what they leave behind (the engine refuses the rest at its turn). Nothing makes sense
+// after a waiting Uninstall completely, and after a Remove only Uninstall completely does.
+export function appActionGates(inst: Pick<InstanceSummary, 'installState' | 'runtime' | 'desired'>, ops: Pick<OperationDto, 'kind'>[]): { start: boolean; stop: boolean; restart: boolean; remove: boolean; purge: boolean; update: boolean } {
   const retained = inst.installState === 'retained';
   const canStop = (inst.installState === 'installed' || inst.installState === 'needs_action' || inst.installState === 'failed') && inst.runtime !== 'stopped';
   const purging = ops.some((o) => o.kind === 'purge');
   const removing = ops.some((o) => o.kind === 'remove');
-  const after = ops.length > 0 && !retained && !purging && !removing;
-  if (purging || removing) return { stop: false, restart: false, remove: false, purge: !purging, update: false };
+  if (purging || removing) return { start: false, stop: false, restart: false, remove: false, purge: !purging, update: false };
+  const after = ops.length > 0 && !retained;
+  // The app as the operations ahead leave it. A busy app that should run counts as running: a backup's cold pass or a
+  // restart stops it only for a moment.
+  let installed = inst.installState === 'installed';
+  let running = installed && (inst.runtime === 'running' || (after && inst.desired === 'running'));
+  let stopped = installed && inst.desired === 'stopped';
+  if (after) {
+    for (const o of ops) {
+      if (LEAVES_INSTALLED.has(o.kind)) installed = true;
+      if (LEAVES_RUNNING.has(o.kind)) {
+        running = installed;
+        stopped = false;
+      } else if (o.kind === 'stop') {
+        running = false;
+        stopped = installed;
+      }
+    }
+  }
+  const updateAhead = ops.some((o) => o.kind === 'update');
   return {
+    start: stopped,
     stop: canStop || after,
-    restart: (canStop && inst.installState === 'installed' && inst.runtime === 'running') || after,
+    restart: running,
     remove: (!retained && inst.installState !== 'installing') || after,
     purge: inst.installState !== 'installing' || after,
-    update: inst.installState === 'installed' || after,
+    update: (inst.installState === 'installed' || (inst.installState === 'installing' && after)) && !updateAhead,
   };
 }
 

@@ -111,7 +111,7 @@ export function outdatedCopy(copies: InstanceSummary[]): InstanceSummary | null 
   return copies.find((i) => i.updateAvailable && i.installState === 'installed') ?? null;
 }
 
-export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, onUpdate, disabled }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; onUpdate: (i: InstanceSummary) => void; disabled: boolean }) {
+export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, onAddCopy, onManage, onUpdate }: { item: CatalogItemDto; copies?: InstanceSummary[]; removed?: InstanceSummary[]; onOpen: () => void; onInstall: () => void; onAddCopy: () => void; onManage: (i: InstanceSummary) => void; onUpdate: (i: InstanceSummary) => void }) {
   const installed = copies.length;
   const action = storeAction(item, [...copies, ...removed]);
   const addCopy = action === 'open-or-copy';
@@ -146,22 +146,22 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
       {installed > 0 ? (
         <div className="row wrap store-actions">
           {addCopy && !outdated && (
-            <button className="btn" disabled={disabled} onClick={onAddCopy} aria-label={`Add another copy of ${item.name}`}>
+            <button className="btn" onClick={onAddCopy} aria-label={`Add another copy of ${item.name}`}>
               Add another copy…
             </button>
           )}
           <OpenCopy inst={copies[0]!} name={item.name} onManage={onManage} primary={!outdated} />
-          {outdated && <UpdateButton inst={outdated} copies={copies} onUpdate={onUpdate} disabled={disabled} />}
+          {outdated && <UpdateButton inst={outdated} copies={copies} onUpdate={onUpdate} />}
         </div>
       ) : action === 'unavailable' ? (
         <Pill tone="bad">Unavailable</Pill>
       ) : action === 'reinstall' ? (
         // one copy per machine and a removed one keeps its data: bring that one back (its page has Reinstall)
-        <button className="btn primary" disabled={disabled} onClick={() => onManage(removed[0]!)} aria-label={`Reinstall ${item.name}`}>
+        <button className="btn primary" onClick={() => onManage(removed[0]!)} aria-label={`Reinstall ${item.name}`}>
           Reinstall…
         </button>
       ) : (
-        <button className="btn primary" disabled={disabled} onClick={onInstall} aria-label={`Install ${item.name}`}>
+        <button className="btn primary" onClick={onInstall} aria-label={`Install ${item.name}`}>
           Install
         </button>
       )}
@@ -172,11 +172,11 @@ export function StoreCard({ item, copies = [], removed = [], onOpen, onInstall, 
 // "Open" for an installed copy: its address in a new tab when it is running, else its page in Harbor
 // (where Start, Unlock or Repair live), so the button never does nothing.
 // One copy's update, from the Store card or the app's Store page (the same review as the app page's Update).
-export function UpdateButton({ inst, copies, onUpdate, disabled }: { inst: InstanceSummary; copies: InstanceSummary[]; onUpdate: (i: InstanceSummary) => void; disabled: boolean }) {
+export function UpdateButton({ inst, copies, onUpdate }: { inst: InstanceSummary; copies: InstanceSummary[]; onUpdate: (i: InstanceSummary) => void }) {
   // the copy's name only when several copies wait for an update (the review names the copy either way)
   const label = copies.filter((c) => c.updateAvailable && c.installState === 'installed').length > 1 ? `Update ${inst.displayName ?? inst.name}` : 'Update';
   return (
-    <button className="btn primary" disabled={disabled} onClick={() => onUpdate(inst)} aria-label={`Update ${inst.name}`} title={updateLine(inst, inst.updateAvailable!)}>
+    <button className="btn primary" onClick={() => onUpdate(inst)} aria-label={`Update ${inst.name}`} title={updateLine(inst, inst.updateAvailable!)}>
       {label}
     </button>
   );

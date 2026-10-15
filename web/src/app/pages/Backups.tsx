@@ -486,7 +486,7 @@ function RemovePlace({ target, onRemoved }: { target: BackupTargetDto; onRemoved
 
 // ---------------------------------------------------------------- the app drawer
 
-export function AppBackupsPanel({ inst, busy, onAction }: { inst: InstanceSummary; busy: boolean; onAction: (a: Action) => void }) {
+export function AppBackupsPanel({ inst, onAction }: { inst: InstanceSummary; onAction: (a: Action) => void }) {
   const [b, setB] = useState<AppBackupsDto | null>(null);
   const [places, setPlaces] = useState<BackupTargetDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -567,7 +567,7 @@ export function AppBackupsPanel({ inst, busy, onAction }: { inst: InstanceSummar
                 Use the global time
               </button>
             )}
-            <button className="btn small" disabled={working || busy || chosen.size === 0} onClick={() => void api.backupNow(inst.id).then((x) => (setB(x), setMsg('Queued. It runs as soon as no other app is being backed up.')), (e) => setError(errText(e)))} aria-label={`Back up ${inst.name} now`}>
+            <button className="btn small" disabled={working || chosen.size === 0} onClick={() => void api.backupNow(inst.id).then((x) => (setB(x), setMsg('Queued. It runs as soon as no other app is being backed up.')), (e) => setError(errText(e)))} aria-label={`Back up ${inst.name} now`}>
               Back up now
             </button>
           </div>
@@ -604,7 +604,7 @@ export function AppBackupsPanel({ inst, busy, onAction }: { inst: InstanceSummar
               <span className="small">
                 {fmtTime(p.time)} <span className="muted">· {p.totalBytes !== null ? fmtBytes(p.totalBytes) : '?'} · {p.places.map((x) => x.name).join(', ')}</span>
               </span>
-              <button className="btn small" disabled={busy || Boolean(b.previous) || inst.installState === 'retained'} onClick={() => onAction({ kind: 'restore', instance: inst, runId: p.runId })} aria-label={`Restore ${inst.name} to ${fmtTime(p.time)}`}>
+              <button className="btn small" disabled={Boolean(b.previous) || inst.installState === 'retained'} onClick={() => onAction({ kind: 'restore', instance: inst, runId: p.runId })} aria-label={`Restore ${inst.name} to ${fmtTime(p.time)}`}>
                 Restore…
               </button>
             </li>

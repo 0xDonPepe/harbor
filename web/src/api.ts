@@ -1,5 +1,5 @@
 import type { AppBackupsDto, BackupAppPolicyDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, SettingValue } from '../../src/contracts/api';
-import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailnetAllDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto } from '../../src/contracts/api';
+import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, OperationQueueDto, QueueableKind, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailnetAllDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto } from '../../src/contracts/api';
 import { isMockUi, mockApi } from './mock/api';
 
 export class ApiError extends Error {
@@ -148,6 +148,12 @@ const realApi = {
   // decision 143: next null = Harbor's own key
   changePassphrase: (id: string, current: string, next: string | null) => call<{ instance: InstanceSummary; recoveryKey: string | null }>('POST', `/v1/instances/${id}/passphrase`, { ...(current ? { current } : {}), next }),
   operation: (id: string) => call<OperationDto>('GET', `/v1/operations/${id}`),
+  // decision 183: the queue (active in run order, the running one first; recent finished, newest first; no events)
+  queue: (recent = 10) => call<OperationQueueDto>('GET', `/v1/operations?recent=${recent}`),
+  // decision 183: queue an action without a plan (Harbor plans it at its turn); one idempotency key per dialog
+  queueAction: (kind: QueueableKind, instanceId: string, idempotencyKey: string) => call<{ operationId: string; created: boolean; operation: OperationDto }>('POST', '/v1/operations', { action: { kind, instanceId } }, { 'idempotency-key': idempotencyKey }),
+  // decision 183: cancel a waiting item (NOT_CANCELLABLE once it runs, or when Harbor queued it to protect something)
+  cancelOperation: (id: string) => call<OperationDto>('POST', `/v1/operations/${id}/cancel`, {}),
   // settings
   changePassword: (currentPassword: string, newPassword: string) => call<{ revokedSessions: number }>('PUT', '/v1/account/password', { currentPassword, newPassword }),
   hostStorage: () => call<HostStorageDto>('GET', '/v1/host/storage'),

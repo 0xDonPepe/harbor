@@ -38,6 +38,8 @@ export interface FakeBehaviour {
   volumeSizes?: Record<string, number>;
   // decision 179: runtimes `docker info` lists (default: runc only, no NVIDIA toolkit)
   runtimes?: string[];
+  // decision 183 (dev/e2e only, set from src/dev.ts): how long `pull` takes for a project with these images (ms; 0 = instant)
+  pullDelay?: (images: string[]) => number;
 }
 
 export class FakeDocker implements DockerAdapter, ComposeRunner {
@@ -247,6 +249,11 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   async pull(inv: ComposeInvocation, _timeoutMs: number): Promise<ComposeResult> {
     this.assertUp();
     if (this.behaviour.failPull) throw new ComposeError(`docker compose pull failed: ${this.behaviour.failPull}`, { command: ['pull'], exitCode: 1, stderrTail: this.behaviour.failPull, timedOut: false });
+    if (this.behaviour.pullDelay) {
+      const doc = parseYaml(readFileSync(inv.file, 'utf8')) as { services?: Record<string, { image?: string }> };
+      const ms = this.behaviour.pullDelay(Object.values(doc?.services ?? {}).map((svc) => String(svc.image ?? '')));
+      if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+    }
     this.log.push(`pull ${inv.projectName}`);
     return { stdout: '', stderr: '' };
   }

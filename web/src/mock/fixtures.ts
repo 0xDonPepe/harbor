@@ -10,6 +10,7 @@ import type {
   InstanceSummary,
   NotificationChannelDto,
   NotificationsDto,
+  OperationDto,
   PlatformToolDto,
   PrimaryExposure,
   StorageUsageDto,
@@ -354,6 +355,32 @@ export function mockInstances(): InstanceSummary[] {
       usage: { cpuPercent: 8, memoryBytes: 2048 * MiB, sampledAt: t },
       settings: mockOllamaSettings(),
     },
+    {
+      // decision 183: installing right now (the queue fixture's running item)
+      ...base,
+      id: 'inst-freshrss',
+      name: 'freshrss',
+      packageId: 'freshrss',
+      packageName: 'FreshRSS',
+      category: 'productivity',
+      installState: 'installing',
+      runtime: 'unknown',
+      readiness: 'unknown',
+      endpoints: [endpoint(18089)],
+      operationId: 'op-mock-q-install',
+    },
+  ];
+}
+
+// Decision 183: the queue — a running install, then two waiting items in run order: an Update queued by the owner
+// (planned at its turn, cancellable) and a Stop the drive guard queued (not cancellable).
+export function mockQueue(): OperationDto[] {
+  const at = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+  const op = (o: Partial<OperationDto> & Pick<OperationDto, 'id' | 'kind' | 'instanceId' | 'instanceName'>): OperationDto => ({ planId: null, actor: 'admin', queuedAction: false, cancellable: true, state: 'queued', phase: 'queued', createdAt: at(30), startedAt: null, finishedAt: null, error: null, result: null, events: [], ...o });
+  return [
+    op({ id: 'op-mock-q-install', kind: 'install', instanceId: 'inst-freshrss', instanceName: 'FreshRSS', planId: 'plan-mock-q-install', state: 'applying', phase: 'pulling', createdAt: at(50), startedAt: at(45), cancellable: false }),
+    op({ id: 'op-mock-q-update', kind: 'update', instanceId: 'inst-immich', instanceName: 'Immich', queuedAction: true, createdAt: at(40) }),
+    op({ id: 'op-mock-q-stop', kind: 'stop', instanceId: 'inst-jellyfin', instanceName: 'Jellyfin', planId: 'plan-mock-q-stop', actor: 'drive-guard', cancellable: false, createdAt: at(20) }),
   ];
 }
 

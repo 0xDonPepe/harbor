@@ -44,7 +44,7 @@ export function Publishing({ c, onPublish }: { c: Console; onPublish: (i: Instan
                   <span className="muted small"> · checked {fmtTime(e.observedAt)}</span>
                   {e.note && e.state !== 'active' && <span className="warn small"> · {e.note}</span>}
                 </span>
-                <button className="btn" onClick={() => onPublish(data.instances.find((i) => i.id === e.instanceId)!)} disabled={c.busy}>
+                <button className="btn" onClick={() => onPublish(data.instances.find((i) => i.id === e.instanceId)!)}>
                   Manage
                 </button>
               </li>
@@ -64,7 +64,7 @@ export function Publishing({ c, onPublish }: { c: Console; onPublish: (i: Instan
                   <span>
                     <strong>{i.name}</strong> <span className="muted small">{i.packageName}</span>
                   </span>
-                  <button className="btn" onClick={() => onPublish(i)} disabled={c.busy} aria-label={`Publish ${i.name}`}>
+                  <button className="btn" onClick={() => onPublish(i)} aria-label={`Publish ${i.name}`}>
                     Publish…
                   </button>
                 </li>

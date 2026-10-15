@@ -63,7 +63,7 @@ export function Store({ c, onOpen, onInstall, onAddCopy, onManage, onUpload }: {
                 const copies = copiesOf(i.id, c.data.instances);
                 return (
                   <li key={i.id} className="store-wrap">
-                    <StoreCard item={i} copies={copies.active} removed={copies.removed} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} onAddCopy={() => onAddCopy(i)} onManage={onManage} onUpdate={(inst) => void c.start({ kind: 'update', instance: inst })} disabled={c.busy} />
+                    <StoreCard item={i} copies={copies.active} removed={copies.removed} onOpen={() => onOpen(i)} onInstall={() => onInstall(i)} onAddCopy={() => onAddCopy(i)} onManage={onManage} onUpdate={(inst) => void c.start({ kind: 'update', instance: inst })} />
                     {i.availability === 'unavailable' && <p className="error small">{i.reason}</p>}
                   </li>
                 );

@@ -1,7 +1,7 @@
 // `pnpm dev`: run the daemon against a private local state directory with the fake Docker
 // adapter. Nothing on the host is touched. Set HARBOR_DEV_DOCKER_SOCKET=/path/to/docker.sock
 // to target a Docker engine explicitly (developer opt-in; never auto-discovered).
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { normalizeConfig } from './config.js';
@@ -11,6 +11,7 @@ import { openState } from './state/db.js';
 import { Repo } from './state/repo.js';
 import { systemClock } from './util.js';
 import { devGpu } from './system/gpu.js';
+import { FakeDocker } from './docker/fake.js';
 import { homedir } from 'node:os';
 
 const root = path.resolve(process.env['HARBOR_DEV_ROOT'] ?? '.harbor-dev');
@@ -73,6 +74,21 @@ if (!existsSync(path.join(stateDir, 'harbor.db'))) {
 
 // decisions 179, 181: HARBOR_DEV_GPU picks the fake machine's graphics card (fake mode only; values: devGpu in src/system/gpu.ts)
 const daemon = await startDaemon(config, socket ? {} : { gpu: devGpu(process.env['HARBOR_DEV_GPU']) });
+// decision 183 (e2e): HARBOR_DEV_FAKE_CONTROL=<file> makes fake pulls slow, read on every pull so a test can change it
+// while the daemon runs: {"pullDelayMs": 8000, "match": "<image substring>"} (no file, bad JSON or no match = instant).
+const control = process.env['HARBOR_DEV_FAKE_CONTROL'];
+if (control && daemon.ctx.docker instanceof FakeDocker) {
+  daemon.ctx.docker.behaviour.pullDelay = (images) => {
+    try {
+      const c = JSON.parse(readFileSync(control, 'utf8')) as { pullDelayMs?: unknown; match?: unknown };
+      const ms = typeof c.pullDelayMs === 'number' ? c.pullDelayMs : 0;
+      const match = typeof c.match === 'string' ? c.match : '';
+      return images.some((i) => i.includes(match)) ? ms : 0;
+    } catch {
+      return 0;
+    }
+  };
+}
 console.error(`[dev] ${daemon.url}  docker=${daemon.ctx.docker.description}  ui=${config.uiDir ?? '(not built; run pnpm build:web)'}`);
 const stop = () => void daemon.close().then(() => process.exit(0));
 process.on('SIGINT', stop);

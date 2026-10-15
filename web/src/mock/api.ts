@@ -38,6 +38,7 @@ import {
   mockMetrics,
   mockNotifications,
   mockOllamaSettings,
+  mockQueue,
   mockStorage,
   mockStorageUsage,
   mockSystem,
@@ -63,6 +64,8 @@ export const isMockUi = (): boolean => {
 const beat = (ms = 350) => new Promise((r) => setTimeout(r, ms));
 
 let instances = mockInstances();
+let queueState = mockQueue();
+const finishedOps = new Map<string, OperationDto>();
 // decision 177: the every-app Tailscale policy, derived from the mock instances and exposures
 let tailnetAll: { enabled: boolean; except: string[] } = { enabled: false, except: [] };
 function mockTailnetAll(): TailnetAllDto {
@@ -170,7 +173,11 @@ const opFor = (kind: OperationDto['kind'], instanceId: string, planId: string): 
   id: `op-mock-${kind}`,
   kind,
   instanceId,
+  instanceName: instances.find((i) => i.id === instanceId)?.displayName ?? instances.find((i) => i.id === instanceId)?.name ?? instanceId,
   planId,
+  actor: 'admin',
+  queuedAction: false,
+  cancellable: false,
   state: 'succeeded',
   phase: 'verifying',
   createdAt: new Date().toISOString(),
@@ -336,7 +343,26 @@ export const mockApi = {
     await beat();
     const op = opFor('install', instances[0]!.id, planId);
     op.result = { recoveryKey: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about', recoveryNote: 'Mock recovery key: write down these 12 words in the real console.' };
+    finishedOps.set(op.id, op);
     return { operationId: op.id, created: true, operation: op };
+  },
+  // decision 183: the queue; cancel takes a waiting item out, queueAction adds one at the end
+  queue: async () => ({ active: queueState, recent: [] }),
+  queueAction: async (kind: OperationDto['kind'], instanceId: string) => {
+    await beat();
+    const inst = instances.find((i) => i.id === instanceId);
+    const op: OperationDto = { ...opFor(kind, instanceId, ''), id: `op-mock-q-${kind}-${Date.now()}`, planId: null, queuedAction: true, cancellable: true, state: 'queued', phase: 'queued', startedAt: null, finishedAt: null, events: [], instanceName: inst?.displayName ?? inst?.name ?? instanceId };
+    queueState = [...queueState, op];
+    return { operationId: op.id, created: true, operation: op };
+  },
+  cancelOperation: async (id: string): Promise<OperationDto> => {
+    await beat(150);
+    const op = queueState.find((o) => o.id === id);
+    if (!op || !op.cancellable) throw new Error(op ? 'Harbor queued this itself; it cannot be cancelled.' : 'unknown operation');
+    queueState = queueState.filter((o) => o.id !== id);
+    const done: OperationDto = { ...op, state: 'cancelled', finishedAt: new Date().toISOString(), cancellable: false, error: { code: 'CANCELLED', message: 'Cancelled by you before it started; nothing was changed.', nextAction: '' } };
+    finishedOps.set(id, done);
+    return done;
   },
   foundApps: async () => [
     { home: '/mnt/photos/harbor-apps/immich/immich-2', name: 'immich-2', displayName: 'Immich (2)', packageId: 'immich', packageRevision: '1', instanceId: null, drive: 'Photos', adopted: false, error: null },
@@ -358,7 +384,7 @@ export const mockApi = {
     const inst = instances.find((i) => i.id === id) ?? instances[0]!;
     return { ...inst, home: inst.home ? { ...inst.home, state: 'locked' as const } : inst.home };
   },
-  operation: async (id: string): Promise<OperationDto> => opFor('install', instances[0]!.id, id),
+  operation: async (id: string): Promise<OperationDto> => queueState.find((o) => o.id === id) ?? finishedOps.get(id) ?? opFor('install', instances[0]!.id, id),
   changePassword: async () => {
     await beat();
     return { revokedSessions: 1 };

@@ -1303,6 +1303,66 @@ details summary {
 .tray h2 {
   font-size: 15px;
 }
+/* decision 183: the tray is the queue — one line on top, then running, waiting and finished items */
+.tray-head {
+  margin: 0;
+}
+.tray-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tray-toggle .chev {
+  color: var(--muted);
+  flex: none;
+}
+.tray-toggle .chev.up {
+  transform: rotate(180deg);
+}
+.tray-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.tray-item h3 {
+  font-size: 14px;
+  margin: 0;
+}
+.tray-item h3 .dot {
+  margin-right: 4px;
+}
+.tray-item > p {
+  margin: 4px 0;
+}
+.tray-waiting {
+  gap: 0;
+}
+.tray-waiting > li {
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 0;
+}
+.tray-waiting > li .btn {
+  flex: none;
+}
+.tray-wait-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+}
+.tray-why {
+  display: block;
+}
 progress {
   width: 100%;
   height: 6px;
@@ -1575,7 +1635,8 @@ progress {
   filter: grayscale(1);
   opacity: 0.7;
 }
-.icon-tile.installing .appicon {
+.icon-tile.installing .appicon,
+.icon-tile.busy .appicon {
   animation: pulse 1.6s ease-in-out infinite;
 }
 @keyframes pulse {

@@ -48,7 +48,11 @@ export function validatePasswordPolicy(password: string): string | null {
   return null;
 }
 
+export function validateUsernameFormat(username: string): string | null {
+  return /^[a-z][a-z0-9_-]{2,31}$/.test(username) ? null : 'username must be 3-32 lowercase letters, digits, _ or -';
+}
+
+// A NEW username: the format, and never one of Harbor's own actor names (decision 183).
 export function validateUsername(username: string): string | null {
-  if (!/^[a-z][a-z0-9_-]{2,31}$/.test(username)) return 'username must be 3-32 lowercase letters, digits, _ or -';
-  return reservedUsername(username);
+  return validateUsernameFormat(username) ?? reservedUsername(username);
 }

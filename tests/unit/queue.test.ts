@@ -14,6 +14,9 @@ import { systemIds } from '../../src/util.js';
 import { INTERNAL_ACTORS, reservedUsername } from '../../src/actors.js';
 import { TAILNET_POLICY_ACTOR } from '../../src/lifecycle/tailnet-all.js';
 import { validateUsername } from '../../src/auth/password.js';
+import { sameQueuedAction } from '../../src/lifecycle/service.js';
+import { enrollAdministrator } from '../../src/maintenance.js';
+import { normalizeConfig } from '../../src/config.js';
 
 const FIXED = new Date('2026-10-15T09:00:00Z');
 function repo(): Repo {
@@ -161,5 +164,55 @@ describe('harbor queue wording (decision 183)', () => {
     expect(canQueueAction({ acceptPermissions: true })).toBe(false);
     expect(canQueueAction({ passphraseStdin: true })).toBe(false);
     expect(canQueueAction({ values: 2 })).toBe(false);
+  });
+});
+
+describe('the queue dedupe rule (decision 183 review R1/R3/R7)', () => {
+  const item = (kind: string, o: Partial<{ actor: string; state: string; startedAt: string | null }> = {}) => ({ kind, actor: 'admin', state: 'queued', startedAt: null as string | null, ...o });
+  it("is the app's last waiting item of the same kind, a person's", () => {
+    const stop = item('stop');
+    expect(sameQueuedAction([item('install', { state: 'applying', startedAt: 't' }), stop], 'stop')).toBe(stop);
+    expect(sameQueuedAction([], 'stop')).toBeNull();
+  });
+  it("never an item something else waits behind, never one of Harbor's own, never a started one (an update aside)", () => {
+    expect(sameQueuedAction([item('stop'), item('restart')], 'stop')).toBeNull();
+    for (const actor of INTERNAL_ACTORS) expect(sameQueuedAction([item('stop', { actor })], 'stop')).toBeNull();
+    expect(sameQueuedAction([item('stop', { actor: 'Drive-Guard' })], 'stop')).toBeNull();
+    expect(sameQueuedAction([item('stop', { startedAt: 't' })], 'stop')).toBeNull();
+    expect(sameQueuedAction([item('restart', { state: 'applying', startedAt: 't' })], 'restart')).toBeNull();
+    const running = item('update', { state: 'verifying', startedAt: 't' });
+    expect(sameQueuedAction([running], 'update')).toBe(running);
+    expect(sameQueuedAction([item('update', { actor: 'auto-update', state: 'applying', startedAt: 't' })], 'update')).toBeNull();
+  });
+});
+
+describe('enroll --reset keeps an existing name (decision 183 review R5)', () => {
+  function stateWith(username: string) {
+    const root = mkdtempSync(path.join(tmpdir(), 'harbor-enroll-'));
+    const config = normalizeConfig({ stateDir: path.join(root, 'state'), catalogDir: path.join(root, 'catalog'), userDataDir: path.join(root, 'data'), docker: { mode: 'fake' }, catalog: { url: null } }, root);
+    initializeState(config.stateDir, { clock: { now: () => FIXED }, ids: systemIds, config: {} });
+    const db = openState(config.stateDir);
+    new Repo(db, { now: () => FIXED }).setAdministrator({ username, passwordHash: 'x', salt: 'x', params: {} });
+    db.close();
+    return config;
+  }
+  const adminName = (stateDir: string) => {
+    const db = openState(stateDir);
+    try {
+      return new Repo(db, { now: () => FIXED }).administrator()?.username;
+    } finally {
+      db.close();
+    }
+  };
+  it('lets an administrator enrolled before the rule reset under that same name; a new reserved name is refused', async () => {
+    const config = stateWith('scheduler');
+    await expect(enrollAdministrator(config, 'auto-update', 'correct horse battery', { reset: true })).rejects.toThrow(/Harbor uses for its own background work/);
+    await expect(enrollAdministrator(config, 'Bad Name', 'correct horse battery', { reset: true })).rejects.toThrow(/lowercase/);
+    const r = await enrollAdministrator(config, 'scheduler', 'correct horse battery', { reset: true });
+    expect(r.created).toBe(false);
+    expect(adminName(config.stateDir)).toBe('scheduler');
+    // and a reset may still move to a new, free name
+    await enrollAdministrator(config, 'carlos', 'correct horse battery', { reset: true });
+    expect(adminName(config.stateDir)).toBe('carlos');
   });
 });

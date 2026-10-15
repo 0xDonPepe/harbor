@@ -1,6 +1,7 @@
 // Local maintenance commands that touch state directly (never over HTTP):
 // explicit initialization and administrator enrollment/reset.
-import { hashPassword, validatePasswordPolicy, validateUsername } from './auth/password.js';
+import { hashPassword, validatePasswordPolicy, validateUsernameFormat } from './auth/password.js';
+import { reservedUsername } from './actors.js';
 import { createSealedMachineKey, zeroMachineKey } from './auth/machine-key.js';
 import type { DaemonConfig } from './config.js';
 import { HarborError } from './errors.js';
@@ -24,7 +25,7 @@ export function initState(config: DaemonConfig): { installationId: string } {
 }
 
 export async function enrollAdministrator(config: DaemonConfig, username: string, password: string, opts: { reset: boolean }): Promise<{ created: boolean; revokedSessions: number; sealedDestroyed: boolean }> {
-  const u = validateUsername(username);
+  const u = validateUsernameFormat(username);
   if (u) throw new HarborError('INVALID_REQUEST', u);
   const p = validatePasswordPolicy(password);
   if (p) throw new HarborError('INVALID_REQUEST', p);
@@ -37,6 +38,10 @@ export async function enrollAdministrator(config: DaemonConfig, username: string
       if (existing && !opts.reset) {
         throw new HarborError('INVALID_STATE', `administrator ${existing.username} is already enrolled`, { nextAction: 'Use --reset (daemon stopped) to replace the credentials.' });
       }
+      // Decision 183: a NEW name is never one of Harbor's own actor names. An administrator enrolled under one before
+      // that rule may still reset under the same name (the documented recovery); only moving to such a name is refused.
+      const reserved = existing?.username === username ? null : reservedUsername(username);
+      if (reserved) throw new HarborError('INVALID_REQUEST', reserved);
       const hashed = await hashPassword(password);
       let revoked = 0;
       let sealedDestroyed = false;

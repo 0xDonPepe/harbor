@@ -2,7 +2,7 @@ import { accessSync, constants, existsSync, mkdirSync, readdirSync, rmSync, stat
 import path from 'node:path';
 import { UUID_RE } from '../contracts/patterns.js';
 import { tagValue } from '../backups/restic.js';
-import { QUEUEABLE_KINDS, type AppLinkDto, type FixedPortDto, type LinkChoice, type LinkDto, type QueueableKind } from '../contracts/api.js';
+import { INTERNAL_ACTORS, QUEUEABLE_KINDS, type AppLinkDto, type FixedPortDto, type LinkChoice, type LinkDto, type QueueableKind } from '../contracts/api.js';
 import type { LinkClaim, Manifest, ManifestPermission, ManifestSetting, SecretClaim, SettingValue } from '../contracts/types.js';
 import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permissionDto, permissionsOf } from '../planner/permissions.js';
 import { gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf } from '../planner/gpu.js';
@@ -1803,13 +1803,25 @@ export class ApplicationService {
         if (existing.actor === actor && existing.request?.kind === k && existing.request.instanceId === instanceId) return { operation: existing, created: false };
         throw new HarborError('IDEMPOTENCY_CONFLICT', 'this idempotency key was already used for a different request', { operationId: existing.id });
       }
+      // a key that an earlier request resolved to an existing item (the dedupe below) stays that item
+      const alias = this.queueKeyAliases.get(idempotencyKey);
+      if (alias) {
+        const aliased = repo.operation(alias.operationId);
+        if (aliased && alias.actor === actor && alias.kind === k && alias.instanceId === instanceId) return { operation: aliased, created: false };
+        throw new HarborError('IDEMPOTENCY_CONFLICT', 'this idempotency key was already used for a different request', { operationId: alias.operationId });
+      }
       const inst = repo.instance(instanceId);
       if (!inst || inst.purgedAt) throw new HarborError('NOT_FOUND', `unknown instance ${instanceId}`);
       const label = inst.displayName ?? inst.name;
-      // the same action already waiting for this app (a second click, another tab) is that item, not a duplicate that
-      // would only fail at its turn ("already runs revision N")
-      const waiting = repo.activeOperationsOf(inst.id).find((o) => o.kind === k && o.state === 'queued' && o.startedAt === null);
-      if (waiting) return { operation: waiting, created: false };
+      // The same action as the app's last item (a second click, another tab) is that item, not a duplicate that would
+      // only fail at its turn ("already runs revision N"). Only a true duplicate: the app's LAST not-final item, of the
+      // same kind, not Harbor's own (a guard's stop leaves desired running; a person's stop must flip it), and still
+      // waiting, except that an update already running counts too (a second one could only fail).
+      const same = sameQueuedAction(repo.activeOperationsOf(inst.id), k);
+      if (same) {
+        this.rememberQueueKey(idempotencyKey, { operationId: same.id, actor, kind: k, instanceId: inst.id });
+        return { operation: same, created: false };
+      }
       if (repo.activeOperationsOf(inst.id).some((o) => o.kind === 'purge')) throw new HarborError('INVALID_STATE', `${label} is being removed completely`, { nextAction: 'Wait for it to finish; there is nothing left to act on afterwards.' });
       const operationId = ids.uuid();
       repo.insertQueuedAction({ id: operationId, idempotencyKey, actor, kind: k, instanceId: inst.id });
@@ -3062,6 +3074,14 @@ export class ApplicationService {
   // Decision 180: setting values chosen at submission (install review → Options, an update's new settings, CLI
   // --set). Not secret, but like the values above they belong to this one submission: held by plan id, taken by
   // the runner when the operation starts (a daemon restart marks a queued operation needs_action anyway).
+  // Idempotency keys a queued action resolved to an existing item (decision 183 dedupe): the key is not stored on any
+  // row, so a retry with it (a lost reply) must still find that item after it started or finished. In memory only: a
+  // restart cancels every waiting item anyway, and a retry after one gets a fresh answer. Bounded, oldest dropped.
+  private queueKeyAliases = new Map<string, { operationId: string; actor: string; kind: QueueableKind; instanceId: string }>();
+  private rememberQueueKey(key: string, alias: { operationId: string; actor: string; kind: QueueableKind; instanceId: string }): void {
+    this.queueKeyAliases.set(key, alias);
+    while (this.queueKeyAliases.size > 1000) this.queueKeyAliases.delete(this.queueKeyAliases.keys().next().value!);
+  }
   private submittedSettings = new Map<string, Record<string, SettingValue>>();
   takeSubmittedSettings(planId: string): Record<string, SettingValue> {
     const v = this.submittedSettings.get(planId) ?? {};
@@ -3229,6 +3249,18 @@ export function notificationLink(kind: string): string | null {
   if (kind === 'delivery-failed') return '#/settings/notifications';
   if (kind === 'harbor-update') return '#/settings';
   return null;
+}
+
+// Decision 183 dedupe (the console's alreadyQueued applies the same rule): a queued action of kind `kind` is the
+// existing item X only when X is the app's LAST not-final item (nothing waits after it), X has that kind, X is not
+// Harbor's own (an internal actor: a guard's stop, a scheduler's backup, an auto-update), and X still waits; for an
+// update, one already running counts too. `active` = the app's not-final operations in run order.
+export function sameQueuedAction<T extends { kind: string; actor: string; state: string; startedAt: string | null }>(active: readonly T[], kind: QueueableKind): T | null {
+  const last = active[active.length - 1];
+  if (!last || last.kind !== kind) return null;
+  if ((INTERNAL_ACTORS as readonly string[]).includes(last.actor.toLowerCase())) return null;
+  const waiting = last.state === 'queued' && last.startedAt === null;
+  return waiting || kind === 'update' ? last : null;
 }
 
 // Decision 164: each kind of notification brings its own call to action (first = primary). Derived, not

@@ -431,4 +431,66 @@ describe('the operation queue (decision 183)', () => {
     expect((await h.api.waitOperation(second)).state).toBe('succeeded');
     expect((await byName('z1')).revision).toBe('1');
   });
+
+  // The dedupe rule (decision 183 review R1/R3/R7): a queued action is the existing item X only when X is the app's
+  // last not-final item, of the same kind, not Harbor's own (an internal actor), and still waiting; an update that
+  // already runs counts too.
+  it("a person's stop never merges into a waiting drive-guard stop: it is its own item and desired ends stopped", async () => {
+    await upload('eta', '1');
+    const app = await installed('eta', 'd1');
+    const running = await heldInstall('alpha', 'a13');
+    const guard = h.daemon.service.submit((await h.daemon.service.createPlan({ kind: 'stop', instanceId: app.id }, 'drive-guard')).id, key(), 'drive-guard');
+    expect(guard.operation).toMatchObject({ state: 'queued', actor: 'drive-guard' });
+    const mine = await queueAction('stop', app.id);
+    expect(mine.created).toBe(true);
+    expect(mine.operationId).not.toBe(guard.operation.id);
+    expect(mine.operation).toMatchObject({ actor: 'admin', cancellable: true });
+    expect((await queue()).active.filter((o) => o.instanceId === app.id).map((o) => o.id)).toEqual([guard.operation.id, mine.operationId]);
+    release();
+    expect((await h.api.waitOperation(running)).state).toBe('succeeded');
+    expect((await h.api.waitOperation(guard.operation.id)).state).toBe('succeeded');
+    const stopped = await h.api.waitOperation(mine.operationId);
+    expect(stopped.state, JSON.stringify(stopped.error)).toBe('succeeded');
+    expect(await byName('d1')).toMatchObject({ desired: 'stopped' });
+  });
+
+  it('a stop queued behind [stop, start] is a third item: the last request wins', async () => {
+    await upload('theta', '1');
+    const app = await installed('theta', 'd2');
+    const running = await heldInstall('alpha', 'a14');
+    const stop1 = await queueAction('stop', app.id);
+    const start = await queueAction('start', app.id);    const stop2 = await queueAction('stop', app.id);
+    expect([stop1.created, start.created, stop2.created]).toEqual([true, true, true]);
+    expect((await queue()).active.filter((o) => o.instanceId === app.id).map((o) => o.id)).toEqual([stop1.operationId, start.operationId, stop2.operationId]);
+    // and a stop right behind the last stop is that stop
+    const again = await queueAction('stop', app.id);
+    expect([again.created, again.operationId]).toEqual([false, stop2.operationId]);
+    release();
+    expect((await h.api.waitOperation(running)).state).toBe('succeeded');
+    for (const id of [stop1.operationId, start.operationId, stop2.operationId]) expect((await h.api.waitOperation(id)).state).toBe('succeeded');
+    expect(await byName('d2')).toMatchObject({ desired: 'stopped' });
+  });
+
+  it('an update queued while the same app is already updating is that running update; a retry with the same key stays it', async () => {
+    const app = await installed('epsilon', 'e1');
+    await upload('epsilon', '2');
+    hold();
+    const update = await h.api.submit((await h.api.plan({ kind: 'update', instanceId: app.id })).id);
+    await waitChecking(update.operationId);
+    const k = key();
+    const q = await queueAction('update', app.id, k);
+    expect([q.created, q.operationId]).toEqual([false, update.operationId]);
+    // a stop is not deduped against a running item: it waits behind the update
+    const stop = await queueAction('stop', app.id);
+    expect(stop.created).toBe(true);
+    release();
+    expect((await h.api.waitOperation(update.operationId)).state).toBe('succeeded');
+    expect((await h.api.waitOperation(stop.operationId)).state).toBe('succeeded');
+    // the reply was lost and the console retries with the same key after the update finished: still that operation
+    const retry = await queueAction('update', app.id, k);
+    expect([retry.created, retry.operationId]).toEqual([false, update.operationId]);
+    // the same key for something else is refused
+    await h.api.expectError(409, 'IDEMPOTENCY_CONFLICT', 'POST', '/v1/operations', { action: { kind: 'restart', instanceId: app.id } }, { 'idempotency-key': k });
+    expect((await byName('e1')).revision).toBe('2');
+  });
 });

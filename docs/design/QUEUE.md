@@ -23,20 +23,30 @@ the **tray becomes the queue**, plus `harbor queue` in the CLI. Implemented in 0
   only a person can give (a permission to accept, a value to type, a passphrase), the item stops as **Needs your
   review** (`failed`, code `REVIEW_NEEDED`) and nothing changes; any other planning error fails the item with that
   error.
-- The same action already waiting for that app is not queued twice: the dialog says *Already queued: Update Immich*
-  with its Cancel and *Keep it*; the API returns the waiting item (`created: false`).
+- Each action on a busy app is judged by what the items ahead leave behind: Start only if the app ends up stopped,
+  Restart only if it ends up running (a busy app whose desired state is running counts as running), Update only for an
+  installed or installing app with no update ahead.
+- The same action is not queued twice when it would change nothing: if the app's **last** unfinished item is the same
+  kind, still waiting, and was queued by a person (not by Harbor's own actors, `INTERNAL_ACTORS`), the dialog says
+  *Already queued: Update Immich* with its Cancel and *Keep it*, and the API returns that item (`created: false`).
+  Anything else is a new item behind, so the last request always wins and a person's Stop never folds into a drive
+  guard's. An update is the exception: any unfinished update of the app, wherever it is and whoever queued it
+  (auto-update too), stands for a second one (*Already running: Update Immich* while it runs), because a second
+  update could only fail with "already runs revision N".
 - A review where the operator typed values, accepted permissions or changed settings never drops them into a queued
   action: if the app became busy meanwhile, the review waits for it and shows again (decision 173).
 - Other kinds on a busy app (configure, publish/withdraw, main address, move, restore, encrypt, link changes) keep
   decision 173: their review waits for the app, then plans.
 - The tray lists the queue: the running item (phase, progress), the waiting items in run order (each with **Cancel**
-  when it may be cancelled, else one line saying why) and finished items: everything this console accepted (any
-  outcome), anything showing a value once, failures of any actor. Successful background items it only watched leave
-  by themselves. Each is dismissible; **Clear finished** clears all but shown-once values. It collapses to one line.
+  when it may be cancelled, else one line saying why) and finished items: every item a person started (decided by its
+  actor, so Update all, adopt, another tab or a reload count), anything showing a value once, failures of any actor.
+  Successful items of Harbor's own actors leave by themselves. Each is dismissible; **Clear finished** clears all but shown-once values. It collapses to one line.
 - `harbor queue` lists it, `harbor queue cancel <operation>` cancels a waiting item. A CLI action of a queueable kind
   on a busy app offers to queue it (`--yes` accepts) only when nothing comes with it; with `--accept-permissions`,
   `--passphrase-stdin` or values (`--set`, `--secret`, `--link`, storage) it waits for the app, then plans and
-  reviews as before.
+  reviews as before. `harbor start` on a locked app asks for its passphrase (or reads `--passphrase-stdin`), unlocks
+  it for this boot first, then plans (and queues, if the app is busy); an app meant to be running starts by itself
+  once its key is back, and the CLI follows that start instead of planning a second one.
 
 ## 2. Engine model
 
@@ -68,7 +78,10 @@ existing BUSY guard and every background actor's "skip a busy app" keep working 
 - `POST /v1/operations {action: {kind, instanceId}}` with an Idempotency-Key **queues an action** of a queueable kind
   (`start|stop|restart|update|remove|reinstall|purge`) for an existing app, busy or not. Inserts an operation row with
   `plan_id NULL`, `request_json`, actor = the caller, state `queued`, event "<kind> queued for <app>; planned when its
-  turn comes". The same kind already waiting (not picked) for that app returns that item (`created: false`). Refused:
+  turn comes". A duplicate per §1 (the app's last unfinished item, same kind, still waiting, not an internal actor's;
+  for update any unfinished update) returns that item (`created: false`); its idempotency key is remembered in memory
+  (bounded) so a retry with that key returns the same item, and the same key with another request is
+  `IDEMPOTENCY_CONFLICT`. Refused:
   unknown app (NOT_FOUND), a kind outside the list (INVALID_REQUEST), an app whose full uninstall waits ahead
   (INVALID_STATE). No plan-time checks run now; they run at its turn.
 - `applyAllUpdates` queues an action for a busy app instead of skipping it, and skips one with an update already
@@ -103,7 +116,8 @@ existing BUSY guard and every background actor's "skip a busy app" keep working 
 - Not cancellable by a person (`NOT_CANCELLABLE`, says why): operations Harbor queues to protect something: actors
   `drive-guard`, `link-guard`, `lock-guard` and the backup `scheduler`'s cold pass (manual *Back up now* runs too).
   Person, CLI and `auto-update` items are cancellable. `OperationDto.cancellable` tells the client. New accounts may
-  not take an internal actor name as their username (`src/actors.ts`).
+  not take an internal actor name as their username (`INTERNAL_ACTORS` in `src/contracts/api.ts`); `enroll --reset`
+  may keep an existing one.
 - One release helper (`cancelNeverRun`) serves a person's cancel, the shutdown path (§2.4) and restart recovery
   (§2.6): state `cancelled`, `finished_at`, error `{code: 'CANCELLED', message, nextAction}`, event; drop its in-memory
   handovers (operator secrets, submitted settings, install-location/Start passphrase; the adopt key is locked again);

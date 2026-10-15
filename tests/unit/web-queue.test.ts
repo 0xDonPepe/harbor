@@ -70,14 +70,19 @@ describe('the same action twice (C10, R6, R7)', () => {
   });
   it('an item Harbor queued itself never stands in for the operator’s own action', () => {
     expect(alreadyQueued([op({ kind: 'stop', actor: 'drive-guard', cancellable: false })], 'i1', 'stop')).toBeNull();
-    expect(alreadyQueued([op({ kind: 'update', actor: 'auto-update' })], 'i1', 'update')).toBeNull();
     expect(alreadyQueued([op({ kind: 'start', actor: 'lock-guard', cancellable: false })], 'i1', 'start')).toBeNull();
   });
   it('a running Update is a duplicate of a second Update (that one would fail at its turn)', () => {
     const upd = op({ id: 'u', kind: 'update', state: 'applying', startedAt: 't', cancellable: false });
     expect(alreadyQueued([upd], 'i1', 'update')).toBe(upd);
     expect(alreadyQueued([op({ id: 'u2', kind: 'update', state: 'queued', startedAt: 't' })], 'i1', 'update')?.id).toBe('u2');
-    expect(alreadyQueued([upd, op({ kind: 'stop' })], 'i1', 'update')).toBeNull(); // the update is not the last item
+  });
+  it('any unfinished Update of the app stands for a second one, wherever it is and whoever queued it (review round 3)', () => {
+    const upd = op({ id: 'u', kind: 'update' });
+    expect(alreadyQueued([upd, op({ kind: 'stop' })], 'i1', 'update')).toBe(upd);
+    const auto = op({ id: 'a', kind: 'update', actor: 'auto-update' });
+    expect(alreadyQueued([auto], 'i1', 'update')).toBe(auto);
+    expect(alreadyQueued([op({ kind: 'stop' })], 'i1', 'update')).toBeNull();
   });
 });
 

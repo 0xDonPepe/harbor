@@ -438,27 +438,64 @@ async function planOrQueue(api: ApiClient, kind: QueueableKind, ref: string, opt
   return null;
 }
 
-// A locked custom-passphrase app refuses its start while the plan is MADE (decision 183 review R2), busy or free: read
-// the passphrase (--passphrase-stdin, or a hidden prompt on a terminal), unlock the app with it for this boot, then plan
-// again (nothing is left to hand over, so a busy app gets the start queued). Without a terminal and without
-// --passphrase-stdin it stops with the refusal and says how to hand the passphrase over.
+// A locked custom-passphrase app refuses its start while the plan is MADE (decision 183 review R2), busy or free, and a
+// start queued for it would only meet that refusal at its turn (review round 3). So a locked home is unlocked FIRST:
+// read the passphrase (--passphrase-stdin, or a hidden prompt on a terminal), unlock it for this boot, then plan (a busy
+// app gets the start queued, nothing is left to hand over). Without a terminal and without --passphrase-stdin it stops
+// with the refusal and says how to hand the passphrase over. The refusal is still caught for a home that locked
+// between the read and the plan.
 async function startPlanOrQueue(api: ApiClient, ref: string, opts: { yes: boolean; wait: boolean; handover: { passphraseStdin: boolean } }): Promise<PlanDto | null> {
+  const inst = await resolveInstance(api, ref);
+  const lockedHome = inst.home?.state === 'locked' && !inst.home.defaultKey;
+  if (lockedHome) return (await unlockForStart(api, inst, opts, `${inst.displayName ?? inst.name} is locked`)) ? null : planOrQueue(api, 'start', ref, { yes: opts.yes, wait: opts.wait });
   try {
     return await planOrQueue(api, 'start', ref, opts);
   } catch (e) {
     if (!HarborError.is(e, 'INVALID_STATE') || !/is locked/.test(e.message)) throw e;
-    const inst = await resolveInstance(api, ref);
     // a home opened by Harbor's own key unlocks at login, not with a passphrase: its refusal already says so
     if (inst.home?.defaultKey) throw e;
-    if (!opts.handover.passphraseStdin && !process.stdin.isTTY) {
-      throw new HarborError('INVALID_STATE', e.message, { nextAction: `Pipe its passphrase (or 12-word recovery key) with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name} first, then start it again.` });
-    }
-    const passphrase = opts.handover.passphraseStdin ? (await readStdinAll()).trim() : await promptHidden('App passphrase (or 12-word recovery key): ');
-    if (!passphrase) throw new HarborError('INVALID_REQUEST', 'no passphrase was given; nothing was done', { nextAction: `Pipe its passphrase with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name}.` });
-    await api.post<InstanceSummary>(`/v1/instances/${inst.id}/unlock`, { passphrase });
-    if (!globals().json) process.stderr.write(`${inst.displayName ?? inst.name} unlocked for this boot.\n`);
-    return planOrQueue(api, 'start', ref, { yes: opts.yes, wait: opts.wait });
+    return (await unlockForStart(api, inst, opts, e.message)) ? null : planOrQueue(api, 'start', ref, { yes: opts.yes, wait: opts.wait });
   }
+}
+
+// Unlock a locked app for its start. Returns true when Harbor started it on its own meanwhile (nothing left to do):
+// an app that should be running starts by itself once its key is back (the observer's lock-guard start, decision 164),
+// and planning a second start next to that one would fail as busy or changed although the app runs.
+async function unlockForStart(api: ApiClient, inst: InstanceSummary, opts: { handover: { passphraseStdin: boolean } }, refusal: string): Promise<boolean> {
+  if (!opts.handover.passphraseStdin && !process.stdin.isTTY) {
+    throw new HarborError('INVALID_STATE', refusal, { nextAction: `Pipe its passphrase (or 12-word recovery key) with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name} first, then start it again.` });
+  }
+  const passphrase = opts.handover.passphraseStdin ? (await readStdinAll()).trim() : await promptHidden('App passphrase (or 12-word recovery key): ');
+  if (!passphrase) throw new HarborError('INVALID_REQUEST', 'no passphrase was given; nothing was done', { nextAction: `Pipe its passphrase with --passphrase-stdin, or run ${PRODUCT.cliName} unlock ${inst.name}.` });
+  await api.post<InstanceSummary>(`/v1/instances/${inst.id}/unlock`, { passphrase });
+  const label = inst.displayName ?? inst.name;
+  if (!globals().json) process.stderr.write(`${label} unlocked for this boot.\n`);
+  if (inst.desired !== 'running') return false;
+  const policy = await api.get<HostStorageDto>('/v1/host/storage').catch(() => null);
+  if (policy?.storagePolicy.autoStart === false) return false;
+  // Harbor's own start follows within one observer tick (10 s): follow it instead of planning another
+  for (let i = 0; i < 30; i++) {
+    const queue = await api.get<OperationQueueDto>('/v1/operations?recent=0');
+    const own = queue.active.find((o) => o.instanceId === inst.id && o.kind === 'start');
+    if (own) {
+      if (!globals().json) process.stderr.write(`Harbor is starting ${label} now that its key is back; following it…\n`);
+      const op = await waitOperation(api, own.id, true);
+      out(op, () => operationSummary(op));
+      if (op.state !== 'succeeded') {
+        alreadyReported = true;
+        throw new HarborError((op.error?.code as HarborError['code']) ?? 'OPERATION_FAILED', op.error?.message ?? `${op.kind} ${op.state}`, { nextAction: op.error?.nextAction ?? '', operationId: op.id });
+      }
+      return true;
+    }
+    const now = await api.get<InstanceSummary>(`/v1/instances/${inst.id}`).catch(() => null);
+    if (now?.runtime === 'running') {
+      out(now, () => `${label} is running.`);
+      return true;
+    }
+    if (queue.active.some((o) => o.instanceId === inst.id)) return false; // something else of its own is queued: plan behind it
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
 }
 
 program

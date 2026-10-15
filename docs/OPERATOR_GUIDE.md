@@ -243,7 +243,9 @@ because something else is running: what you approve joins the **queue** and runs
   its turn comes Harbor makes the plan against the app as it is then and runs it, the way automatic updates do. If
   that plan needs something only you can give (a new permission to accept, a value to type, a passphrase), the item
   stops as **Needs your review** and nothing changes: open the app and choose the action again to review it. The same
-  action already waiting is not queued twice (*Already queued: Update Immich*, with its Cancel). Other changes
+  action already last in line is not queued twice (*Already queued: Update Immich*, with its Cancel; *Already running*
+  for an update in progress), and the page offers what fits after what is queued (after a waiting Stop: Start, not
+  Restart). Other changes
   (publishing, settings, moving, restoring), and any review where you already typed a value or ticked a permission,
   wait for the app in their review, then show the plan again.
 - **The queue** sits at the bottom right: the running item with its progress, the waiting items in the order they
@@ -261,7 +263,10 @@ because something else is running: what you approve joins the **queue** and runs
 `harbor queue` shows the same list (`--json` for scripts) and `harbor queue cancel <operation>` cancels a waiting item.
 On a busy app, `harbor start|stop|restart|update|remove|reinstall|purge` offers to queue the action (`--yes` accepts);
 with `--accept-permissions`, `--passphrase-stdin` or values (`--set`, `--secret`, `--link`, storage) it waits for the
-app instead, then plans and asks as before.
+app instead, then plans and asks as before. `harbor start` on a locked app asks for its passphrase (or reads
+`--passphrase-stdin`), unlocks it for this boot and starts it, busy or not. New accounts cannot be called like one of
+Harbor's own actors (`scheduler`, `auto-update`, `drive-guard`, …); an existing one should be renamed, because its
+queued items would read as Harbor's own and could not be cancelled.
 
 ### Full uninstall
 

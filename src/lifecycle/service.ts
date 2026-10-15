@@ -3253,14 +3253,16 @@ export function notificationLink(kind: string): string | null {
 
 // Decision 183 dedupe (the console's alreadyQueued applies the same rule): a queued action of kind `kind` is the
 // existing item X only when X is the app's LAST not-final item (nothing waits after it), X has that kind, X is not
-// Harbor's own (an internal actor: a guard's stop, a scheduler's backup, an auto-update), and X still waits; for an
-// update, one already running counts too. `active` = the app's not-final operations in run order.
+// Harbor's own (an internal actor: a guard's stop, a scheduler's backup, an auto-update), and X still waits. An update
+// is different: order and actor do not matter (a second update after any unfinished one, running or waiting, an
+// auto-update's included, could only fail with "already runs revision N"), so the first one stands for it.
+// `active` = the app's not-final operations in run order.
 export function sameQueuedAction<T extends { kind: string; actor: string; state: string; startedAt: string | null }>(active: readonly T[], kind: QueueableKind): T | null {
+  if (kind === 'update') return active.find((o) => o.kind === 'update') ?? null;
   const last = active[active.length - 1];
   if (!last || last.kind !== kind) return null;
   if ((INTERNAL_ACTORS as readonly string[]).includes(last.actor.toLowerCase())) return null;
-  const waiting = last.state === 'queued' && last.startedAt === null;
-  return waiting || kind === 'update' ? last : null;
+  return last.state === 'queued' && last.startedAt === null ? last : null;
 }
 
 // Decision 164: each kind of notification brings its own call to action (first = primary). Derived, not

@@ -180,9 +180,17 @@ describe('the queue dedupe rule (decision 183 review R1/R3/R7)', () => {
     expect(sameQueuedAction([item('stop', { actor: 'Drive-Guard' })], 'stop')).toBeNull();
     expect(sameQueuedAction([item('stop', { startedAt: 't' })], 'stop')).toBeNull();
     expect(sameQueuedAction([item('restart', { state: 'applying', startedAt: 't' })], 'restart')).toBeNull();
+  });
+  it('an update: any unfinished update of the app, wherever it is and whoever queued it (a second one could only fail; review round 3)', () => {
     const running = item('update', { state: 'verifying', startedAt: 't' });
     expect(sameQueuedAction([running], 'update')).toBe(running);
-    expect(sameQueuedAction([item('update', { actor: 'auto-update', state: 'applying', startedAt: 't' })], 'update')).toBeNull();
+    const auto = item('update', { actor: 'auto-update', state: 'applying', startedAt: 't' });
+    expect(sameQueuedAction([auto], 'update')).toBe(auto);
+    const waitingAuto = item('update', { actor: 'auto-update' });
+    expect(sameQueuedAction([item('install', { state: 'applying', startedAt: 't' }), waitingAuto], 'update')).toBe(waitingAuto);
+    const first = item('update');
+    expect(sameQueuedAction([first, item('stop')], 'update')).toBe(first);
+    expect(sameQueuedAction([item('stop')], 'update')).toBeNull();
   });
 });
 

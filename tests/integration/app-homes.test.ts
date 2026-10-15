@@ -328,12 +328,29 @@ describe('install to an encrypted app home', () => {
       delete h.fake.behaviour.respond;
       const busy = await pending;
       expect(busy.code, busy.stderr).toBe(0);
-      expect(busy.stderr).toMatch(/Waiting for the running/);
+      // review round 3: the locked home is unlocked first, then the start is queued behind the app's own restart
+      expect(busy.stderr).toMatch(/unlocked for this boot/);
+      expect(busy.stderr).toMatch(/Queued start of/);
       expect((await h.api.instances()).find((i) => i.id === driveInstanceId)!).toMatchObject({ runtime: 'running', home: { state: 'unlocked' } });
       expect((await h.api.waitOperation(other.operationId)).state).toBe('succeeded');
     } finally {
       delete h.fake.behaviour.respond;
     }
+
+    // review round 3: an app that should be running starts by itself once its key is back (lock-guard). The CLI
+    // follows that start instead of planning a second one that would fail as busy or changed although the app runs.
+    const stop3 = await h.api.plan({ kind: 'stop', instanceId: driveInstanceId });
+    expect((await h.api.waitOperation((await h.api.submit(stop3.id)).operationId)).state).toBe('succeeded');
+    await h.api.expect<InstanceSummary>(200, 'POST', `/v1/instances/${driveInstanceId}/lock`, {});
+    h.daemon.ctx.repo.updateInstance(driveInstanceId, { desired: 'running' }); // as after a reboot: locked, meant to run
+    const failedBefore = h.daemon.ctx.repo.listOperations(500).filter((o) => o.instanceId === driveInstanceId && o.state === 'failed').length;
+    const auto = await cli(['start', name, '--yes', '--passphrase-stdin'], `${PASS}\n`);
+    expect(auto.code, auto.stderr).toBe(0);
+    expect(auto.stderr).toMatch(/unlocked for this boot/);
+    expect((await h.api.instances()).find((i) => i.id === driveInstanceId)!).toMatchObject({ runtime: 'running', home: { state: 'unlocked' } });
+    const ops = h.daemon.ctx.repo.listOperations(500).filter((o) => o.instanceId === driveInstanceId);
+    expect(ops.filter((o) => o.state === 'failed').length).toBe(failedBefore); // no second start failed next to Harbor's own
+    expect(ops.some((o) => o.kind === 'start' && o.actor === 'lock-guard' && o.state === 'succeeded')).toBe(true);
   });
 });
 

@@ -40,8 +40,9 @@ bar); the waiting ones (*Update Immich · waiting*), each with **Cancel** (acces
 or, when Harbor queued it to protect something (drive guard, link guard, lock guard, a backup run), one
 quiet line saying why it cannot be cancelled; then the finished operations, each with today's result (Open, next
 step, shown-once credentials and recovery cards, error code + next action, *Technical steps*) and its own Dismiss.
-The tray keeps what this console accepted (any outcome), anything that shows a value once, and failures of any
-actor; background successes this console only watched (a nightly backup, an auto-update) leave on their own.
+The tray keeps every item a person started (by its actor: Update all, adopt, other tabs and reloads included),
+anything that shows a value once, and failures of any actor; successes of Harbor's own actors (a nightly backup, an
+auto-update) leave on their own.
 **Clear finished** clears everything except a password or recovery words, which stay until acknowledged. No button
 anywhere is disabled because another operation runs: a Start/Stop/Restart/Update/Remove/Reinstall/Uninstall on a
 busy app (installing included) opens the review in *queue mode* (no plan; "Harbor is installing Immich right now.

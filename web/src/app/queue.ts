@@ -81,9 +81,11 @@ export const byHarbor = (actor: string) => (INTERNAL_ACTORS as readonly string[]
 // still waiting. A running one is no duplicate, except a running Update: a second one would fail at its turn.
 export function alreadyQueued(active: OperationDto[], instanceId: string, kind: string): OperationDto | null {
   const mine = active.filter((o) => o.instanceId === instanceId && !isFinal(o));
+  // an update: any unfinished one of the app stands for a second (it could only fail), whoever queued it
+  if (kind === 'update') return mine.find((o) => o.kind === 'update') ?? null;
   const last = mine[mine.length - 1];
   if (!last || last.kind !== kind || byHarbor(last.actor)) return null;
-  return kind === 'update' || !isRunning(last) ? last : null;
+  return !isRunning(last) ? last : null;
 }
 
 // A review the operator gave values in (typed secrets, accepted permissions, changed settings). Approving it while

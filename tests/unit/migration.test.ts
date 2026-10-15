@@ -163,3 +163,51 @@ describe('state migration v11 -> v12 (decision 165)', () => {
     opened.close();
   });
 });
+
+describe('state migration v12 -> v13 (decision 183)', () => {
+  it('rebuilds operations in run order, with a nullable plan, request_json and the cancelled state', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'harbor-mig13-'));
+    const db = new Database(path.join(dir, 'harbor.db'));
+    db.exec(V1);
+    db.pragma('user_version = 1');
+    db.prepare("INSERT INTO installation VALUES ('11111111-1111-4111-8111-111111111111', 1, '2026-01-01T00:00:00Z', '{}')").run();
+    db.prepare(`INSERT INTO instances (id, name, project, package_id, revision, desired, install_state, runtime, readiness, release_dir, release_hashes_json, endpoints_json, secrets_json, created_at, updated_at)
+      VALUES ('22222222-2222-4222-8222-222222222222', 'excalidraw', 'hb_x', 'excalidraw', '1', 'running', 'installed', 'running', 'healthy', 'instances/x/release', '{}', '[]', '[]', 't', 't')`).run();
+    db.close();
+    // Bring it to the current schema, then put back the v12 shape of operations.
+    openState(dir).close();
+    const v12 = new Database(path.join(dir, 'harbor.db'));
+    v12.pragma('foreign_keys = OFF');
+    v12.exec(`
+      DROP TABLE operations;
+      CREATE TABLE operations (id TEXT PRIMARY KEY, idempotency_key TEXT NOT NULL UNIQUE, plan_id TEXT NOT NULL UNIQUE REFERENCES plans(id), actor TEXT NOT NULL, kind TEXT NOT NULL, instance_id TEXT NOT NULL REFERENCES instances(id), state TEXT NOT NULL CHECK (state IN ('queued','applying','verifying','succeeded','failed','needs_action')), phase TEXT NOT NULL, created_at TEXT NOT NULL, started_at TEXT, finished_at TEXT, error_code TEXT, error_message TEXT, next_action TEXT, result_json TEXT);
+    `);
+    // Same second, ids out of alphabetical order: insertion order is the run order.
+    const ids = ['cccccccc-0000-4000-8000-000000000000', 'aaaaaaaa-0000-4000-8000-000000000000', 'bbbbbbbb-0000-4000-8000-000000000000'];
+    ids.forEach((id, i) => {
+      const plan = `${String(i + 3).repeat(8)}-3333-4333-8333-333333333333`;
+      v12.prepare("INSERT INTO plans VALUES (?, 'admin', 'start', '22222222-2222-4222-8222-222222222222', '{}', 0, 't', 't', ?)").run(plan, id);
+      v12.prepare("INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, result_json) VALUES (?, ?, ?, 'admin', 'start', '22222222-2222-4222-8222-222222222222', ?, 'x', '2026-10-15T09:00:00Z', ?)").run(id, `k${i}`, plan, i === 0 ? 'succeeded' : 'queued', i === 0 ? '{"ok":true}' : null);
+    });
+    v12.prepare("INSERT INTO plans VALUES ('99999999-3333-4333-8333-333333333333', 'admin', 'start', '22222222-2222-4222-8222-222222222222', '{}', 0, 't', 't', '00000000-0000-4000-8000-000000000000')").run();
+    v12.prepare("INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at) VALUES ('00000000-0000-4000-8000-000000000000', 'k-early', '99999999-3333-4333-8333-333333333333', 'admin', 'start', '22222222-2222-4222-8222-222222222222', 'failed', 'failed', '2026-10-15T08:00:00Z')").run();
+    v12.pragma('user_version = 12');
+    v12.close();
+
+    const opened = openState(dir);
+    expect(opened.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
+    const rows = opened.prepare('SELECT id, state, result_json, request_json FROM operations ORDER BY rowid').all() as { id: string; state: string; result_json: string | null; request_json: string | null }[];
+    expect(rows.map((r) => r.id)).toEqual(['00000000-0000-4000-8000-000000000000', ...ids]);
+    expect(rows.map((r) => r.state)).toEqual(['failed', 'succeeded', 'queued', 'queued']);
+    expect(rows[1]!.result_json).toBe('{"ok":true}');
+    expect(rows.every((r) => r.request_json === null)).toBe(true);
+    // a queued action has no plan yet; cancelled is a state now; nonsense still is not
+    opened.prepare(`INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, request_json) VALUES ('dddddddd-0000-4000-8000-000000000000', 'k-q1', NULL, 'admin', 'update', '22222222-2222-4222-8222-222222222222', 'queued', 'queued', 't', '{"kind":"update"}')`).run();
+    opened.prepare("INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at) VALUES ('eeeeeeee-0000-4000-8000-000000000000', 'k-q2', NULL, 'admin', 'stop', '22222222-2222-4222-8222-222222222222', 'cancelled', 'cancelled', 't')").run();
+    expect(() => opened.prepare("INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at) VALUES ('ffffffff-0000-4000-8000-000000000000', 'k-q3', NULL, 'admin', 'stop', '22222222-2222-4222-8222-222222222222', 'paused', 'x', 't')").run()).toThrow(/CHECK/);
+    // a plan is still consumed by one operation only
+    expect(() => opened.prepare("INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at) VALUES ('ffffffff-1111-4000-8000-000000000000', 'k-q4', '33333333-3333-4333-8333-333333333333', 'admin', 'stop', '22222222-2222-4222-8222-222222222222', 'queued', 'x', 't')").run()).toThrow(/UNIQUE/);
+    expect(opened.pragma('foreign_key_check')).toEqual([]);
+    opened.close();
+  });
+});

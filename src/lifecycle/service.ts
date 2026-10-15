@@ -2,7 +2,7 @@ import { accessSync, constants, existsSync, mkdirSync, readdirSync, rmSync, stat
 import path from 'node:path';
 import { UUID_RE } from '../contracts/patterns.js';
 import { tagValue } from '../backups/restic.js';
-import type { AppLinkDto, FixedPortDto, LinkChoice, LinkDto } from '../contracts/api.js';
+import { QUEUEABLE_KINDS, type AppLinkDto, type FixedPortDto, type LinkChoice, type LinkDto, type QueueableKind } from '../contracts/api.js';
 import type { LinkClaim, Manifest, ManifestPermission, ManifestSetting, SecretClaim, SettingValue } from '../contracts/types.js';
 import { fixedPortClaim, fixedPortsOf, newPermissions, PERMISSION_LABEL, permissionDto, permissionsOf } from '../planner/permissions.js';
 import { gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf } from '../planner/gpu.js';
@@ -10,7 +10,7 @@ import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
 import { checkSubmittedSettings, formatSettingValue, installSettingChanges, plannedConfigureSettings, plannedInstallSettings, plannedUpdateSettings, settingDtos } from '../planner/settings.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
-import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, GpuDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, PermissionDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
+import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, GpuDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, PermissionDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, OperationQueueDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
 import { lanAppHost, lanNames, lanUrl } from '../system/lan.js';
 import { caPem, ensureTlsCerts, HTTPS_ONLY_SETTING, httpsOnlyOn, lanHttpsHosts, readTlsState, reconcileLanHttps, runtimeLanAccess } from '../system/lan-https.js';
@@ -21,7 +21,7 @@ import { sampleMetrics } from '../system/metrics.js';
 import type { LoadedPackage } from '../contracts/types.js';
 import { compareRevisions, type PackageStore } from '../packages/store.js';
 import { browserUrlFor, managementOrigin } from '../config.js';
-import { HarborError } from '../errors.js';
+import { HarborError, personCanResolve } from '../errors.js';
 import { copyNote, identityFor, oneCopyNextAction, ownedVolumeName, proposeName, type InstanceIdentity } from '../planner/identity.js';
 import { allocateEndpoints } from '../planner/ports.js';
 import { renderCompose } from '../planner/render.js';
@@ -36,12 +36,12 @@ import { INSTALLATION_RECOVERY_SETTING, newInstallationRecoveryKey, openInstalla
 import { stampInstallationRecovery } from '../storage/app-home.js';
 import type { ResourceRow } from '../state/repo.js';
 import { listMounts } from '../system/host-storage.js';
-import type { EndpointAllocation, InstanceRow, OperationRow, PackageSourceRow, PlanProposal, PlanRow } from '../state/repo.js';
+import { FINAL_OPERATION_STATES, type EndpointAllocation, type FinalOperationState, type InstanceRow, type OperationRow, type PackageSourceRow, type PlanProposal, type PlanRow } from '../state/repo.js';
 import { addSeconds, rfc3339 } from '../util.js';
 import { validateGitSourceInput } from '../packages/git.js';
 import { ComposeError } from '../docker/adapter.js';
 import type { Ctx } from './context.js';
-import { exposureDto, instanceSummary, operationDto, planDto } from './dto.js';
+import { exposureDto, instanceSummary, operationDto, operationInstanceName, planDto, PROTECTED_ACTORS } from './dto.js';
 import { ONE_TIME_TTL_MS } from '../state/one-time.js';
 import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
@@ -57,6 +57,13 @@ import { TAILNET_POLICY_ACTOR, TailnetAllPolicy } from './tailnet-all.js';
 export interface SubmitResult {
   operation: OperationRow;
   created: boolean;
+}
+
+export interface SubmitOptions {
+  secrets?: Record<string, string>;
+  settings?: Record<string, SettingValue>;
+  acceptPermissions?: boolean;
+  adoptedHome?: { name: string; metadata: Record<string, unknown> };
 }
 
 // Read paths and the plan/submit contract. Mutations of Docker resources live in the runner.
@@ -443,11 +450,17 @@ export class ApplicationService {
         skipped.push({ instanceId: i.id, name: i.name, reason: `state is ${i.installState}` });
         continue;
       }
-      if (i.activeOperationId) {
-        skipped.push({ instanceId: i.id, name: i.name, reason: 'another operation is running' });
-        continue;
-      }
       try {
+        // decision 183: a busy app gets its update queued behind what it is doing, planned when its turn comes
+        if (i.activeOperationId) {
+          if (this.ctx.repo.activeOperationsOf(i.id).some((o) => o.kind === 'update')) {
+            skipped.push({ instanceId: i.id, name: i.name, reason: 'an update is already queued' });
+            continue;
+          }
+          const r = this.queueAction(i.id, 'update', actor, this.ctx.ids.uuid());
+          started.push({ instanceId: i.id, name: i.name, operationId: r.operation.id });
+          continue;
+        }
         const plan = await this.createPlan({ kind: 'update', instanceId: i.id }, actor);
         const r = this.submit(plan.id, this.ctx.ids.uuid(), actor);
         started.push({ instanceId: i.id, name: i.name, operationId: r.operation.id });
@@ -1757,9 +1770,151 @@ export class ApplicationService {
   operation(id: string): OperationDto {
     const o = this.ctx.repo.operation(id);
     if (!o) throw new HarborError('NOT_FOUND', `unknown operation ${id}`);
-    const dto = operationDto(o, this.ctx.repo.eventsForOperation(id, 200));
+    const dto = operationDto(o, this.ctx.repo.eventsForOperation(id, 200), this.operationName(o));
     const once = this.oneTimeResult(id);
     return once && dto.result ? { ...dto, result: { ...dto.result, ...once } } : dto;
+  }
+
+  // The app's name as an operation shows it (decision 183): a cancelled install's freed row still names its app.
+  private operationName(o: OperationRow): string {
+    const inst = this.ctx.repo.instance(o.instanceId);
+    const planned = o.planId ? this.ctx.repo.plan(o.planId)?.proposal.name : undefined;
+    return operationInstanceName(inst, planned ?? o.instanceId);
+  }
+
+  // GET /v1/operations (decision 183): the queue in run order and the newest finished items (events left out).
+  queue(recent = 10): OperationQueueDto {
+    const q = this.ctx.repo.listQueue(Math.max(0, Math.min(50, recent)));
+    const dto = (o: OperationRow) => operationDto(o, [], this.operationName(o));
+    return { active: q.active.map(dto), recent: q.recent.map(dto) };
+  }
+
+  // Decision 183: queue an action of a queueable kind for an existing app, busy or not, without a plan. Harbor plans
+  // it when its turn comes (OperationRunner → planQueuedAction). Idempotent like submit: same key, same request → same operation.
+  queueAction(instanceId: string, kind: string, actor: string, idempotencyKey: string): SubmitResult {
+    const { repo, ids } = this.ctx;
+    if (!(QUEUEABLE_KINDS as readonly string[]).includes(kind)) throw new HarborError('INVALID_REQUEST', `${kind} cannot be queued without a review`, { nextAction: `Queueable actions: ${QUEUEABLE_KINDS.join(', ')}. Make a plan for anything else.` });
+    const k = kind as QueueableKind;
+    const result = repo.transaction((): SubmitResult => {
+      const existing = repo.operationByIdempotencyKey(idempotencyKey);
+      if (existing) {
+        if (existing.actor === actor && existing.request?.kind === k && existing.request.instanceId === instanceId) return { operation: existing, created: false };
+        throw new HarborError('IDEMPOTENCY_CONFLICT', 'this idempotency key was already used for a different request', { operationId: existing.id });
+      }
+      const inst = repo.instance(instanceId);
+      if (!inst || inst.purgedAt) throw new HarborError('NOT_FOUND', `unknown instance ${instanceId}`);
+      const label = inst.displayName ?? inst.name;
+      if (repo.activeOperationsOf(inst.id).some((o) => o.kind === 'purge')) throw new HarborError('INVALID_STATE', `${label} is being removed completely`, { nextAction: 'Wait for it to finish; there is nothing left to act on afterwards.' });
+      const operationId = ids.uuid();
+      repo.insertQueuedAction({ id: operationId, idempotencyKey, actor, kind: k, instanceId: inst.id });
+      repo.syncActiveOperation(inst.id);
+      repo.addEvent({ operationId, instanceId: inst.id, phase: 'queued', message: `${k} queued for ${label}; planned when its turn comes` });
+      return { operation: repo.operation(operationId)!, created: true };
+    });
+    if (result.created) this.wake();
+    return result;
+  }
+
+  // Decision 183: the runner plans a queued action at its turn, against the app as it is then, and accepts it the
+  // way submit does with no typed values and no permissions accepted. Throws when it cannot be accepted; nothing is
+  // changed then (the plan made here is recorded on the operation and consumed, so it never shows as an open plan).
+  async planQueuedAction(op: OperationRow): Promise<OperationRow> {
+    const { repo } = this.ctx;
+    const req = op.request;
+    if (!req) throw new HarborError('STATE_CHANGED', 'this queued item has no action to plan');
+    const dto = await this.createPlan({ kind: req.kind, instanceId: req.instanceId } as PlanRequest, op.actor, { forOperation: op.id });
+    const plan = repo.plan(dto.id)!;
+    const record = () =>
+      repo.transaction(() => {
+        repo.attachPlan(op.id, plan.id);
+        repo.consumePlan(plan.id, op.id);
+      });
+    try {
+      const required = ((plan.proposal.secrets ?? []) as PlannedSecret[]).filter((s) => s.ask === 'required');
+      if (required.length) throw new HarborError('REVIEW_NEEDED', `it needs a value only you can give: ${required.map((s) => s.prompt ?? s.id).join(', ')}`);
+      repo.transaction(() => {
+        const cur = repo.operation(op.id);
+        if (!cur || cur.state !== 'queued' || cur.planId !== null) throw new HarborError('STATE_CHANGED', 'this queued item changed while it was planned');
+        this.acceptPlan(plan, op.id, {}, op.id);
+        repo.attachPlan(op.id, plan.id);
+        repo.consumePlan(plan.id, op.id);
+        repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'queued', message: `${op.kind} planned at its turn for ${plan.proposal.name}: ${plan.proposal.changes.join('; ')}` });
+      });
+    } catch (e) {
+      record();
+      throw e;
+    }
+    return repo.operation(op.id)!;
+  }
+
+  // Decision 183: cancel a waiting item (never one that started: a running step cannot be stopped safely).
+  // Nothing was done for it, so nothing is undone; what accepting reserved is released.
+  private cancelListeners: ((instanceId: string) => void)[] = [];
+  // Background actors with one-attempt memories (observer guards) forget them for an app whose item was cancelled.
+  onOperationCancelled(fn: (instanceId: string) => void): void {
+    this.cancelListeners.push(fn);
+  }
+  cancelOperation(id: string, actor: string): OperationDto {
+    const { repo } = this.ctx;
+    const op = repo.operation(id);
+    if (!op) throw new HarborError('NOT_FOUND', `unknown operation ${id}`);
+    const what = `${op.kind} of ${this.operationName(op)}`;
+    if (FINAL_OPERATION_STATES.includes(op.state as FinalOperationState)) throw new HarborError('NOT_CANCELLABLE', `the ${what} has finished`, { nextAction: 'Nothing to cancel.' });
+    const protectedWhy = PROTECTED_ACTORS[op.actor];
+    if (protectedWhy) throw new HarborError('NOT_CANCELLABLE', `the ${what} cannot be cancelled: ${protectedWhy}`, { nextAction: 'Let it run; it was queued to protect the app.' });
+    const running = () => new HarborError('NOT_CANCELLABLE', `the ${what} is already running; a running step cannot be stopped safely`, { nextAction: 'Let it finish; harbor queue shows its progress.' });
+    if (op.state !== 'queued' || op.startedAt !== null) throw running();
+    const plans: string[] = [];
+    repo.transaction(() => {
+      if (!repo.cancelOperation(op.id, { message: 'Cancelled by you before it started; nothing was changed.', nextAction: '' })) throw running();
+      repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: `${op.kind} cancelled by ${actor} before it started; nothing was changed` });
+      if (op.planId) plans.push(op.planId);
+      const inst = repo.instance(op.instanceId);
+      if (!inst) return;
+      const plan = op.planId ? repo.plan(op.planId) : null;
+      if (op.kind === 'install' && inst.installState === 'installing' && repo.resources(inst.id).filter((r) => r.role !== '__home__').length === 0) {
+        // a queued install created nothing: free its row, name and ports (as a stale plan does) and its waiting follow-ups
+        for (const f of repo.activeOperationsOf(inst.id)) {
+          if (f.id === op.id || f.startedAt !== null) continue;
+          if (repo.cancelOperation(f.id, { message: `Cancelled with the install of ${inst.name} it was waiting for; nothing was changed.`, nextAction: '' })) {
+            repo.addEvent({ operationId: f.id, instanceId: inst.id, phase: 'cancelled', message: `${f.kind} cancelled: the install it waited for was cancelled` });
+            if (f.planId) plans.push(f.planId);
+          }
+        }
+        repo.updateInstance(inst.id, { lastOperationId: op.id });
+        repo.purgeInstance(inst.id, `${inst.name}~cancelled~${inst.id.slice(0, 8)}`);
+        return;
+      }
+      if (plan?.proposal.ports?.length) {
+        // fixed ports this item claimed that the app's current release does not publish go back
+        let current: Set<number>;
+        try {
+          current = new Set(fixedPortsOf(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, inst.id), 'release'), inst.packageId).manifest).map((p) => p.hostPort));
+        } catch {
+          current = new Set(plan.proposal.ports.map((p) => p.hostPort)); // no readable release: keep every claim
+        }
+        for (const p of plan.proposal.ports) if (!current.has(p.hostPort)) repo.releasePort(p.hostPort, inst.id);
+      }
+      repo.syncActiveOperation(inst.id);
+    });
+    for (const planId of plans) this.dropHandovers(planId);
+    if (op.kind === 'install') this.lockApp(op.instanceId); // an adopt's held key
+    for (const fn of this.cancelListeners) {
+      try {
+        fn(op.instanceId);
+      } catch (e) {
+        this.ctx.log.warn(`a cancel listener failed: ${(e as Error).message}`);
+      }
+    }
+    this.wake();
+    return this.operation(id);
+  }
+
+  // Every in-memory value handed over with a submission, by plan id (decision 183: a cancelled item drops them).
+  private dropHandovers(planId: string): void {
+    this.operatorValues.delete(planId);
+    this.submittedSettings.delete(planId);
+    this.locationSecrets.delete(planId);
   }
 
   // Recovery words an operation minted (decision 165): never written to the operations table (a copy of
@@ -1829,7 +1984,8 @@ export class ApplicationService {
 
   // ---- planning
 
-  async createPlan(req: PlanRequest, actor: string): Promise<PlanDto> {
+  // opts.forOperation (decision 183): the runner plans a queued action at its turn; that operation is the app's active one.
+  async createPlan(req: PlanRequest, actor: string, opts: { forOperation?: string } = {}): Promise<PlanDto> {
     const { repo, clock, ids, config } = this.ctx;
     const now = clock.now();
     const expiresAt = rfc3339(addSeconds(now, config.planTtlSeconds));
@@ -1967,7 +2123,7 @@ export class ApplicationService {
     }
 
     const inst = this.instanceRow(req.instanceId);
-    if (inst.activeOperationId) throw new HarborError('BUSY', `instance ${inst.name} has an active operation`, { operationId: inst.activeOperationId });
+    if (inst.activeOperationId && inst.activeOperationId !== opts.forOperation) throw new HarborError('BUSY', `instance ${inst.name} has an active operation`, { operationId: inst.activeOperationId });
     const pkgName = this.packageMeta(inst).name;
     if (req.kind === 'expose' || req.kind === 'unexpose' || req.kind === 'reconfigure') return this.exposurePlan(req, inst, pkgName, actor, now, expiresAt);
     if (req.kind === 'seal') return this.sealPlan(inst, pkgName, actor, now, expiresAt);
@@ -1997,9 +2153,10 @@ export class ApplicationService {
           // AFU. Otherwise refuse now so the drawer can prompt.
           const reachable = this.unlockedApps.has(inst.id) || (hs.silentUnlock && this.ctx.machineKey.unlocked);
           if (!reachable) {
-            throw new HarborError('INVALID_STATE', `${inst.name} is locked`, {
+            // a queued Start stops here as "needs your review" (decision 183): a person resolves it with a passphrase
+            throw personCanResolve(new HarborError('INVALID_STATE', `${inst.name} is locked`, {
               nextAction: hs.defaultKey ? 'Log in again to unlock apps on this machine, then Start again.' : hs.silentUnlock ? 'Log in again (it unlocks with your Harbor password), or unlock it with its passphrase, then Start again.' : 'Unlock it with its encryption passphrase (or recovery key), then Start again.',
-            });
+            }));
           }
         }
         changes.push(`Verify release, retained volumes and secrets of "${inst.name}"`, `Start existing containers of project ${inst.project}`, 'Check readiness');
@@ -2884,7 +3041,7 @@ export class ApplicationService {
     return v;
   }
 
-  submit(planId: string, idempotencyKey: string, actor: string, opts: { secrets?: Record<string, string>; settings?: Record<string, SettingValue>; acceptPermissions?: boolean; adoptedHome?: { name: string; metadata: Record<string, unknown> } } = {}): SubmitResult {
+  submit(planId: string, idempotencyKey: string, actor: string, opts: SubmitOptions = {}): SubmitResult {
     const { repo, ids } = this.ctx;
     let checked: { store: Record<string, string>; clear: string[] } | null = null;
     let chosen: Record<string, SettingValue> = {};
@@ -2901,79 +3058,11 @@ export class ApplicationService {
         throw new HarborError('IDEMPOTENCY_CONFLICT', `plan ${planId} was already submitted`, { operationId: plan.consumedOperationId, nextAction: 'Poll the existing operation instead of submitting again.' });
       }
       if (new Date(plan.expiresAt).getTime() <= this.ctx.clock.now().getTime()) throw new HarborError('PLAN_EXPIRED', `plan ${planId} expired at ${plan.expiresAt}`);
-      checked = checkSubmittedSecrets((plan.proposal.secrets ?? []) as PlannedSecret[], opts.secrets);
-      chosen = checkSubmittedSettings(plan.proposal.settings ?? [], opts.settings);
-      // Decision 163: permissions are accepted by the person approving, never by default. Update-all, auto-update
-      // and git redeploys submit without it, so an update that asks for more stops here and waits for a person.
-      // Decision 165: so does an update that opens fixed ports the current release does not publish (a release from
-      // a compromised catalog or git source would otherwise open a port to the internet with nobody asked).
-      const asked = plan.proposal.permissions ?? [];
-      const opened = plan.proposal.opensPorts ?? [];
-      if ((asked.length || opened.length) && opts.acceptPermissions !== true) {
-        const what = [...asked.map((p) => `${p.service} ${p.permission}`), ...opened.map((p) => `open port ${p}`)].join(', ');
-        throw new HarborError('PERMISSION_REQUIRED', `${plan.proposal.name} asks for permissions you have not accepted: ${what}`, { nextAction: 'Review them in the plan and approve with them accepted (console: tick the box; CLI: --accept-permissions).' });
-      }
-      // fixed ports (decision 163): the planner checked them; claim them now, unless this instance already holds one
-      const fixedClaims = (instanceId: string) => {
-        const claims = repo.claimedPorts();
-        for (const p of plan.proposal.ports ?? []) {
-          const held = claims.find((c) => c.port === p.hostPort);
-          if (held && held.instanceId === instanceId) continue;
-          if (held) throw new HarborError('PORT_CONFLICT', `port ${p.hostPort} was claimed by another app since planning`);
-          repo.claimPort(p.hostPort, instanceId, fixedPortClaim(p.id));
-        }
-      };
-
       const operationId = ids.uuid();
-      if (plan.kind === 'install') {
-        if (repo.instanceByName(plan.proposal.name)) throw new HarborError('NAME_CONFLICT', `instance name ${plan.proposal.name} is no longer free`);
-        if (repo.instance(plan.instanceId)) throw new HarborError('STATE_CHANGED', 'plan instance already exists');
-        // Install-location plans need their passphrase at submit time (it is
-        // never in the plan itself). Refuse here — not at apply — so a missing
-        // secret fails fast with a clear error instead of a stuck operation.
-        // Default-key plans (data folder) carry no passphrase: pre-seed the
-        // marker so the single-use check passes without operator input.
-        if (plan.proposal.location && !this.locationSecrets.has(planId)) {
-          if (plan.proposal.location.defaultKey === true) this.locationSecrets.set(planId, 'default-key');
-          else throw new HarborError('INVALID_REQUEST', 'this plan installs the app encrypted on a drive: submit the encryption passphrase with it', { nextAction: 'Submit again with the passphrase shown at install time.' });
-        }
-        const claimed = new Set(repo.claimedPorts().map((c) => c.port));
-        for (const e of plan.proposal.endpoints) {
-          if (claimed.has(e.hostPort)) throw new HarborError('PORT_CONFLICT', `port ${e.hostPort} was claimed by another operation since planning`);
-        }
-        repo.insertInstance({
-          id: plan.instanceId,
-          name: plan.proposal.name,
-          project: plan.proposal.project,
-          packageId: plan.proposal.packageId,
-          revision: plan.proposal.revision,
-          generation: 0,
-          desired: 'running',
-          installState: 'installing',
-          runtime: 'unknown',
-          readiness: 'unknown',
-          everInstalled: false,
-          releaseDir: path.join('instances', plan.instanceId, 'release'),
-          releaseHashes: plan.proposal.releaseHashes,
-          endpoints: plan.proposal.endpoints,
-          secrets: [],
-          activeOperationId: operationId,
-          autoUpdate: repo.setting<boolean>('updates.autoDefault') ?? false,
-        });
-        for (const e of plan.proposal.endpoints) repo.claimPort(e.hostPort, plan.instanceId, e.id);
-        fixedClaims(plan.instanceId);
-        // adopt (adoptApp): the drive's home, recorded with the instance it belongs to, before the runner looks for it
-        if (opts.adoptedHome) repo.upsertResource({ instanceId: plan.instanceId, kind: 'volume', role: '__home__', dockerId: null, name: opts.adoptedHome.name, token: null, metadata: opts.adoptedHome.metadata });
-      } else {
-        const inst = repo.instance(plan.instanceId);
-        if (!inst) throw new HarborError('NOT_FOUND', `instance ${plan.instanceId} no longer exists`);
-        if (inst.generation !== plan.expectedGeneration) throw new HarborError('STATE_CHANGED', `instance ${inst.name} changed since the plan was created (generation ${inst.generation}, expected ${plan.expectedGeneration})`);
-        if (inst.activeOperationId) throw new HarborError('BUSY', `instance ${inst.name} has an active operation`, { operationId: inst.activeOperationId });
-        fixedClaims(inst.id);
-        repo.updateInstance(inst.id, { activeOperationId: operationId });
-      }
+      ({ checked, chosen } = this.acceptPlan(plan, operationId, opts));
       repo.insertOperation({ id: operationId, idempotencyKey, planId, actor, kind: plan.kind, instanceId: plan.instanceId });
       repo.consumePlan(planId, operationId);
+      repo.syncActiveOperation(plan.instanceId);
       repo.addEvent({ operationId, instanceId: plan.instanceId, phase: 'queued', message: `${plan.kind} accepted for instance ${plan.proposal.name}` });
       const chosenLines = Object.entries(chosen).map(([id, v]) => {
         const def = (plan.proposal.settings ?? []).find((x) => x.id === id)!;
@@ -3000,6 +3089,85 @@ export class ApplicationService {
     }
     if (result.created) this.wake();
     return result;
+  }
+
+  // The accept half of submit, inside its transaction: the submitted values checked, permissions accepted or refused,
+  // ports claimed, an install's row created. Decision 183: also accepts a queued action planned at its turn
+  // (`queuedOperation` = that operation, already the app's active one).
+  private acceptPlan(plan: PlanRow, operationId: string, opts: SubmitOptions, queuedOperation?: string): { checked: { store: Record<string, string>; clear: string[] }; chosen: Record<string, SettingValue> } {
+    const { repo } = this.ctx;
+    const planId = plan.id;
+    const checked = checkSubmittedSecrets((plan.proposal.secrets ?? []) as PlannedSecret[], opts.secrets);
+    const chosen = checkSubmittedSettings(plan.proposal.settings ?? [], opts.settings);
+    // Decision 163: permissions are accepted by the person approving, never by default. Update-all, auto-update
+    // and git redeploys submit without it, so an update that asks for more stops here and waits for a person.
+    // Decision 165: so does an update that opens fixed ports the current release does not publish (a release from
+    // a compromised catalog or git source would otherwise open a port to the internet with nobody asked).
+    const asked = plan.proposal.permissions ?? [];
+    const opened = plan.proposal.opensPorts ?? [];
+    if ((asked.length || opened.length) && opts.acceptPermissions !== true) {
+      const what = [...asked.map((p) => `${p.service} ${p.permission}`), ...opened.map((p) => `open port ${p}`)].join(', ');
+      throw new HarborError('PERMISSION_REQUIRED', `${plan.proposal.name} asks for permissions you have not accepted: ${what}`, { nextAction: 'Review them in the plan and approve with them accepted (console: tick the box; CLI: --accept-permissions).' });
+    }
+    // fixed ports (decision 163): the planner checked them; claim them now, unless this instance already holds one
+    const fixedClaims = (instanceId: string) => {
+      const claims = repo.claimedPorts();
+      for (const p of plan.proposal.ports ?? []) {
+        const held = claims.find((c) => c.port === p.hostPort);
+        if (held && held.instanceId === instanceId) continue;
+        if (held) throw new HarborError('PORT_CONFLICT', `port ${p.hostPort} was claimed by another app since planning`);
+        repo.claimPort(p.hostPort, instanceId, fixedPortClaim(p.id));
+      }
+    };
+
+    if (plan.kind === 'install') {
+      if (repo.instanceByName(plan.proposal.name)) throw new HarborError('NAME_CONFLICT', `instance name ${plan.proposal.name} is no longer free`);
+      if (repo.instance(plan.instanceId)) throw new HarborError('STATE_CHANGED', 'plan instance already exists');
+      // Install-location plans need their passphrase at submit time (it is
+      // never in the plan itself). Refuse here — not at apply — so a missing
+      // secret fails fast with a clear error instead of a stuck operation.
+      // Default-key plans (data folder) carry no passphrase: pre-seed the
+      // marker so the single-use check passes without operator input.
+      if (plan.proposal.location && !this.locationSecrets.has(planId)) {
+        if (plan.proposal.location.defaultKey === true) this.locationSecrets.set(planId, 'default-key');
+        else throw new HarborError('INVALID_REQUEST', 'this plan installs the app encrypted on a drive: submit the encryption passphrase with it', { nextAction: 'Submit again with the passphrase shown at install time.' });
+      }
+      const claimed = new Set(repo.claimedPorts().map((c) => c.port));
+      for (const e of plan.proposal.endpoints) {
+        if (claimed.has(e.hostPort)) throw new HarborError('PORT_CONFLICT', `port ${e.hostPort} was claimed by another operation since planning`);
+      }
+      repo.insertInstance({
+        id: plan.instanceId,
+        name: plan.proposal.name,
+        project: plan.proposal.project,
+        packageId: plan.proposal.packageId,
+        revision: plan.proposal.revision,
+        generation: 0,
+        desired: 'running',
+        installState: 'installing',
+        runtime: 'unknown',
+        readiness: 'unknown',
+        everInstalled: false,
+        releaseDir: path.join('instances', plan.instanceId, 'release'),
+        releaseHashes: plan.proposal.releaseHashes,
+        endpoints: plan.proposal.endpoints,
+        secrets: [],
+        activeOperationId: operationId,
+        autoUpdate: repo.setting<boolean>('updates.autoDefault') ?? false,
+      });
+      for (const e of plan.proposal.endpoints) repo.claimPort(e.hostPort, plan.instanceId, e.id);
+      fixedClaims(plan.instanceId);
+      // adopt (adoptApp): the drive's home, recorded with the instance it belongs to, before the runner looks for it
+      if (opts.adoptedHome) repo.upsertResource({ instanceId: plan.instanceId, kind: 'volume', role: '__home__', dockerId: null, name: opts.adoptedHome.name, token: null, metadata: opts.adoptedHome.metadata });
+    } else {
+      const inst = repo.instance(plan.instanceId);
+      if (!inst) throw new HarborError('NOT_FOUND', `instance ${plan.instanceId} no longer exists`);
+      if (inst.generation !== plan.expectedGeneration) throw new HarborError('STATE_CHANGED', `instance ${inst.name} changed since the plan was created (generation ${inst.generation}, expected ${plan.expectedGeneration})`);
+      // a reviewed plan for a busy app waits for it (decision 173); only a queued action joins its queue (decision 183)
+      if (inst.activeOperationId && inst.activeOperationId !== queuedOperation) throw new HarborError('BUSY', `instance ${inst.name} has an active operation`, { operationId: inst.activeOperationId });
+      fixedClaims(inst.id);
+    }
+    return { checked, chosen };
   }
 }
 

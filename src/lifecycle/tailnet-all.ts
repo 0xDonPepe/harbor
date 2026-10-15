@@ -225,8 +225,10 @@ export class TailnetAllPolicy {
         this.inFlight.delete(instanceId);
         continue;
       }
-      if (op.state !== 'succeeded' && op.state !== 'failed' && op.state !== 'needs_action') continue;
+      if (op.state !== 'succeeded' && op.state !== 'failed' && op.state !== 'needs_action' && op.state !== 'cancelled') continue;
       this.inFlight.delete(instanceId);
+      // decision 183: a person cancelled it before it ran: no failure to report, and not retried until the next start
+      if (op.state === 'cancelled') continue;
       const row = this.ctx.repo.instance(instanceId);
       // the address is recorded (a later step such as a restart hook may have failed): that is the policy's success
       const published = row !== null && this.candidates().some((c) => c.row.id === instanceId && c.app.tailnetUrl !== null);

@@ -5,7 +5,7 @@ import { HarborError } from '../errors.js';
 import { rfc3339, type Clock, type Ids } from '../util.js';
 import { splitOneTime } from './one-time.js';
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 // Decision 126: one row per (consumer, link id). provider_instance_id NULL = needs a provider;
 // 'dormant' = the consumer is removed (retained) and Reinstall re-creates the link.
@@ -46,6 +46,28 @@ CREATE TABLE backup_runs (
 );
 CREATE INDEX backup_runs_instance ON backup_runs(instance_id, started_at);
 `;
+
+// v13 (decision 183): plan_id NULL while a queued action waits to be planned at its turn (request_json holds
+// {kind, instanceId}, never a secret); 'cancelled' = a waiting item cancelled before it started.
+const OPERATIONS_SQL = `
+CREATE TABLE operations (
+  id TEXT PRIMARY KEY,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  plan_id TEXT UNIQUE REFERENCES plans(id),
+  actor TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  instance_id TEXT NOT NULL REFERENCES instances(id),
+  state TEXT NOT NULL CHECK (state IN ('queued','applying','verifying','succeeded','failed','needs_action','cancelled')),
+  phase TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  error_code TEXT,
+  error_message TEXT,
+  next_action TEXT,
+  result_json TEXT,
+  request_json TEXT
+);`;
 
 export const SCHEMA_SQL = `
 CREATE TABLE installation (
@@ -129,23 +151,7 @@ CREATE TABLE plans (
   expires_at TEXT NOT NULL,
   consumed_operation_id TEXT
 );
-CREATE TABLE operations (
-  id TEXT PRIMARY KEY,
-  idempotency_key TEXT NOT NULL UNIQUE,
-  plan_id TEXT NOT NULL UNIQUE REFERENCES plans(id),
-  actor TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  instance_id TEXT NOT NULL REFERENCES instances(id),
-  state TEXT NOT NULL CHECK (state IN ('queued','applying','verifying','succeeded','failed','needs_action')),
-  phase TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  started_at TEXT,
-  finished_at TEXT,
-  error_code TEXT,
-  error_message TEXT,
-  next_action TEXT,
-  result_json TEXT
-);
+${OPERATIONS_SQL}
 CREATE TABLE resources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   instance_id TEXT NOT NULL REFERENCES instances(id),
@@ -338,6 +344,10 @@ export function openState(stateDir: string, opts: { readonly?: boolean } = {}): 
           migrateV11toV12(db);
           version = 12;
         }
+        if (version === 12) {
+          migrateV12toV13(db);
+          version = 13;
+        }
       } finally {
         db.pragma('foreign_keys = ON');
       }
@@ -479,6 +489,22 @@ function migrateV11toV12(db: Db): void {
     db.pragma('user_version = 12');
   })();
   db.pragma('wal_checkpoint(TRUNCATE)');
+}
+
+// v13 (decision 183): the operation queue. Table rebuild (SQLite cannot alter a CHECK or drop NOT NULL): plan_id
+// nullable (a queued action is planned at its turn), state accepts 'cancelled', request_json holds the queued action.
+// Rows are copied in run order (created_at, rowid) so the queue order survives the rebuild.
+function migrateV12toV13(db: Db): void {
+  db.transaction(() => {
+    db.exec(`
+      ${OPERATIONS_SQL.replace('CREATE TABLE operations (', 'CREATE TABLE operations_v13 (')}
+      INSERT INTO operations_v13 (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json)
+        SELECT id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json FROM operations ORDER BY created_at, rowid;
+      DROP TABLE operations;
+      ALTER TABLE operations_v13 RENAME TO operations;
+    `);
+    db.pragma('user_version = 13');
+  })();
 }
 
 // v6: notifications, git package sources, per-instance automatic updates (round 9, decision 82).

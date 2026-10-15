@@ -8,7 +8,9 @@ export type Desired = 'running' | 'stopped' | 'retained';
 export type InstallState = 'installing' | 'installed' | 'failed' | 'needs_action' | 'retained';
 export type Runtime = 'running' | 'stopped' | 'starting' | 'unavailable' | 'unknown';
 export type Readiness = 'healthy' | 'unhealthy' | 'checking' | 'unknown';
-export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action';
+export type OperationState = 'queued' | 'applying' | 'verifying' | 'succeeded' | 'failed' | 'needs_action' | 'cancelled';
+export type FinalOperationState = 'succeeded' | 'failed' | 'needs_action' | 'cancelled';
+export const FINAL_OPERATION_STATES: readonly FinalOperationState[] = ['succeeded', 'failed', 'needs_action', 'cancelled'];
 export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | 'purge' | 'update' | 'expose' | 'unexpose' | 'reconfigure' | 'restart' | 'configure' | 'seal' | 'move' | 'backup' | 'restore' | 'relink';
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
 // The operator's own proxy (decision 118) is never the main address: Harbor does not own its TLS.
@@ -227,7 +229,7 @@ export interface PlanProposal {
 export interface OperationRow {
   id: string;
   idempotencyKey: string;
-  planId: string;
+  planId: string | null; // null while a queued action waits to be planned (decision 183)
   actor: string;
   kind: PlanKind;
   instanceId: string;
@@ -240,6 +242,14 @@ export interface OperationRow {
   errorMessage: string | null;
   nextAction: string | null;
   result: Record<string, unknown> | null;
+  // decision 183: the queued action of an operation created without a plan (never a secret)
+  request: QueuedAction | null;
+}
+
+// Decision 183: what `POST /v1/operations {action}` queued; planned when its turn comes.
+export interface QueuedAction {
+  kind: PlanKind;
+  instanceId: string;
 }
 
 export interface ResourceRow {
@@ -374,7 +384,7 @@ function operationFrom(r: Raw): OperationRow {
   return {
     id: r['id'] as string,
     idempotencyKey: r['idempotency_key'] as string,
-    planId: r['plan_id'] as string,
+    planId: (r['plan_id'] as string | null) ?? null,
     actor: r['actor'] as string,
     kind: r['kind'] as PlanKind,
     instanceId: r['instance_id'] as string,
@@ -387,6 +397,7 @@ function operationFrom(r: Raw): OperationRow {
     errorMessage: (r['error_message'] as string | null) ?? null,
     nextAction: (r['next_action'] as string | null) ?? null,
     result: pj(r['result_json'], null),
+    request: pj(r['request_json'], null),
   };
 }
 function resourceFrom(r: Raw): ResourceRow {
@@ -687,6 +698,10 @@ export class Repo {
   claimPort(port: number, instanceId: string, endpointId: string): void {
     this.db.prepare('INSERT INTO port_claims (port, instance_id, endpoint_id) VALUES (?, ?, ?)').run(port, instanceId, endpointId);
   }
+  // Decision 183: a cancelled operation gives back a fixed port it claimed (only this instance's claim).
+  releasePort(port: number, instanceId: string): void {
+    this.db.prepare('DELETE FROM port_claims WHERE port = ? AND instance_id = ?').run(port, instanceId);
+  }
 
   // plans
   insertPlan(p: Omit<PlanRow, 'consumedOperationId'>): void {
@@ -725,24 +740,69 @@ export class Repo {
     const r = this.db.prepare('SELECT * FROM operations WHERE plan_id = ?').get(planId) as Raw | undefined;
     return r ? operationFrom(r) : null;
   }
+  // A queued action (decision 183): no plan yet, planned by the runner when its turn comes.
+  insertQueuedAction(o: Pick<OperationRow, 'id' | 'idempotencyKey' | 'actor' | 'kind' | 'instanceId'>): void {
+    this.db
+      .prepare('INSERT INTO operations (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, request_json) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)')
+      .run(o.id, o.idempotencyKey, o.actor, o.kind, o.instanceId, 'queued', 'queued', this.now(), j({ kind: o.kind, instanceId: o.instanceId }));
+  }
+  // The queued action now has its plan (consumed by it in the same transaction).
+  attachPlan(operationId: string, planId: string): void {
+    this.db.prepare('UPDATE operations SET plan_id = ? WHERE id = ? AND plan_id IS NULL').run(planId, operationId);
+  }
+  // Run order (decision 183): created_at has second precision and id is random, so rowid (insertion order) breaks ties.
   nextQueuedOperation(): OperationRow | null {
-    const r = this.db.prepare("SELECT * FROM operations WHERE state = 'queued' ORDER BY created_at, id LIMIT 1").get() as Raw | undefined;
+    const r = this.db.prepare("SELECT * FROM operations WHERE state = 'queued' AND started_at IS NULL ORDER BY created_at, rowid LIMIT 1").get() as Raw | undefined;
     return r ? operationFrom(r) : null;
   }
+  // The runner picks the head of the queue: started_at is set before any side effect, atomically, so a cancel that
+  // raced it either wins (0 rows here, take the next) or finds it started (NOT_CANCELLABLE).
+  claimHead(): OperationRow | null {
+    for (;;) {
+      const head = this.nextQueuedOperation();
+      if (!head) return null;
+      const claimed = this.db.prepare("UPDATE operations SET started_at = ? WHERE id = ? AND state = 'queued' AND started_at IS NULL").run(this.now(), head.id).changes;
+      if (claimed === 1) return this.operation(head.id);
+    }
+  }
+  // Cancel a waiting item: only while nothing was done (atomic guard). Returns false when it already started or finished.
+  cancelOperation(id: string, opts: { message: string; nextAction: string }): boolean {
+    const changed = this.db
+      .prepare("UPDATE operations SET state = 'cancelled', phase = 'cancelled', finished_at = ?, error_code = 'CANCELLED', error_message = ?, next_action = ? WHERE id = ? AND state = 'queued' AND started_at IS NULL")
+      .run(this.now(), opts.message, opts.nextAction, id).changes;
+    return changed === 1;
+  }
   activeOperations(): OperationRow[] {
-    return (this.db.prepare("SELECT * FROM operations WHERE state IN ('queued','applying','verifying') ORDER BY created_at").all() as Raw[]).map(operationFrom);
+    return (this.db.prepare("SELECT * FROM operations WHERE state IN ('queued','applying','verifying') ORDER BY created_at, rowid").all() as Raw[]).map(operationFrom);
+  }
+  // The not-final operations of one app, in run order.
+  activeOperationsOf(instanceId: string): OperationRow[] {
+    return (this.db.prepare("SELECT * FROM operations WHERE instance_id = ? AND state IN ('queued','applying','verifying') ORDER BY created_at, rowid").all(instanceId) as Raw[]).map(operationFrom);
+  }
+  // instances.active_operation_id = the first not-final operation of the app in run order, or NULL (decision 183).
+  syncActiveOperation(instanceId: string): string | null {
+    const first = this.db.prepare("SELECT id FROM operations WHERE instance_id = ? AND state IN ('queued','applying','verifying') ORDER BY created_at, rowid LIMIT 1").get(instanceId) as { id: string } | undefined;
+    const id = first?.id ?? null;
+    this.db.prepare('UPDATE instances SET active_operation_id = ?, updated_at = ? WHERE id = ? AND active_operation_id IS NOT ?').run(id, this.now(), instanceId, id);
+    return id;
+  }
+  // The queue (decision 183): active in run order, the newest finished ones.
+  listQueue(recent: number): { active: OperationRow[]; recent: OperationRow[] } {
+    const finished = (this.db.prepare("SELECT * FROM operations WHERE state NOT IN ('queued','applying','verifying') ORDER BY COALESCE(finished_at, created_at) DESC, rowid DESC LIMIT ?").all(recent) as Raw[]).map(operationFrom);
+    return { active: this.activeOperations(), recent: finished };
   }
   listOperations(limit = 100): OperationRow[] {
-    return (this.db.prepare('SELECT * FROM operations ORDER BY created_at DESC LIMIT ?').all(limit) as Raw[]).map(operationFrom);
+    return (this.db.prepare('SELECT * FROM operations ORDER BY created_at DESC, rowid DESC LIMIT ?').all(limit) as Raw[]).map(operationFrom);
   }
   setOperationPhase(id: string, state: OperationState, phase: string): void {
+    // started_at is set when the runner claims the operation (claimHead); kept for an operation that never was
     const started = state === 'applying' ? ', started_at = COALESCE(started_at, ?)' : '';
     const args: unknown[] = [state, phase];
     if (started) args.push(this.now());
     args.push(id);
     this.db.prepare(`UPDATE operations SET state = ?, phase = ?${started} WHERE id = ?`).run(...args);
   }
-  finishOperation(id: string, state: 'succeeded' | 'failed' | 'needs_action', opts: { errorCode?: string; errorMessage?: string; nextAction?: string; result?: Record<string, unknown> } = {}): void {
+  finishOperation(id: string, state: 'succeeded' | 'failed' | 'needs_action' | 'cancelled', opts: { errorCode?: string; errorMessage?: string; nextAction?: string; result?: Record<string, unknown> } = {}): void {
     this.db
       .prepare('UPDATE operations SET state = ?, phase = ?, finished_at = ?, error_code = ?, error_message = ?, next_action = ?, result_json = ? WHERE id = ?')
       .run(state, state, this.now(), opts.errorCode ?? null, opts.errorMessage ?? null, opts.nextAction ?? null, opts.result ? j(opts.result) : null, id);

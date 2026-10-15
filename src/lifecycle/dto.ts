@@ -84,12 +84,35 @@ export function exposureDto(e: ExposureRow, instanceName: string, primary: Insta
   return { id: e.id, instanceId: e.instanceId, instanceName, endpointId: e.endpointId, via: e.via, url: exposureUrl(e), hostname: e.hostname, port: e.port, protection: e.protection, state: e.state, observedAt: e.observedAt, note: e.note, isPrimary };
 }
 
-export function operationDto(o: OperationRow, events: EventRow[]): OperationDto {
+// Decision 183: operations Harbor queued to protect something; a person cannot cancel them.
+export const PROTECTED_ACTORS: Record<string, string> = {
+  'drive-guard': 'Harbor queued it because a drive went away or came back',
+  'link-guard': 'Harbor queued it to keep the app links safe',
+  'lock-guard': 'Harbor queued it because the app\'s key is back',
+  scheduler: 'it is the cold pass of a backup run',
+};
+
+// The app's display name; a freed row (cancelled install, full uninstall) keeps only its archived name `<name>~…`.
+export function operationInstanceName(inst: InstanceRow | null, fallback: string): string {
+  if (!inst) return fallback;
+  if (inst.purgedAt) return inst.name.split('~')[0] ?? inst.name;
+  return inst.displayName ?? inst.name;
+}
+
+export function isCancellable(o: OperationRow): boolean {
+  return o.state === 'queued' && o.startedAt === null && !(o.actor in PROTECTED_ACTORS);
+}
+
+export function operationDto(o: OperationRow, events: EventRow[], instanceName = ''): OperationDto {
   return {
     id: o.id,
     kind: o.kind,
     instanceId: o.instanceId,
+    instanceName,
     planId: o.planId,
+    actor: o.actor,
+    queuedAction: o.planId === null && o.state === 'queued',
+    cancellable: isCancellable(o),
     state: o.state,
     phase: o.phase,
     createdAt: o.createdAt,

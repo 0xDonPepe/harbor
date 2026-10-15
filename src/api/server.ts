@@ -20,7 +20,7 @@ import type { SetupRequest, SetupStatusDto, TerminalClientMessage } from '../con
 import type { SetupService } from '../auth/setup.js';
 import type { BackupService } from '../backups/service.js';
 import type { BackupAppPolicyDto, BackupPolicyDto } from '../contracts/api.js';
-import { CATALOG_STATUS_SCHEMA } from '../contracts/api.js';
+import { CATALOG_STATUS_SCHEMA, QUEUEABLE_KINDS, type QueueableKind } from '../contracts/api.js';
 import { isLanPeer, lanHostAllowed } from '../system/lan.js';
 import { hostname as osHostname } from 'node:os';
 import { hostFacts } from '../system/metrics.js';
@@ -1025,18 +1025,53 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     {
       preHandler: requireAuth,
       schema: {
-        description: 'Submit an exact plan ID. Requires Idempotency-Key. Install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Plans that list settings with ask (decision 180: install, the settings an update adds) may carry chosen values in `settings` (not secret; SETTING_INVALID when a value is not allowed). Returns 202 with the (possibly existing) operation.',
+        description: 'Submit an exact plan ID, or queue an action (decision 183). Requires Idempotency-Key. Plan form {planId, …}: install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Plans that list settings with ask (decision 180: install, the settings an update adds) may carry chosen values in `settings` (not secret; SETTING_INVALID when a value is not allowed). A plan for a busy app is refused (BUSY). Action form {action: {kind, instanceId}}: a start, stop, restart, update, remove, reinstall or purge for an existing app, busy or not, joins the queue without a plan; Harbor plans it when its turn comes (an item that then needs a person stops as REVIEW_NEEDED, nothing changed). Returns 202 with the (possibly existing) operation.',
         headers: { type: 'object', properties: { 'idempotency-key': { type: 'string', pattern: IDEMPOTENCY_KEY_RE.source } }, required: ['idempotency-key'] },
-        body: { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } }, settings: SETTING_VALUES, acceptPermissions: { type: 'boolean', description: 'Decision 163: true accepts the permissions the plan lists (required when it lists any).' } } },
+        body: {
+          oneOf: [
+            { type: 'object', additionalProperties: false, required: ['planId'], properties: { planId: { type: 'string', pattern: UUID_PATTERN }, passphrase: { type: 'string', minLength: 1, maxLength: 256 }, secrets: { type: 'object', maxProperties: 16, propertyNames: { pattern: ID_PATTERN }, additionalProperties: { type: 'string', maxLength: 4096 } }, settings: SETTING_VALUES, acceptPermissions: { type: 'boolean', description: 'Decision 163: true accepts the permissions the plan lists (required when it lists any).' } } },
+            { type: 'object', additionalProperties: false, required: ['action'], properties: { action: { type: 'object', additionalProperties: false, required: ['kind', 'instanceId'], properties: { kind: { enum: [...QUEUEABLE_KINDS] }, instanceId: { type: 'string', pattern: UUID_PATTERN } } } } },
+          ],
+        },
       },
     },
     async (req, reply) => {
       const key = req.headers['idempotency-key'] as string;
-      const { planId, passphrase, secrets, settings, acceptPermissions } = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string>; settings?: Record<string, string | number | boolean>; acceptPermissions?: boolean };
+      const body = req.body as { planId: string; passphrase?: string; secrets?: Record<string, string>; settings?: Record<string, string | number | boolean>; acceptPermissions?: boolean } | { action: { kind: QueueableKind; instanceId: string } };
+      if ('action' in body) {
+        const queued = service.queueAction(body.action.instanceId, body.action.kind, req.actor!, key);
+        return reply.status(202).send({ operationId: queued.operation.id, created: queued.created, operation: service.operation(queued.operation.id) });
+      }
+      const { planId, passphrase, secrets, settings, acceptPermissions } = body;
       if (typeof passphrase === 'string' && passphrase) service.submitInstallLocationSecret(planId, passphrase);
       const result = service.submit(planId, key, req.actor!, { ...(secrets ? { secrets } : {}), ...(settings ? { settings } : {}), ...(acceptPermissions === true ? { acceptPermissions: true } : {}) });
       return reply.status(202).send({ operationId: result.operation.id, created: result.created, operation: service.operation(result.operation.id) });
     },
+  );
+  app.get(
+    '/v1/operations',
+    {
+      preHandler: requireAuth,
+      schema: {
+        description: 'The operation queue (decision 183): `active` = every operation not finished, in run order (the running one first, then the waiting ones; `cancellable` says which a person may cancel), `recent` = the newest finished ones (newest first, `recent` of them, default 10). List items carry no events; GET /v1/operations/:id has them and the one-time results.',
+        querystring: { type: 'object', additionalProperties: false, properties: { recent: { type: 'string', pattern: '^([0-9]|[1-4][0-9]|50)$' } } },
+      },
+    },
+    async (req) => {
+      const recent = (req.query as { recent?: string }).recent;
+      return service.queue(recent === undefined ? 10 : Number(recent));
+    },
+  );
+  app.post(
+    '/v1/operations/:id/cancel',
+    {
+      preHandler: requireAuth,
+      schema: {
+        description: 'Cancel a waiting operation (decision 183): only before the runner picked it (409 NOT_CANCELLABLE once it runs or has finished, and for items Harbor queued to protect something: drive-guard, link-guard, lock-guard, the backup scheduler). Nothing was done for it, so nothing is undone; a cancelled install frees its name and ports and cancels what waited for it. Returns the cancelled operation.',
+        params: { type: 'object', properties: { id: { type: 'string', pattern: UUID_PATTERN } }, required: ['id'] },
+      },
+    },
+    async (req) => service.cancelOperation((req.params as { id: string }).id, req.actor!),
   );
   // Portable app homes on mounted drives: found but not adopted here.
   app.get('/v1/found-apps', { preHandler: requireAuth, schema: { description: 'App homes found on mounted drives that this machine has not adopted (locked tiles; adopting prompts for the passphrase).' } }, async () => ({ items: service.foundApps() }));

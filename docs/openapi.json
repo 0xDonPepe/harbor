@@ -3065,64 +3065,102 @@
     },
     "/v1/operations": {
       "post": {
-        "description": "Submit an exact plan ID. Requires Idempotency-Key. Install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Plans that list settings with ask (decision 180: install, the settings an update adds) may carry chosen values in `settings` (not secret; SETTING_INVALID when a value is not allowed). Returns 202 with the (possibly existing) operation.",
+        "description": "Submit an exact plan ID, or queue an action (decision 183). Requires Idempotency-Key. Plan form {planId, …}: install-location plans also need the encryption passphrase, and plans that ask for operator-provided secrets (decision 125) carry their values in `secrets` — neither is ever stored in the plan, an operation or a response. Plans that list settings with ask (decision 180: install, the settings an update adds) may carry chosen values in `settings` (not secret; SETTING_INVALID when a value is not allowed). A plan for a busy app is refused (BUSY). Action form {action: {kind, instanceId}}: a start, stop, restart, update, remove, reinstall or purge for an existing app, busy or not, joins the queue without a plan; Harbor plans it when its turn comes (an item that then needs a person stops as REVIEW_NEEDED, nothing changed). Returns 202 with the (possibly existing) operation.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "planId"
-                ],
-                "properties": {
-                  "planId": {
-                    "type": "string",
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-                  },
-                  "passphrase": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "secrets": {
+                "oneOf": [
+                  {
                     "type": "object",
-                    "maxProperties": 16,
-                    "propertyNames": {
-                      "pattern": "^[a-z][a-z0-9-]{0,62}$"
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "maxLength": 4096
-                    }
-                  },
-                  "settings": {
-                    "type": "object",
-                    "maxProperties": 32,
-                    "propertyNames": {
-                      "pattern": "^[a-z][a-z0-9-]{0,39}$"
-                    },
-                    "additionalProperties": {
-                      "anyOf": [
-                        {
-                          "type": "number"
+                    "additionalProperties": false,
+                    "required": [
+                      "planId"
+                    ],
+                    "properties": {
+                      "planId": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                      },
+                      "passphrase": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "secrets": {
+                        "type": "object",
+                        "maxProperties": 16,
+                        "propertyNames": {
+                          "pattern": "^[a-z][a-z0-9-]{0,62}$"
                         },
-                        {
-                          "type": "boolean"
-                        },
-                        {
+                        "additionalProperties": {
                           "type": "string",
-                          "maxLength": 1024
+                          "maxLength": 4096
                         }
-                      ]
+                      },
+                      "settings": {
+                        "type": "object",
+                        "maxProperties": 32,
+                        "propertyNames": {
+                          "pattern": "^[a-z][a-z0-9-]{0,39}$"
+                        },
+                        "additionalProperties": {
+                          "anyOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "maxLength": 1024
+                            }
+                          ]
+                        }
+                      },
+                      "acceptPermissions": {
+                        "type": "boolean",
+                        "description": "Decision 163: true accepts the permissions the plan lists (required when it lists any)."
+                      }
                     }
                   },
-                  "acceptPermissions": {
-                    "type": "boolean",
-                    "description": "Decision 163: true accepts the permissions the plan lists (required when it lists any)."
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "action"
+                    ],
+                    "properties": {
+                      "action": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "kind",
+                          "instanceId"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "enum": [
+                              "start",
+                              "stop",
+                              "restart",
+                              "update",
+                              "remove",
+                              "reinstall",
+                              "purge"
+                            ]
+                          },
+                          "instanceId": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                          }
+                        }
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -3135,6 +3173,46 @@
             },
             "in": "header",
             "name": "idempotency-key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "get": {
+        "description": "The operation queue (decision 183): `active` = every operation not finished, in run order (the running one first, then the waiting ones; `cancellable` says which a person may cancel), `recent` = the newest finished ones (newest first, `recent` of them, default 10). List items carry no events; GET /v1/operations/:id has them and the one-time results.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^([0-9]|[1-4][0-9]|50)$"
+            },
+            "in": "query",
+            "name": "recent",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/operations/{id}/cancel": {
+      "post": {
+        "description": "Cancel a waiting operation (decision 183): only before the runner picked it (409 NOT_CANCELLABLE once it runs or has finished, and for items Harbor queued to protect something: drive-guard, link-guard, lock-guard, the backup scheduler). Nothing was done for it, so nothing is undone; a cancelled install frees its name and ports and cancels what waited for it. Returns the cancelled operation.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-7][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "in": "path",
+            "name": "id",
             "required": true
           }
         ],

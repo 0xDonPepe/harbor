@@ -35,7 +35,15 @@ export class Observer {
     private readonly intervalMs: number,
     // git sources are polled on their own, much slower cadence (decision 80; default 15 min)
     private readonly sourceCheckMs: number = 15 * 60_000,
-  ) {}
+  ) {
+    // decision 183: an item cancelled for an app frees the guards' one-attempt memories of it, so a guard may act again
+    service.onOperationCancelled((instanceId) => this.forgetAttempts(instanceId));
+  }
+
+  forgetAttempts(instanceId: string): void {
+    for (const set of [this.driveStopAttempts, this.driveStartAttempts]) for (const k of [...set]) if (k.startsWith(`${instanceId}:`)) set.delete(k);
+    this.unlockStartAttempts.delete(instanceId);
+  }
 
   start(): void {
     void this.tick();

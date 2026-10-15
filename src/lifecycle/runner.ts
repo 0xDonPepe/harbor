@@ -2,7 +2,7 @@ import path from 'node:path';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import type { Ctx } from './context.js';
-import { HarborError, type ErrorCode } from '../errors.js';
+import { HarborError, needsReview, type ErrorCode } from '../errors.js';
 import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
 import { LABELS } from '../naming.js';
 import { defaultNetworkName, identityFor, ownedVolumeName, volumeLabels, type InstanceIdentity } from '../planner/identity.js';
@@ -60,12 +60,26 @@ export class OperationRunner {
 
   constructor(private readonly ctx: Ctx) {}
 
-  // Mark leftovers from a previous process. Never replay.
+  // Mark leftovers from a previous process. Never replay (decision 12). Decision 183: an operation the runner never
+  // picked (started_at NULL) did nothing, so it is cancelled and its app is left as it was (a queued install's row is
+  // freed); a picked one becomes needs_action as before.
   recoverOnStartup(): number {
     const { repo } = this.ctx;
     const stale = repo.activeOperations();
+    const touched = new Set<string>();
     for (const op of stale) {
       repo.transaction(() => {
+        touched.add(op.instanceId);
+        if (op.startedAt === null) {
+          repo.finishOperation(op.id, 'cancelled', { errorCode: 'CANCELLED', errorMessage: 'Harbor restarted before this ran; nothing was changed.', nextAction: 'Queue it again.' });
+          repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: 'daemon restarted before the operation ran; nothing was changed' });
+          const inst = repo.instance(op.instanceId);
+          if (inst && op.kind === 'install' && inst.installState === 'installing' && !inst.purgedAt && repo.resources(inst.id).filter((r) => r.role !== '__home__').length === 0) {
+            repo.updateInstance(inst.id, { lastOperationId: op.id });
+            repo.purgeInstance(inst.id, `${inst.name}~cancelled~${inst.id.slice(0, 8)}`);
+          }
+          return;
+        }
         repo.finishOperation(op.id, 'needs_action', {
           errorCode: 'STATE_CHANGED',
           errorMessage: `operation was ${op.state} (${op.phase}) when the daemon stopped; its effects were not replayed`,
@@ -78,11 +92,12 @@ export class OperationRunner {
           // a background tailnet publish cut short by a restart must not leave the app to repair). The operation
           // itself still says needs_action and is never replayed; the exposure checks settle its address row.
           const keep = op.kind === 'expose' || op.kind === 'unexpose' || op.kind === 'reconfigure';
-          repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id, installState: keep ? inst.installState : 'needs_action', runtime: 'unknown', readiness: 'unknown' });
+          repo.updateInstance(inst.id, { lastOperationId: op.id, installState: keep ? inst.installState : 'needs_action', runtime: 'unknown', readiness: 'unknown' });
           repo.bumpGeneration(inst.id);
         }
       });
     }
+    for (const id of touched) repo.syncActiveOperation(id);
     return stale.length;
   }
 
@@ -105,9 +120,48 @@ export class OperationRunner {
 
   private async loop(): Promise<void> {
     while (!this.stopping) {
-      const op = this.ctx.repo.nextQueuedOperation();
+      // decision 183: claimed atomically (started_at) before any side effect; a cancelled head is skipped
+      const op = this.ctx.repo.claimHead();
       if (!op) return;
+      if (op.planId === null) {
+        const planned = await this.planQueued(op);
+        if (planned) await this.execute(planned);
+        continue;
+      }
       await this.execute(op);
+    }
+  }
+
+  // Decision 183: a queued action is planned now, against the app as it is after everything ahead of it, and accepted
+  // like a submission with no typed values and no permissions accepted. A refusal finishes it without touching the app
+  // (no generation bump): REVIEW_NEEDED when a person can resolve it, else the planning error itself.
+  private async planQueued(op: OperationRow): Promise<OperationRow | null> {
+    const { repo } = this.ctx;
+    try {
+      return await this.ctx.service.planQueuedAction(op);
+    } catch (e) {
+      const inst = repo.instance(op.instanceId);
+      const label = inst ? (inst.displayName ?? inst.name) : op.instanceId;
+      const verb = op.kind.charAt(0).toUpperCase() + op.kind.slice(1);
+      const err = HarborError.is(e) ? e : new HarborError('INTERNAL', e instanceof Error ? e.message : String(e));
+      const review = needsReview(err);
+      const code: ErrorCode = review ? 'REVIEW_NEEDED' : err.code;
+      const message = review ? `${verb} ${label} needs your review: ${err.message}` : err.message;
+      const nextAction = review ? `Open ${label} and choose ${verb} to review it.` : err.nextAction;
+      this.ctx.log.warn(`queued ${op.kind} of ${label} was not run: ${message}`, { operationId: op.id, instanceId: op.instanceId, code });
+      repo.transaction(() => {
+        repo.finishOperation(op.id, 'failed', { errorCode: code, errorMessage: message, nextAction });
+        repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'failed', message: `${op.kind} not run: ${message}` });
+        if (inst) {
+          repo.updateInstance(inst.id, { lastOperationId: op.id });
+          repo.syncActiveOperation(inst.id);
+        }
+      });
+      // a person who queued it reads the refusal in the queue, as at review time; an auto-update nobody watches rings the bell
+      if (inst && op.actor === 'auto-update') {
+        this.ctx.notifier.notify({ kind: 'operation-failed', severity: review ? 'warning' : 'error', title: review ? `${verb} of ${label} needs your review` : `${op.kind} of ${label} failed`, body: `${message} Next: ${nextAction}`, instanceId: inst.id, dedupeKey: `operation-failed:${op.id}` });
+      }
+      return null;
     }
   }
 
@@ -123,18 +177,21 @@ export class OperationRunner {
 
   private async execute(op: OperationRow): Promise<void> {
     const { repo } = this.ctx;
-    const plan = repo.plan(op.planId);
+    const plan = op.planId ? repo.plan(op.planId) : null;
     const inst = repo.instance(op.instanceId);
     if (!plan || !inst) {
-      repo.finishOperation(op.id, 'failed', { errorCode: 'STATE_CHANGED', errorMessage: 'plan or instance vanished', nextAction: 'Inspect state.' });
+      repo.transaction(() => {
+        repo.finishOperation(op.id, 'failed', { errorCode: 'STATE_CHANGED', errorMessage: 'plan or instance vanished', nextAction: 'Inspect state.' });
+        if (inst) repo.syncActiveOperation(inst.id);
+      });
       return;
     }
     const secretValues: string[] = [];
     this.opResult = null;
     // Taken first, whatever happens next: values never outlive their operation.
-    this.supplied = this.ctx.service.takeOperatorSecrets(op.planId);
+    this.supplied = this.ctx.service.takeOperatorSecrets(plan.id);
     secretValues.push(...Object.values(this.supplied.store));
-    this.chosenSettings = this.ctx.service.takeSubmittedSettings(op.planId);
+    this.chosenSettings = this.ctx.service.takeSubmittedSettings(plan.id);
     try {
       if (this.stopping) throw new InterruptedError();
       switch (op.kind) {
@@ -161,7 +218,8 @@ export class OperationRunner {
       this.ctx.service.keepOneTimeResult(op.id, memory);
       repo.transaction(() => {
         repo.finishOperation(op.id, 'succeeded', { result });
-        repo.updateInstance(inst.id, { activeOperationId: null, lastOperationId: op.id });
+        repo.updateInstance(inst.id, { lastOperationId: op.id });
+        repo.syncActiveOperation(inst.id); // decision 183: the next waiting item of this app, if any
         repo.bumpGeneration(inst.id);
         repo.addEvent({ operationId: op.id, instanceId: inst.id, phase: 'succeeded', message: `${op.kind} succeeded` });
       });
@@ -193,12 +251,20 @@ export class OperationRunner {
       repo.transaction(() => {
         repo.finishOperation(op.id, state, { errorCode: code, errorMessage: message, nextAction, ...(result ? { result } : {}) });
         repo.updateInstance(inst.id, {
-          activeOperationId: null,
           lastOperationId: op.id,
           installState: rolledBack ? 'installed' : stale && op.kind !== 'install' ? inst.installState : installStateAfterFailure(op.kind, repo.resources(inst.id).some((r) => r.kind === 'container'), inst.installState, code),
           readiness: rolledBack ? 'healthy' : stale ? inst.readiness : 'unknown',
         });
-        if (dropInstall) repo.purgeInstance(inst.id, `${inst.name}~stale~${inst.id.slice(0, 8)}`);
+        repo.syncActiveOperation(inst.id); // decision 183: the next waiting item of this app, if any
+        if (dropInstall) {
+          // decision 183: items queued behind an install that never ran have no app left to act on
+          for (const f of repo.activeOperationsOf(inst.id)) {
+            if (f.startedAt === null && repo.cancelOperation(f.id, { message: `Cancelled: the install of ${inst.name} it waited for did not run; nothing was changed.`, nextAction: '' })) {
+              repo.addEvent({ operationId: f.id, instanceId: inst.id, phase: 'cancelled', message: `${f.kind} cancelled: the install it waited for did not run` });
+            }
+          }
+          repo.purgeInstance(inst.id, `${inst.name}~stale~${inst.id.slice(0, 8)}`);
+        }
         repo.bumpGeneration(inst.id);
         repo.addEvent({ operationId: op.id, instanceId: inst.id, phase: state, message: `${op.kind} ${state}: ${message}` });
       });

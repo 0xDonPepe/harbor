@@ -768,6 +768,8 @@ export class BackupService {
         if (!opId) return this.finish(runId, inst, 'skipped', `${inst.name} was busy with another operation all window; the next window tries again.`, { ctx: run });
         this.ctx.repo.updateBackupRun(runId, { operationId: opId });
         const op = await this.waitOperation(opId);
+        // decision 183: a cold pass cancelled before it ran stopped nothing and backed nothing up: the run ends there
+        if (op.state === 'cancelled') return this.finish(runId, inst, 'failed', `The cold pass was cancelled before it ran; ${inst.name} was not stopped and not backed up. ${op.error?.message ?? ''}`.trim(), { ctx: run, downtimeMs: 0, operationId: opId });
         const downtimeMs = typeof op.result?.['downtimeMs'] === 'number' ? (op.result['downtimeMs'] as number) : null;
         if (op.state !== 'succeeded' && !run.calls.some((c) => run.results.get(c.stored.id)?.state === 'succeeded')) {
           return this.finish(runId, inst, 'failed', op.error ? `${op.error.message} Next: ${op.error.nextAction}` : 'the backup operation failed', { ctx: run, downtimeMs, operationId: opId });
@@ -846,7 +848,7 @@ export class BackupService {
   private async waitOperation(id: string): Promise<{ state: string; result: Record<string, unknown> | null; error: { message: string; nextAction: string } | null }> {
     for (;;) {
       const op = this.ctx.repo.operation(id);
-      if (op && ['succeeded', 'failed', 'needs_action'].includes(op.state)) {
+      if (op && ['succeeded', 'failed', 'needs_action', 'cancelled'].includes(op.state)) {
         return { state: op.state, result: op.result, error: op.errorMessage ? { message: op.errorMessage, nextAction: op.nextAction ?? '' } : null };
       }
       await new Promise((r) => setTimeout(r, 250));

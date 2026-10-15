@@ -14,6 +14,12 @@ export type PlanKind = 'install' | 'start' | 'stop' | 'remove' | 'reinstall' | '
 // them when their turn comes. They take no typed values, so a queued action never holds a secret.
 export const QUEUEABLE_KINDS = ['start', 'stop', 'restart', 'update', 'remove', 'reinstall', 'purge'] as const;
 export type QueueableKind = (typeof QUEUEABLE_KINDS)[number];
+// The actor names Harbor itself writes on plans and operations (background work nobody clicked). A session's actor
+// is the login name, so a person must never be able to log in under one of these (decision 183: a guard's item is
+// not cancellable and an auto-update's refusal rings the bell, both decided by the actor name). A person's queued
+// action never merges into an item of one of these actors (decision 183 dedupe); the console reads the same list.
+export const INTERNAL_ACTORS = ['drive-guard', 'link-guard', 'lock-guard', 'scheduler', 'auto-update', 'git-source', 'tailnet-policy'] as const;
+export type InternalActor = (typeof INTERNAL_ACTORS)[number];
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
 // The address an app treats as its own, chosen at install (decision 116). Omitted = this network

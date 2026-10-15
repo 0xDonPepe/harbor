@@ -1,7 +1,8 @@
-// The actor names Harbor itself writes on plans and operations (background work nobody clicked). A session's actor
-// is the login name, so a person must never be able to log in under one of these (decision 183: a guard's item is
-// not cancellable and an auto-update's refusal rings the bell, both decided by the actor name).
-export const INTERNAL_ACTORS = ['drive-guard', 'link-guard', 'lock-guard', 'scheduler', 'auto-update', 'git-source', 'tailnet-policy'] as const;
+// The actor list itself lives in the contracts (src/contracts/api.ts, the console reads it too); this module keeps
+// the daemon-side helpers and re-exports the list for existing importers.
+import { INTERNAL_ACTORS } from './contracts/api.js';
+
+export { INTERNAL_ACTORS };
 
 export function isInternalActor(name: string): boolean {
   return (INTERNAL_ACTORS as readonly string[]).includes(name.toLowerCase());

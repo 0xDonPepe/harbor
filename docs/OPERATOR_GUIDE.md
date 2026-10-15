@@ -183,8 +183,8 @@ tagline, category chips and search; an app page with Install and the storage cho
 Portainer, Tailscale, proxy with real state and links; Cockpit and Portainer show a **Set up**
 button when absent — one click starts the install as root and the card reports progress),
 **Settings** (session, SSH forwarding line,
-about). Every change goes through the same plan review; the operation tray at the bottom right shows
-progress and, once, any generated credentials.
+about). Every change goes through the same plan review; the queue at the bottom right shows what runs, what
+waits its turn and what just finished, with, once, any generated credentials (see *The queue* below).
 
 CLI (`harbor`; bootstrap links `/usr/local/bin/harbor` to `/opt/harbor/bin/harbor` since 0.28.2, and never replaces a file of yours there):
 
@@ -206,6 +206,8 @@ harbor passphrase <name>          # change an encrypted app's passphrase (or --h
 harbor move <name> --location /mnt/photos/harbor-apps   # an encrypted app to another place, same key
 harbor repair <name>              # an app stuck in needs_action/failed: run its stored release again (alias: retry)
 harbor plan install n8n && harbor apply <plan-id> --idempotency-key <key>
+harbor queue                      # what runs now, what waits (in order) and what finished lately
+harbor queue cancel <operation>   # take a waiting item out of the queue (nothing is changed)
 harbor tools / tools bind cockpit --url https://localhost:9090/
 harbor doctor
 ```
@@ -228,6 +230,32 @@ States: **install** installing/installed/failed/needs_action/retained · **desir
 running/stopped/retained · **runtime** running/stopped/starting/unavailable/unknown ·
 **readiness** healthy/unhealthy/checking/unknown. `installed`+`healthy` means the app answers its
 readiness URL. It does **not** mean the app's own onboarding is done: n8n shows separate setup guidance.
+
+### The queue (since 0.35.0)
+
+Harbor does one thing at a time, but you never have to wait to ask for the next one. No button is greyed out
+because something else is running: what you approve joins the **queue** and runs in turn.
+
+- **Another app is busy.** Review and approve as usual; the item waits in the queue and runs when its turn comes.
+- **The same app is busy** (it is installing, updating, …). *Start*, *Stop*, *Restart*, *Update*, *Remove*,
+  *Reinstall* and *Uninstall completely* ask once (*Queue: Update Immich — it runs after Immich's install*) and join
+  the queue without a plan. When its turn comes Harbor makes the plan against the app as it is then and runs it, the
+  way automatic updates do. If that plan needs something only you can give (a new permission to accept, a value to
+  type, a passphrase), the item stops as **Needs your review** and nothing changes: open the app and choose the
+  action again to review it. Other changes (publishing, settings, moving, restoring) wait for the app in their review,
+  then show the plan.
+- **The queue** sits at the bottom right: the running item with its progress, the waiting items in the order they
+  will run, and the items that finished while you watched (with their results, errors and, once, any credentials or
+  recovery words). Fold it to one line; close a finished item with ×.
+- **Cancel** takes a waiting item out before it starts; nothing is changed, and a cancelled install frees its name and
+  ports (and cancels what you queued behind it for that app). A running item cannot be stopped halfway. Items Harbor
+  queued itself to protect an app (a stop because its drive disappeared, a link repair, a backup's last pass) cannot
+  be cancelled; the queue says why.
+- **If Harbor restarts**, items that had not started yet are cancelled (nothing was changed; queue them again); the
+  one that was running stops as *Needs attention* as before.
+
+`harbor queue` shows the same list (`--json` for scripts) and `harbor queue cancel <operation>` cancels a waiting item.
+A CLI action of the kinds above on a busy app offers to queue it (`--yes` accepts); other actions wait for the app.
 
 ### Full uninstall
 

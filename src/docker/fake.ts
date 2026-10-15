@@ -38,8 +38,28 @@ export interface FakeBehaviour {
   volumeSizes?: Record<string, number>;
   // decision 179: runtimes `docker info` lists (default: runc only, no NVIDIA toolkit)
   runtimes?: string[];
-  // decision 183 (dev/e2e only, set from src/dev.ts): how long `pull` takes for a project with these images (ms; 0 = instant)
-  pullDelay?: (images: string[]) => number;
+  // decision 183 (dev/e2e only, set from src/dev.ts): `pull` for a project with these images resolves when this does
+  // (a test holds a pull and releases it; unset = instant)
+  pullWait?: (images: string[]) => Promise<void>;
+}
+
+// Decision 183 (dev/e2e only; src/dev.ts wires it to HARBOR_DEV_FAKE_CONTROL): hold a fake pull of these images
+// while the control says so, reading it again every pollMs. `{hold: true, match}` holds until the control no longer
+// matches (a test releases it by writing `{}`); `{pullDelayMs, match}` holds at most that long (with or without hold).
+// No match, no hold and no delay, or a control that is not an object = no wait at all.
+export async function holdPull(images: string[], read: () => unknown, opts: { pollMs?: number } = {}): Promise<void> {
+  const pollMs = opts.pollMs ?? 150;
+  const held = (): { maxMs: number } | null => {
+    const c = read();
+    if (!c || typeof c !== 'object') return null;
+    const { hold, pullDelayMs, match } = c as { hold?: unknown; pullDelayMs?: unknown; match?: unknown };
+    const maxMs = typeof pullDelayMs === 'number' && pullDelayMs > 0 ? pullDelayMs : hold === true ? Infinity : 0;
+    if (!maxMs) return null;
+    const m = typeof match === 'string' ? match : '';
+    return images.some((i) => i.includes(m)) ? { maxMs } : null;
+  };
+  const t0 = Date.now();
+  for (let h = held(); h && Date.now() - t0 < h.maxMs; h = held()) await new Promise((r) => setTimeout(r, Math.min(pollMs, Math.max(1, h.maxMs - (Date.now() - t0)))));
 }
 
 export class FakeDocker implements DockerAdapter, ComposeRunner {
@@ -249,10 +269,9 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   async pull(inv: ComposeInvocation, _timeoutMs: number): Promise<ComposeResult> {
     this.assertUp();
     if (this.behaviour.failPull) throw new ComposeError(`docker compose pull failed: ${this.behaviour.failPull}`, { command: ['pull'], exitCode: 1, stderrTail: this.behaviour.failPull, timedOut: false });
-    if (this.behaviour.pullDelay) {
+    if (this.behaviour.pullWait) {
       const doc = parseYaml(readFileSync(inv.file, 'utf8')) as { services?: Record<string, { image?: string }> };
-      const ms = this.behaviour.pullDelay(Object.values(doc?.services ?? {}).map((svc) => String(svc.image ?? '')));
-      if (ms > 0) await new Promise((r) => setTimeout(r, ms));
+      await this.behaviour.pullWait(Object.values(doc?.services ?? {}).map((svc) => String(svc.image ?? '')));
     }
     this.log.push(`pull ${inv.projectName}`);
     return { stdout: '', stderr: '' };

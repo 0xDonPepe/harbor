@@ -1363,6 +1363,9 @@ details summary {
 .tray-why {
   display: block;
 }
+.tray-clear {
+  margin-top: 8px;
+}
 progress {
   width: 100%;
   height: 6px;

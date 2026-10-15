@@ -25,7 +25,13 @@ async function approve(page: Page, label: string | RegExp) {
 }
 // Tray titles are human sentences; map the operation kind to the wording that proves success.
 const DONE_RE: Record<string, RegExp> = { Update: /is up to date$/, Install: /is ready$/, Start: /is running again$/, Stop: /is stopped$/, Remove: /was removed \(data kept\)$/, Reinstall: /is back$/, Purge: /was uninstalled completely$/, Expose: /is published$/, Unexpose: /address withdrawn$/, Restart: /restarted$/, Restore: /is restored$/ };
-const trayDone = (page: Page, kind: string) => expect(page.getByRole('heading', { name: DONE_RE[kind]! })).toBeVisible({ timeout: 30_000 });
+// Decision 183: finished items stay in the tray until dismissed (newest first), so once the result shows, the plain
+// ones are cleared and the next wait sees only new results (values shown once stay; dismissRecovery takes those).
+async function trayDone(page: Page, kind: string) {
+  await expect(page.getByRole('heading', { name: DONE_RE[kind]! }).first()).toBeVisible({ timeout: 30_000 });
+  const clear = page.locator('aside.tray').getByRole('button', { name: 'Clear finished', exact: true });
+  if (await clear.count()) await clear.click();
+}
 
 // A finished install may show recovery cards: the Harbor recovery key the
 // first time this installation encrypts anything, and the app's own 12 words
@@ -1062,7 +1068,8 @@ test('advanced access: the terminal runs a shell and echoes; troubleshoot shows 
   await login(page);
   await page.goto('/#/settings/access');
   await expect(page.getByRole('heading', { name: 'Terminal' })).toBeVisible();
-  await expect(page.locator('pre.code.wrap').first()).toContainText('-L 18500:127.0.0.1:18500');
+  const port = process.env['HARBOR_E2E_PORT'] ?? '18500'; // the daemon's own port (playwright.config.ts)
+  await expect(page.locator('pre.code.wrap').first()).toContainText(`-L ${port}:127.0.0.1:${port}`);
   await page.getByRole('button', { name: 'Open terminal' }).click();
   await expect(page.getByText(/Connected · shell/)).toBeVisible({ timeout: 15_000 });
   await page.locator('.terminal-wrap textarea').focus();
@@ -1704,12 +1711,14 @@ test('decision 164: a notification brings its own button — Harbor X is availab
   await page.unroute('**/v1/notifications');
 });
 
-// Decision 183: the tray is the queue. A dev-only knob (HARBOR_DEV_FAKE_CONTROL, src/dev.ts) makes one image's fake
-// pull slow, so an install keeps running while the console queues more behind it.
+// Decision 183: the tray is the queue. A dev-only knob (HARBOR_DEV_FAKE_CONTROL, src/dev.ts) holds one image's fake
+// pull until the test releases it, so an install keeps running while the console queues more behind it.
 test.describe('queue', () => {
-  const control = process.env['HARBOR_E2E_FAKE_CONTROL'] ?? path.join(tmpdir(), 'harbor-e2e-fake-control-18500.json');
-  const slowPulls = (c: { pullDelayMs: number; match: string } | null) => writeFileSync(control, JSON.stringify(c ?? {}));
-  test.afterEach(() => slowPulls(null));
+  const control = process.env['HARBOR_E2E_FAKE_CONTROL'] ?? path.join(tmpdir(), `harbor-e2e-fake-control-${process.env['HARBOR_E2E_PORT'] ?? 18500}.json`);
+  // holds every fake pull of a matching image until released (src/dev.ts re-reads the file while a pull waits)
+  const holdPulls = (match: string) => writeFileSync(control, JSON.stringify({ hold: true, match }));
+  const releasePulls = () => writeFileSync(control, '{}');
+  test.afterEach(() => releasePulls()); // a failed run never leaves the next test behind a held pull
 
   test('nothing greys out while an app installs; a second install and a same-app action queue; Cancel takes a waiting one out', async ({ page }) => {
     test.setTimeout(150_000);
@@ -1720,29 +1729,45 @@ test.describe('queue', () => {
     await trayDone(page, 'Install');
     await dismissRecovery(page);
 
-    // Uptime Kuma downloads slowly: it keeps the queue's single runner busy while the rest happens
-    slowPulls({ pullDelayMs: 30_000, match: 'louislam/uptime-kuma' });
+    // Uptime Kuma's download is held: it keeps the queue's single runner busy while the rest happens
+    holdPulls('louislam/uptime-kuma');
     await installFromStore(page, 'Uptime Kuma');
     await approve(page, 'Install');
     const tray = page.locator('aside.tray');
     await expect(tray.getByRole('heading', { name: 'Installing Uptime Kuma…', exact: true })).toBeVisible();
     await expect(tray.getByRole('heading', { name: /^Queue · 1 running/ })).toBeVisible();
+    const waiting = tray.getByRole('list', { name: 'Waiting' });
 
     // Home: the busy app says so; the other app's buttons and the busy app's own stay enabled
     await page.getByRole('link', { name: 'Home' }).click();
     await expect(page.locator('.icon-tile[data-instance="uptime-kuma"]')).toContainText('Installing…');
     await page.getByRole('button', { name: 'Details of uptime-kuma', exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('status', { name: 'Queue for uptime-kuma' })).toContainText('Installing…');
-    await expect(page.getByRole('dialog').getByRole('button', { name: 'Customize uptime-kuma', exact: true })).toBeEnabled();
-    await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
     let drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('status', { name: 'Queue for uptime-kuma' })).toContainText('Installing…');
+    await expect(drawer.getByRole('button', { name: 'Customize uptime-kuma', exact: true })).toBeEnabled();
+    // an installing app offers what makes sense after its install; each queues behind it
+    for (const name of ['Stop uptime-kuma', 'Restart uptime-kuma', 'Remove uptime-kuma']) await expect(drawer.getByRole('button', { name, exact: true })).toBeEnabled();
+    await drawer.getByText('Uninstall completely…').click();
+    await drawer.getByLabel('Type uptime-kuma to confirm', { exact: true }).fill('uptime-kuma');
+    await drawer.getByRole('button', { name: 'Uninstall uptime-kuma completely', exact: true }).click();
+    let ask = page.getByRole('dialog');
+    await expect(ask.getByRole('heading', { name: 'Queue: Uninstall Uptime Kuma', exact: true })).toBeVisible();
+    await expect(ask).toContainText('Harbor is installing Uptime Kuma right now. Harbor will uninstall it as soon as that finishes');
+    await ask.getByRole('button', { name: 'Queue uninstall', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Uninstall Uptime Kuma' })).toHaveCount(1);
+    // changed our mind: it never started, so it leaves the queue and the install goes on
+    await tray.getByRole('button', { name: 'Cancel uninstall Uptime Kuma', exact: true }).click();
+    await expect(tray.getByRole('list', { name: 'Waiting' })).toHaveCount(0);
+    await expect(tray.getByRole('heading', { name: 'Installing Uptime Kuma…', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
+    drawer = page.getByRole('dialog');
     for (const name of ['Stop n8n', 'Restart n8n', 'Remove n8n', 'Customize n8n']) await expect(drawer.getByRole('button', { name, exact: true })).toBeEnabled();
 
     // a reviewed plan for another app is approved at once and waits its turn
     await drawer.getByRole('button', { name: 'Restart n8n', exact: true }).click();
     await approve(page, 'Restart');
-    const waiting = tray.getByRole('list', { name: 'Waiting' });
     await expect(waiting.getByRole('listitem').filter({ hasText: 'Restart n8n' })).toHaveCount(1);
     await expect(tray.getByRole('heading', { name: 'Installing Uptime Kuma…', exact: true })).toBeVisible();
     await expect(page.locator('.icon-tile[data-instance="n8n"]')).toContainText('Waiting…');
@@ -1752,7 +1777,7 @@ test.describe('queue', () => {
     drawer = page.getByRole('dialog');
     await expect(drawer.getByRole('status', { name: 'Queue for n8n' })).toContainText('Restart waiting');
     await drawer.getByRole('button', { name: 'Stop n8n', exact: true }).click();
-    const ask = page.getByRole('dialog');
+    ask = page.getByRole('dialog');
     await expect(ask.getByRole('heading', { name: 'Queue: Stop n8n', exact: true })).toBeVisible();
     await expect(ask).toContainText('n8n is waiting to restart first. Harbor will stop it as soon as that finishes, planning it then.');
     await expect(ask.getByRole('button', { name: 'Queue stop', exact: true })).toBeEnabled();
@@ -1760,6 +1785,15 @@ test.describe('queue', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toHaveCount(1);
     await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toContainText('planned at its turn');
+    // a second Stop says it is already queued (with its Cancel) instead of queueing it twice
+    await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Stop n8n', exact: true }).click();
+    ask = page.getByRole('dialog');
+    await expect(ask.getByRole('heading', { name: 'Already queued: Stop n8n', exact: true })).toBeVisible();
+    await expect(ask.getByRole('button', { name: 'Cancel stop n8n', exact: true })).toBeVisible();
+    await ask.getByRole('button', { name: 'Keep it', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toHaveCount(1);
 
     // a second app's install, approved while the first one still downloads
     await page.getByRole('link', { name: 'App Store' }).click();
@@ -1776,22 +1810,25 @@ test.describe('queue', () => {
     await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toHaveCount(0);
     await expect(waiting.getByRole('listitem')).toHaveText([/^Restart n8n/, /^Install Immich/]);
 
-    // the slow one finishes, then the rest in order; each result stays in the tray
-    slowPulls(null);
-    await expect(tray.getByRole('heading', { name: 'Uptime Kuma is ready', exact: true })).toBeVisible({ timeout: 60_000 });
+    // release the held download: it finishes, then the rest in order; each result stays in the tray
+    releasePulls();
+    await expect(tray.getByRole('heading', { name: 'Uptime Kuma is ready', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(tray.getByRole('heading', { name: 'n8n restarted', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(tray.getByRole('heading', { name: 'Immich is ready', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(tray.getByRole('list', { name: 'Waiting' })).toHaveCount(0);
-    await expect(tray.getByRole('heading', { name: /^Queue · \d+ done$/ })).toBeVisible(); // a guard's own run may finish meanwhile
+    await expect(tray.getByRole('heading', { name: /^Queue · \d+ done$/ })).toBeVisible();
     await expect(tray.getByRole('link', { name: 'Launch uptime-kuma', exact: true })).toBeVisible();
     // n8n was not stopped (its Stop was cancelled before it started)
     await page.getByRole('link', { name: 'Home' }).click();
     await expect(page.locator('.icon-tile[data-instance="n8n"]')).not.toContainText('Stopped');
-    // collapse to one line, open again, dismiss each result
+    // collapse to one line, open again, then Clear finished takes every plain result at once
     await tray.getByRole('button', { name: /^Queue · / }).click();
     await expect(tray.getByRole('heading', { name: 'n8n restarted', exact: true })).toHaveCount(0);
     await tray.getByRole('button', { name: /^Queue · / }).click();
-    await dismissRecovery(page);
+    await tray.getByRole('button', { name: 'Clear finished', exact: true }).click();
+    await expect(tray.getByRole('heading', { name: 'n8n restarted', exact: true })).toHaveCount(0);
+    await expect(tray.getByRole('heading', { name: 'Uptime Kuma is ready', exact: true })).toHaveCount(0);
+    await dismissRecovery(page); // what showed a value once needs its own yes
     await expect(tray).toHaveCount(0);
   });
 });

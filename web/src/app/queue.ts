@@ -1,4 +1,4 @@
-import { QUEUEABLE_KINDS, type InstanceSummary, type OperationDto, type QueueableKind } from '../../../src/contracts/api';
+import { QUEUEABLE_KINDS, type InstanceSummary, type OperationDto, type QueueableKind } from '../../../src/contracts/api.js';
 
 // Decision 183: the words the queue speaks in (tray, Home tiles, the queue-mode review). Pure: no DOM, no relative imports.
 
@@ -46,7 +46,8 @@ export function notCancellableReason(op: Pick<OperationDto, 'actor' | 'kind'>): 
     case 'lock-guard':
       return 'Harbor queued this to start the app once its key is back; it cannot be cancelled.';
     case 'scheduler':
-      return 'Part of a scheduled backup; it cannot be cancelled.';
+      // every cold pass runs as the scheduler, a "Back up now" included
+      return 'Part of a backup run; it cannot be cancelled.';
     default:
       return op.kind === 'backup' ? 'Part of a backup run; it cannot be cancelled.' : 'Harbor queued this itself; it cannot be cancelled.';
   }
@@ -69,6 +70,54 @@ export function queueSummary(running: number, waiting: number, finished: number)
 export function whoOf(inst: Pick<InstanceSummary, 'displayName' | 'name' | 'packageId' | 'packageName'> | undefined, fallback: string): string {
   if (!inst) return fallback || 'the app';
   return inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} (${inst.name})`);
+}
+
+// The same action already waits for this app (a second click shows it, with its Cancel, instead of queueing it twice).
+// A running one is not "waiting": it can no longer be cancelled, and the dialog says what runs right now.
+export function alreadyQueued(active: OperationDto[], instanceId: string, kind: string): OperationDto | null {
+  return active.find((o) => o.instanceId === instanceId && o.kind === kind && !isRunning(o)) ?? null;
+}
+
+// A review the operator gave values in (typed secrets, accepted permissions, changed settings). Approving it while
+// the app became busy waits and reviews again (decision 173) instead of queueing an action that would drop them.
+export function reviewHasValues(v: { secrets?: Record<string, string>; acceptPermissions: boolean; settings?: Record<string, unknown> }): boolean {
+  return v.acceptPermissions || Object.keys(v.secrets ?? {}).length > 0 || Object.keys(v.settings ?? {}).length > 0;
+}
+
+// What the tray keeps once an operation finishes: everything accepted from this console (any outcome, until
+// dismissed), anything with values shown once, and failures of any actor. A background operation this console only
+// watched (scheduler, auto-update, guards) that went well drops out by itself (it stays in the queue's recent list).
+export function keepFinished(op: Pick<OperationDto, 'state' | 'result'>, acceptedHere: boolean): boolean {
+  return acceptedHere || hasShownOnce(op) || op.state === 'failed' || op.state === 'needs_action';
+}
+
+// "Clear finished": every finished item goes, except those still showing a value once (they need their own yes).
+export function clearFinished<T extends Pick<OperationDto, 'result'>>(list: T[]): T[] {
+  return list.filter(hasShownOnce);
+}
+
+// The full refresh (system, catalog, apps, addresses, …) runs every 10 s; the queue alone every 2 s while anything
+// runs or waits, else with the refresh.
+export const REFRESH_MS = 10_000;
+export const queuePollMs = (anyActive: boolean) => (anyActive ? 2000 : REFRESH_MS);
+
+// The app page's queueable actions. A free app keeps its own gating; a busy one (an operation of its own runs or
+// waits, its install included) also offers what makes sense after that operation, through queue mode. Nothing makes
+// sense after a waiting Uninstall completely, and after a Remove only Uninstall completely does.
+export function appActionGates(inst: Pick<InstanceSummary, 'installState' | 'runtime'>, ops: Pick<OperationDto, 'kind'>[]): { stop: boolean; restart: boolean; remove: boolean; purge: boolean; update: boolean } {
+  const retained = inst.installState === 'retained';
+  const canStop = (inst.installState === 'installed' || inst.installState === 'needs_action' || inst.installState === 'failed') && inst.runtime !== 'stopped';
+  const purging = ops.some((o) => o.kind === 'purge');
+  const removing = ops.some((o) => o.kind === 'remove');
+  const after = ops.length > 0 && !retained && !purging && !removing;
+  if (purging || removing) return { stop: false, restart: false, remove: false, purge: !purging, update: false };
+  return {
+    stop: canStop || after,
+    restart: (canStop && inst.installState === 'installed' && inst.runtime === 'running') || after,
+    remove: (!retained && inst.installState !== 'installing') || after,
+    purge: inst.installState !== 'installing' || after,
+    update: inst.installState === 'installed' || after,
+  };
 }
 
 // The app page's quiet line while the app is busy: "Installing… · Update waiting".

@@ -9,6 +9,7 @@ import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './form
 import { gpuAppText, gpuReviewText } from './gpu-text';
 import { DriveIcon, LockIcon, PeopleIcon } from './icons';
 import type { Action, Console } from './store';
+import { DOING, VERB, appQueueLine, capitalize as cap, isRunning, whoOf } from './queue';
 import { SettingFields, SettingsDialog } from './settings-fields';
 import { changedValues, draftOf, optionsSummary, settingText, type SettingDraft } from './setting-draft';
 
@@ -71,6 +72,38 @@ export function PlanDialog({ c }: { c: Console }) {
   }, [plan?.id]);
   const chosenSettings = changedValues(askedSettings, settingDraft, (s) => s.default);
   if (!pending) return null;
+  if (c.queuedBehind && 'instance' in pending) {
+    // Decision 183: the app is busy, so this action joins the queue without a plan; Harbor plans it at its turn.
+    const behind = c.queuedBehind;
+    const who = whoOf(c.data.instances.find((i) => i.id === pending.instance.id) ?? pending.instance, pending.instance.name);
+    const v = VERB[pending.kind] ?? pending.kind;
+    const now = isRunning(behind) ? `Harbor is ${(DOING[behind.kind] ?? behind.kind).toLowerCase()} ${who} right now.` : `${who} is waiting to ${VERB[behind.kind] ?? behind.kind} first.`;
+    return (
+      <Dialog title={`Queue: ${cap(v)} ${who}`} onClose={c.cancel}>
+        {planError && (
+          <p className="error" role="alert">
+            {planError}
+          </p>
+        )}
+        <div className="plan">
+          <p className="lead">
+            {now} Harbor will {v} it as soon as that finishes, planning it then.
+          </p>
+          <p className="muted">It stops and asks you only if it needs something new from you.</p>
+          {pending.kind === 'purge' && <p className="warn">Its data volumes, secrets and stored release are deleted. This cannot be undone.</p>}
+          {pending.kind === 'remove' && <p className="muted small">Data, secrets, the name and its ports are kept, so Reinstall brings it back as it was.</p>}
+        </div>
+        <div className="row end">
+          <button className="btn" onClick={c.cancel}>
+            Cancel
+          </button>
+          <button className="btn primary" onClick={() => void c.approve()}>
+            Queue {v}
+          </button>
+        </div>
+      </Dialog>
+    );
+  }
   const missingSecret = plan ? plan.secrets.some((s) => s.ask === 'required' && (secretValues[s.id] ?? '').length < Math.max(1, s.minLength ?? 1)) : false;
   const opensPorts = plan?.opensPorts ?? [];
   const needsPermission = plan ? (plan.permissions.length > 0 || opensPorts.length > 0) && !permissionsAccepted : false;
@@ -391,7 +424,7 @@ function fmtDeviceSize(size: string): string {
   return fmtGB(Number(m[1]) * 1024 ** ('KMGTP'.indexOf(m[2]!.toUpperCase()) + 1));
 }
 
-export function InstallWizard({ item, instances = [], busy, installed = 0, mode: startMode = 'page', onClose, onStart, onRemovePackage, onOpenInstance }: { item: CatalogItemDto; instances?: InstanceSummary[]; busy: boolean; installed?: number; mode?: 'page' | 'copy'; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void; onOpenInstance?: (i: InstanceSummary) => void }) {
+export function InstallWizard({ item, instances = [], installed = 0, mode: startMode = 'page', onClose, onStart, onRemovePackage, onOpenInstance }: { item: CatalogItemDto; instances?: InstanceSummary[]; installed?: number; mode?: 'page' | 'copy'; onClose: () => void; onStart: (a: Action) => void; onRemovePackage?: () => void; onOpenInstance?: (i: InstanceSummary) => void }) {
   // Decision 170: an installed app's page opens the copy you have; "Add another copy…" (copyable apps only)
   // turns it into the install page, which says it is a separate copy and asks for its name (prefilled
   // with the name the daemon proposes, e.g. immich-2).
@@ -817,19 +850,19 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
               Close
             </button>
             {copyable && item.availability === 'available' && (
-              <button className="btn" disabled={busy} onClick={() => setMode('copy')} aria-label={`Add another copy of ${item.name}`}>
+              <button className="btn" onClick={() => setMode('copy')} aria-label={`Add another copy of ${item.name}`}>
                 Add another copy…
               </button>
             )}
             {view === 'reinstall' ? (
               // its drawer has Reinstall (the kept data comes back), the same place the Store card goes
-              <button className="btn primary" disabled={busy} onClick={() => (onOpenInstance ?? onClose)(copies.removed[0]!)} aria-label={`Reinstall ${item.name}`}>
+              <button className="btn primary" onClick={() => (onOpenInstance ?? onClose)(copies.removed[0]!)} aria-label={`Reinstall ${item.name}`}>
                 Reinstall…
               </button>
             ) : (
               <>
                 <OpenCopy inst={copies.active[0]!} name={item.name} onManage={(i) => (onOpenInstance ?? onClose)(i)} primary={!outdatedCopy(copies.active)} />
-                {outdatedCopy(copies.active) && <UpdateButton inst={outdatedCopy(copies.active)!} copies={copies.active} onUpdate={(i) => onStart({ kind: 'update', instance: i })} disabled={busy} />}
+                {outdatedCopy(copies.active) && <UpdateButton inst={outdatedCopy(copies.active)!} copies={copies.active} onUpdate={(i) => onStart({ kind: 'update', instance: i })} />}
               </>
             )}
           </div>
@@ -1144,7 +1177,7 @@ export function InstallWizard({ item, instances = [], busy, installed = 0, mode:
             </button>
             <button
               className="btn primary"
-              disabled={busy || item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
+              disabled={item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
               onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
               aria-label={`Install ${item.name} now`}
               title={nameError ? nameError : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
@@ -1341,7 +1374,7 @@ export function PublishWizard({ inst, exposures, tools, onClose, onStart }: { in
   );
 }
 
-export function UnlockForm({ inst, busy, onUnlocked, onError }: { inst: InstanceSummary; busy: boolean; onUnlocked: () => void; onError: (m: string | null) => void }) {
+export function UnlockForm({ inst, onUnlocked, onError }: { inst: InstanceSummary; onUnlocked: () => void; onError: (m: string | null) => void }) {
   const [pass, setPass] = useState('');
   const [show, setShow] = useState(false);
   const [working, setWorking] = useState(false);
@@ -1367,7 +1400,7 @@ export function UnlockForm({ inst, busy, onUnlocked, onError }: { inst: Instance
       <button className="btn ghost" type="button" onClick={() => setShow(!show)} aria-label={show ? 'Hide passphrase' : 'Show passphrase'}>
         {show ? 'Hide' : 'Show'}
       </button>
-      <button className="btn primary" type="submit" disabled={busy || working || !pass} aria-label={`Unlock ${inst.name}`}>
+      <button className="btn primary" type="submit" disabled={working || !pass} aria-label={`Unlock ${inst.name}`}>
         {working ? 'Unlocking…' : 'Unlock'}
       </button>
     </form>
@@ -1375,7 +1408,7 @@ export function UnlockForm({ inst, busy, onUnlocked, onError }: { inst: Instance
 }
 
 // Decision 145: move an encrypted app to another place that can hold apps (data folder, an ext4 drive).
-function MovePanel({ inst, current, busy, onMove }: { inst: InstanceSummary; current: string; busy: boolean; onMove: (dir: string) => void }) {
+function MovePanel({ inst, current, onMove }: { inst: InstanceSummary; current: string; onMove: (dir: string) => void }) {
   const [cands, setCands] = useState<HostStorageDto['installCandidates'] | null>(null);
   const [pick, setPick] = useState('');
   const load = () => api.hostStorage().then((s) => setCands(s.installCandidates), () => setCands([]));
@@ -1400,7 +1433,7 @@ function MovePanel({ inst, current, busy, onMove }: { inst: InstanceSummary; cur
               </option>
             ))}
           </select>
-          <button className="btn" disabled={busy || !pick} onClick={() => onMove(`${pick}/${inst.packageId}`)} aria-label={`Move ${inst.name}`}>
+          <button className="btn" disabled={!pick} onClick={() => onMove(`${pick}/${inst.packageId}`)} aria-label={`Move ${inst.name}`}>
             Move
           </button>
         </div>
@@ -1480,7 +1513,7 @@ function PassphrasePanel({ inst, defaultKey: given, onChanged }: { inst: Instanc
   );
 }
 
-export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish, onCustomize, onChanged, instances = [], catalog = [] }: { inst: InstanceSummary; exposures: ExposureDto[]; busy: boolean; onClose: () => void; onAction: (a: Action) => void; onPublish: () => void; onCustomize: () => void; onChanged?: (i: InstanceSummary) => void; instances?: InstanceSummary[]; catalog?: CatalogItemDto[] }) {
+export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPublish, onCustomize, onChanged, instances = [], catalog = [] }: { inst: InstanceSummary; exposures: ExposureDto[]; ops?: OperationDto[]; onClose: () => void; onAction: (a: Action) => void; onPublish: () => void; onCustomize: () => void; onChanged?: (i: InstanceSummary) => void; instances?: InstanceSummary[]; catalog?: CatalogItemDto[] }) {
   const [relink, setRelink] = useState<Record<string, string>>({});
   const upd = inst.updateAvailable;
   const [detail, setDetail] = useState<InstanceDetail | null>(null);
@@ -1538,6 +1571,12 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           </p>
           <StatusPill inst={inst} />
           <span className="muted small"> · observed {fmtTime(inst.observedAt)}</span>
+          {ops.length > 0 && (
+            // decision 183: the app is busy; its buttons still work and queue behind this
+            <p className="muted small" role="status" aria-label={`Queue for ${inst.name}`}>
+              {appQueueLine(ops)}
+            </p>
+          )}
           {inst.usage && (
             <p className="muted small" aria-label="Resource usage">
               CPU {inst.usage.cpuPercent}% · {fmtBytes(inst.usage.memoryBytes)} memory
@@ -1553,7 +1592,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             )}
           </p>
           {!home && inst.installState === 'installed' && (
-            <button className="btn small" disabled={busy} onClick={() => onAction({ kind: 'seal', instance: inst })} aria-label={`Encrypt ${inst.name}`} title="Move its data into a sealed home on this machine (Harbor's own key, unlocks when you log in)">
+            <button className="btn small" onClick={() => onAction({ kind: 'seal', instance: inst })} aria-label={`Encrypt ${inst.name}`} title="Move its data into a sealed home on this machine (Harbor's own key, unlocks when you log in)">
               Encrypt this app…
             </button>
           )}
@@ -1578,7 +1617,6 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           {!home!.defaultKey && (
             <UnlockForm
               inst={inst}
-              busy={busy}
               onUnlocked={() => {
                 setError(null);
                 void api.instance(inst.id).then(setDetail, (e: Error) => setError(e.message));
@@ -1604,7 +1642,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           <div className="row wrap">
             <button
               className="btn"
-              disabled={busy || adopting || inst.runtime === 'running' || inst.runtime === 'starting'}
+              disabled={adopting || inst.runtime === 'running' || inst.runtime === 'starting'}
               onClick={() => {
                 setAdopting(true);
                 setAdoptMsg(null);
@@ -1638,7 +1676,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             </span>
             <p className="muted small">Your data, addresses and ports stay. If the new version does not start, Harbor puts the current one back.</p>
           </div>
-          <button className="btn primary" disabled={busy || inst.installState !== 'installed'} onClick={() => onAction({ kind: 'update', instance: inst })} aria-label={`Update ${inst.name}`}>
+          <button className="btn primary" disabled={inst.installState !== 'installed'} onClick={() => onAction({ kind: 'update', instance: inst })} aria-label={`Update ${inst.name}`}>
             Update
           </button>
         </div>
@@ -1678,7 +1716,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           </a>
         )}
         {canOpen && (
-          <button className="btn" disabled={busy} onClick={onPublish} aria-label={`Publish ${inst.name}`}>
+          <button className="btn" onClick={onPublish} aria-label={`Publish ${inst.name}`}>
             Publish…
           </button>
         )}
@@ -1688,29 +1726,29 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           </button>
         )}
         {canStart && (
-          <button className="btn" disabled={busy} onClick={() => onAction({ kind: 'start', instance: inst })} aria-label={`Start ${inst.name}`}>
+          <button className="btn" onClick={() => onAction({ kind: 'start', instance: inst })} aria-label={`Start ${inst.name}`}>
             Start
           </button>
         )}
         {canStop && inst.installState === 'installed' && inst.runtime === 'running' && (
-          <button className="btn" disabled={busy} onClick={() => onAction({ kind: 'restart', instance: inst })} aria-label={`Restart ${inst.name}`} title="Restart with the current addresses, for example after changing network settings">
+          <button className="btn" onClick={() => onAction({ kind: 'restart', instance: inst })} aria-label={`Restart ${inst.name}`} title="Restart with the current addresses, for example after changing network settings">
             Restart
           </button>
         )}
         {(inst.installState === 'needs_action' || inst.installState === 'failed') && inst.hasRetainedData && !need && (
-          <button className="btn primary" disabled={busy} onClick={() => onAction({ kind: 'restart', instance: inst })} aria-label={`Repair ${inst.name}`} title="Run it again from its stored release: re-render, recreate the containers, check it answers. Data, ports and addresses stay.">
+          <button className="btn primary" onClick={() => onAction({ kind: 'restart', instance: inst })} aria-label={`Repair ${inst.name}`} title="Run it again from its stored release: re-render, recreate the containers, check it answers. Data, ports and addresses stay.">
             Repair
           </button>
         )}
         {canStop && inst.installState !== 'installing' && (
-          <button className="btn" disabled={busy} onClick={() => onAction({ kind: 'stop', instance: inst })} aria-label={`Stop ${inst.name}`}>
+          <button className="btn" onClick={() => onAction({ kind: 'stop', instance: inst })} aria-label={`Stop ${inst.name}`}>
             Stop
           </button>
         )}
         {lockable && (
           <button
             className="btn"
-            disabled={busy || locking || !canLock}
+            disabled={locking || !canLock}
             onClick={() => {
               setLocking(true);
               setError(null);
@@ -1727,12 +1765,12 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           </button>
         )}
         {!retained && inst.installState !== 'installing' && (
-          <button className="btn danger" disabled={busy} onClick={() => onAction({ kind: 'remove', instance: inst })} aria-label={`Remove ${inst.name}`}>
+          <button className="btn danger" onClick={() => onAction({ kind: 'remove', instance: inst })} aria-label={`Remove ${inst.name}`}>
             Remove
           </button>
         )}
         {retained && inst.hasRetainedData && (
-          <button className="btn" disabled={busy} onClick={() => onAction({ kind: 'reinstall', instance: inst })} aria-label={`Reinstall ${inst.name}`}>
+          <button className="btn" onClick={() => onAction({ kind: 'reinstall', instance: inst })} aria-label={`Reinstall ${inst.name}`}>
             Reinstall
           </button>
         )}
@@ -1839,11 +1877,11 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
                           </option>
                         ))}
                       </select>
-                      <button className="btn small" disabled={busy || !pick || (pick === l.provider?.instanceId && l.state === 'active')} onClick={() => onAction({ kind: 'configure', instance: inst, links: { [l.id]: { instanceId: pick } } })} aria-label={`Link ${l.id} to the chosen app`}>
+                      <button className="btn small" disabled={!pick || (pick === l.provider?.instanceId && l.state === 'active')} onClick={() => onAction({ kind: 'configure', instance: inst, links: { [l.id]: { instanceId: pick } } })} aria-label={`Link ${l.id} to the chosen app`}>
                         {l.provider ? 'Change' : 'Link'}
                       </button>
                       {l.optional && l.provider && (
-                        <button className="btn small ghost" disabled={busy} onClick={() => onAction({ kind: 'configure', instance: inst, links: { [l.id]: null } })} aria-label={`Unlink ${l.id}`}>
+                        <button className="btn small ghost" onClick={() => onAction({ kind: 'configure', instance: inst, links: { [l.id]: null } })} aria-label={`Unlink ${l.id}`}>
                           Unlink
                         </button>
                       )}
@@ -1867,7 +1905,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             {inst.operatorSecrets.map((s) => (
               <li key={s.id}>
                 {s.prompt} <span className="muted small">· {s.set ? 'set, never shown' : 'not set'}</span>{' '}
-                <button className="btn small" disabled={busy || inst.installState !== 'installed'} onClick={() => onAction({ kind: 'configure', instance: inst, secrets: [s.id] })} aria-label={`Change ${s.id}`}>
+                <button className="btn small" disabled={inst.installState !== 'installed'} onClick={() => onAction({ kind: 'configure', instance: inst, secrets: [s.id] })} aria-label={`Change ${s.id}`}>
                   Change…
                 </button>
               </li>
@@ -1888,7 +1926,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             ))}
           </ul>
           <div className="row">
-            <button className="btn small" disabled={busy || inst.installState !== 'installed'} onClick={() => setSettingsOpen(true)} aria-label={`Change the settings of ${inst.name}`}>
+            <button className="btn small" disabled={inst.installState !== 'installed'} onClick={() => setSettingsOpen(true)} aria-label={`Change the settings of ${inst.name}`}>
               Change…
             </button>
           </div>
@@ -1905,9 +1943,9 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
           )}
         </>
       )}
-      {!retained && <AppBackupsPanel inst={inst} busy={busy} onAction={onAction} />}
+      {!retained && <AppBackupsPanel inst={inst} onAction={onAction} />}
       {home && !retained && !locked && <PassphrasePanel inst={inst} defaultKey={Boolean(home.defaultKey)} onChanged={onChanged} />}
-      {home && !retained && !locked && inst.installState === 'installed' && <MovePanel inst={inst} current={home.path} busy={busy} onMove={(dir) => onAction({ kind: 'move', instance: inst, dir })} />}
+      {home && !retained && !locked && inst.installState === 'installed' && <MovePanel inst={inst} current={home.path} onMove={(dir) => onAction({ kind: 'move', instance: inst, dir })} />}
       {detail?.defaultCredentials && !retained && <DefaultLogin creds={detail.defaultCredentials} />}
       {retained && <p className="muted">Removed. Data volumes and secrets are retained; Reinstall restores the exact same release.</p>}
       {inst.installState !== 'installing' && (
@@ -1922,7 +1960,7 @@ export function AppDrawer({ inst, exposures, busy, onClose, onAction, onPublish,
             </span>
             <input value={confirmPurge} onChange={(e) => setConfirmPurge(e.target.value)} aria-label={`Type ${inst.name} to confirm`} autoComplete="off" />
           </label>
-          <button className="btn danger" disabled={busy || confirmPurge.trim() !== inst.name} onClick={() => onAction({ kind: 'purge', instance: inst })} aria-label={`Uninstall ${inst.name} completely`}>
+          <button className="btn danger" disabled={confirmPurge.trim() !== inst.name} onClick={() => onAction({ kind: 'purge', instance: inst })} aria-label={`Uninstall ${inst.name} completely`}>
             Delete app and its data
           </button>
         </details>

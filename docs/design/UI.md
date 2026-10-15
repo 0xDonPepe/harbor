@@ -26,13 +26,27 @@ Sidebar (desktop) / bottom tabs (phone)
 ├── Publishing  every published address, state, primary marker · Publish/Withdraw · Harbor-on-tailnet toggle
 ├── Platform    Docker, Cockpit, Portainer, Tailscale, Proxy cards with real state, links and the exact next step
 └── Settings    session, version, installation id, access instructions (SSH forward line), theme
-Overlay: operation tray (bottom-right) showing the running operation with phase + events; toast on completion (credentials shown once here)
+Overlay: the queue tray (bottom-right; above the tabs on phones): running item, waiting items with Cancel, finished results (credentials shown once here) — decision 183
 ```
 
 Every tile shows: icon, name, one status pill in plain words ("Running", "Stopped", "Needs attention",
 "Removed, data kept", "Installing…"), the primary address on hover/focus, and actions
 (Open · Publish · Stop/Start · Details · Remove). Technical state (`installState/runtime/readiness`,
 error codes, next action) lives in the drawer.
+
+**The tray is the queue (decision 183).** One quiet panel, one line on top (*Queue · 1 running, 2 waiting*) that
+collapses it. Inside, in run order: the running operation (its sentence, the phase in plain words, a progress
+bar); the waiting ones (*Update Immich · waiting*), each with **Cancel** (accessible name *Cancel update Immich*)
+or, when Harbor queued it to protect something (drive guard, link guard, lock guard, a scheduled backup), one
+quiet line saying why it cannot be cancelled; then the operations this console saw finish, each with today's
+result (Open, next step, shown-once credentials and recovery cards, error code + next action, *Technical steps*)
+and its own Dismiss. Approving something new clears finished items that showed nothing once; a password or
+recovery words stay until dismissed. No button anywhere is disabled because another operation runs: a
+Start/Stop/Restart/Update/Remove/Reinstall/Uninstall on a busy app opens the review in *queue mode* (no plan;
+"Harbor is installing Immich right now. Harbor will update it as soon as that finishes, planning it then." and
+**Queue update**); other kinds keep decision 173's wait. Home tiles show the app's own operation
+(*Updating…*, *Waiting…*, the installing pulse) and the app page adds one quiet line (*Installing… · Update
+waiting*).
 
 ## 3. Package presentation metadata (small, optional schema extension)
 

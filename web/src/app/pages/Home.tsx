@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CatalogItemDto, HostStorageDto, InstanceSummary, SystemMetricsDto, WidgetDto } from '../../../../src/contracts/api';
+import type { CatalogItemDto, HostStorageDto, InstanceSummary, OperationDto, SystemMetricsDto, WidgetDto } from '../../../../src/contracts/api';
 import { api } from '../../api';
 import { AppIcon, InstanceIcon, Pill, appLabel, copyName, openUrl } from '../components';
 import { ArrowUpIcon, EllipsisIcon } from '../icons';
 import { fmtBytes, fmtUptime, plainStatus, updateLine } from '../format';
 import { useReorder } from '../reorder';
+import { tileStatus } from '../queue';
 import type { Console } from '../store';
 
 const PICKS = ['nextcloud', 'immich', 'jellyfin', 'open-webui', 'vaultwarden', 'n8n'];
@@ -110,7 +111,6 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
             {updates.length > 1 && (
               <button
                 className="btn"
-                disabled={c.busy}
                 onClick={() => {
                   void api.applyAllUpdates().then(() => c.refresh());
                 }}
@@ -130,7 +130,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                     {i.updateAvailable!.releaseNotes && <span className="muted small"> · {i.updateAvailable!.releaseNotes}</span>}
                   </span>
                 </span>
-                <button className="btn primary" disabled={c.busy} onClick={() => c.start({ kind: 'update', instance: i })} aria-label={`Update ${i.name}`}>
+                <button className="btn primary" onClick={() => c.start({ kind: 'update', instance: i })} aria-label={`Update ${i.name}`}>
                   Update
                 </button>
               </li>
@@ -198,7 +198,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
           <>
             <ul className="icons" aria-label="Installed apps">
               {tiles.map((i) => (
-                <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} reorder={re} />
+                <AppIconTile key={i.id} inst={i} op={c.activeFor(i.id)} all={data.instances} onDetails={() => onOpenApp(i)} reorder={re} />
               ))}
               {!re.arranging && (
                 <li className="icon-tile add">
@@ -218,7 +218,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 </summary>
                 <ul className="icons">
                   {hidden.map((i) => (
-                    <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} />
+                    <AppIconTile key={i.id} inst={i} op={c.activeFor(i.id)} all={data.instances} onDetails={() => onOpenApp(i)} />
                   ))}
                 </ul>
               </details>
@@ -230,7 +230,7 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
                 </summary>
                 <ul className="icons">
                   {retained.map((i) => (
-                    <AppIconTile key={i.id} inst={i} all={data.instances} onDetails={() => onOpenApp(i)} />
+                    <AppIconTile key={i.id} inst={i} op={c.activeFor(i.id)} all={data.instances} onDetails={() => onOpenApp(i)} />
                   ))}
                 </ul>
               </details>
@@ -255,11 +255,12 @@ export function Home({ c, onOpenApp, onGoStore, onPick }: { c: Console; onOpenAp
   );
 }
 
-function AppIconTile({ inst, all = [], onDetails, reorder }: { inst: InstanceSummary; all?: InstanceSummary[]; onDetails: () => void; reorder?: ReturnType<typeof useReorder> }) {
+function AppIconTile({ inst, op = null, all = [], onDetails, reorder }: { inst: InstanceSummary; op?: OperationDto | null; all?: InstanceSummary[]; onDetails: () => void; reorder?: ReturnType<typeof useReorder> }) {
   const url = openUrl(inst);
   const arranging = reorder?.arranging ?? false;
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && url && !arranging;
-  const status = plainStatus(inst);
+  // decision 183: the app's own operation first ("Updating…", "Waiting…"), then its plain state
+  const status = op ? tileStatus(op) : plainStatus(inst);
   // decision 170: with several copies of one app, each tile names its copy on a line of its own
   const copy = copyName(inst, all);
   const label = copy ? inst.packageName : appLabel(inst);
@@ -275,8 +276,8 @@ function AppIconTile({ inst, all = [], onDetails, reorder }: { inst: InstanceSum
   return (
     <li
       ref={tp?.ref}
-      className={`icon-tile instance ${inst.installState} tone-${status.tone} ${reorder?.dragging === inst.id ? 'dragging' : ''}`}
-      aria-busy={inst.installState === 'installing'}
+      className={`icon-tile instance ${inst.installState} tone-${status.tone} ${op ? 'busy' : ''} ${reorder?.dragging === inst.id ? 'dragging' : ''}`}
+      aria-busy={inst.installState === 'installing' || Boolean(op)}
       onPointerDown={tp?.onPointerDown}
       onKeyDown={tp?.onKeyDown}
       style={tp?.style}

@@ -4,6 +4,17 @@ import { api, ApiError } from '../../api';
 import { Dialog, Pill } from '../components';
 import { fmtTime } from '../format';
 import type { Console } from '../store';
+import { isRunning, opTitle, whoOf } from '../queue';
+
+// decision 183: what runs now and how much waits ("Updating Immich… · 2 waiting")
+function queueLine(c: Console): string {
+  const active = c.queue.active;
+  if (!active.length) return 'nothing running or waiting';
+  const running = active.find(isRunning);
+  const waiting = active.filter((o) => !isRunning(o)).length;
+  const name = (id: string, fallback: string) => whoOf(c.data.instances.find((i) => i.id === id), fallback);
+  return [running ? opTitle(running, name(running.instanceId, running.instanceName)) : '', waiting ? `${waiting} waiting` : ''].filter(Boolean).join(' · ');
+}
 
 const ADVANCED_ACK_KEY = 'harbor.advanced-tools-ack';
 function readAdvancedAck(): boolean {
@@ -52,8 +63,8 @@ export function Platform({ c }: { c: Console }) {
               <span className="muted small"> observed {fmtTime(data.system.docker.observedAt)}</span>
               {data.system.docker.error && <span className="error small"> {data.system.docker.error}</span>}
             </dd>
-            <dt>Busy</dt>
-            <dd>{data.system.busyOperationId ?? 'no operation running'}</dd>
+            <dt>Queue</dt>
+            <dd>{queueLine(c)}</dd>
             <dt>Installation</dt>
             <dd>
               <code>{data.system.installationId}</code>

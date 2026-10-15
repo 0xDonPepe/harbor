@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LinkChoice, SettingValue } from '../../../src/contracts/api';
-import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, PlanDto, PlanRequest, PlatformToolDto, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
+import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, OperationQueueDto, PlanDto, PlanRequest, PlatformToolDto, QueueableKind, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
 import { ApiError, api, newIdempotencyKey } from '../api';
+import { hasShownOnce, isFinal, isQueueable } from './queue';
 
 export interface Data {
   system: SystemDto | null;
@@ -58,7 +59,7 @@ export function planRequestFor(a: Action): PlanRequest {
   }
 }
 
-export const isFinal = (op: OperationDto) => op.state === 'succeeded' || op.state === 'failed' || op.state === 'needs_action';
+export { isFinal };
 
 // The install-location passphrase travels with the submission, never in the plan.
 export function submitPassphraseFor(a: Action | null): string | undefined {
@@ -66,7 +67,8 @@ export function submitPassphraseFor(a: Action | null): string | undefined {
 }
 
 // One store for the console: polling, the plan → approve → operation flow with a stable idempotency
-// key per plan, and the operation tray. Everything comes from the daemon; nothing is cached across reloads.
+// key per plan, and the queue (decision 183): what runs and waits, plus the operations this console saw finish,
+// each with its own results until dismissed. Everything comes from the daemon; nothing is cached across reloads.
 export function useConsole(onAuthLost: (msg?: string) => void) {
   const [data, setData] = useState<Data>({ system: null, metrics: null, catalog: [], instances: [], tools: [], exposures: [], uiExposure: null, appearance: null, notifications: null });
   const [loaded, setLoaded] = useState(false);
@@ -76,15 +78,26 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const [planError, setPlanError] = useState<string | null>(null);
   // The app already runs an operation: the review waits its turn instead of failing (a plan is a snapshot of the
   // app, so it is made once the other operation is done). Text for the dialog while waiting; null otherwise.
+  // Decision 183: only for kinds that cannot be queued without a plan (configure, publish, move, …).
   const [waitingFor, setWaitingFor] = useState<string | null>(null);
+  // Decision 183: the review is in queue mode — the app is busy with this operation, and the action joins the queue
+  // without a plan (Harbor plans it at its turn). Null for a normal review.
+  const [queuedBehind, setQueuedBehind] = useState<OperationDto | null>(null);
   const startToken = useRef(0);
   // decision 164: the daemon restarted and this machine's key is locked; the review dialog asks for the password
   const [locked, setLocked] = useState(false);
   const lastApprove = useRef<{ secrets?: Record<string, string>; acceptPermissions: boolean; settings?: Record<string, SettingValue> }>({ acceptPermissions: false });
-  const [watching, setWatching] = useState<OperationDto | null>(null);
-  const [lastDone, setLastDone] = useState<OperationDto | null>(null);
   const key = useRef<string | null>(null);
   const submitting = useRef(false);
+
+  // decision 183: the queue, and the finished operations this console saw (approved here or seen active)
+  const [queue, setQueue] = useState<OperationQueueDto>({ active: [], recent: [] });
+  const [finished, setFinished] = useState<OperationDto[]>([]);
+  const [trayCollapsed, setTrayCollapsed] = useState(false);
+  const tracked = useRef(new Set<string>());
+  const cancelledHere = useRef(new Set<string>());
+  const polling = useRef<Promise<void> | null>(null);
+  const pollAgain = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -98,38 +111,86 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       setData((prev) => ({ ...prev, system, metrics, catalog, instances, exposures: exp.items, uiExposure: exp.ui, appearance: appearance ?? prev.appearance, notifications: notifications ?? prev.notifications }));
       setLoadError(null);
       setLoaded(true);
-      if (!watching) {
-        const active = instances.find((i) => i.installState === 'installing' || (i.operationId && i.runtime === 'starting'));
-        if (active?.operationId) setWatching(await api.operation(active.operationId));
-      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) onAuthLost();
       else setLoadError(e instanceof Error ? e.message : String(e));
     }
-  }, [onAuthLost, watching]);
+  }, [onAuthLost]);
 
+  // One pass over the queue: the daemon's list, then every operation this console tracks that left it (fetched one
+  // by one for its events and one-time results). Overlapping calls run once more after the current pass.
+  const pollQueueOnce = async (): Promise<void> => {
+    let q: OperationQueueDto | null = null;
+    try {
+      q = await api.queue(10);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return onAuthLost();
+      // no list: the tracked operations below still keep the tray honest
+    }
+    for (const op of q?.active ?? []) tracked.current.add(op.id);
+    const listed = new Set((q?.active ?? []).map((o) => o.id));
+    const extra: OperationDto[] = [];
+    const done: OperationDto[] = [];
+    for (const id of [...tracked.current].filter((x) => !listed.has(x))) {
+      try {
+        const op = await api.operation(id);
+        if (isFinal(op)) {
+          tracked.current.delete(id);
+          if (!cancelledHere.current.delete(id)) done.push(op);
+        } else extra.push(op); // accepted after the list was read: shown at the end until the next pass
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) return onAuthLost();
+        if (e instanceof ApiError && e.status === 404) tracked.current.delete(id);
+      }
+    }
+    setQueue({ active: [...(q?.active ?? []), ...extra], recent: q?.recent ?? [] });
+    if (done.length) {
+      setFinished((prev) => [...done.filter((d) => !prev.some((p) => p.id === d.id)).reverse(), ...prev]);
+      void refresh();
+    }
+  };
+  const pollQueue = async (): Promise<void> => {
+    if (polling.current) {
+      pollAgain.current = true;
+      return polling.current;
+    }
+    polling.current = (async () => {
+      do {
+        pollAgain.current = false;
+        await pollQueueOnce();
+      } while (pollAgain.current);
+    })().finally(() => {
+      polling.current = null;
+    });
+    return polling.current;
+  };
+  const pollRef = useRef(pollQueue);
+  pollRef.current = pollQueue;
+
+  // Every 2 s while anything runs or waits, else with the normal 10 s refresh.
+  const anyActive = queue.active.length > 0;
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => void refresh(), watching && !isFinal(watching) ? 2000 : 10000);
+    void pollRef.current();
+    const t = setInterval(() => {
+      void refresh();
+      void pollRef.current();
+    }, anyActive ? 2000 : 10000);
     return () => clearInterval(t);
-  }, [refresh, watching]);
+  }, [refresh, anyActive]);
 
-  useEffect(() => {
-    if (!watching || isFinal(watching)) return;
-    const t = setInterval(async () => {
-      try {
-        const op = await api.operation(watching.id);
-        setWatching(op);
-        if (isFinal(op)) {
-          setLastDone(op);
-          void refresh();
-        }
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) onAuthLost();
-      }
-    }, 2000);
-    return () => clearInterval(t);
-  }, [watching, refresh, onAuthLost]);
+  // The first operation of an app that is still running or waiting, in run order.
+  const activeFor = (instanceId: string): OperationDto | null => queue.active.find((o) => o.instanceId === instanceId) ?? null;
+
+  // An operation was accepted here: track it, show it at once, and clear finished items that showed nothing once
+  // (an unacknowledged password or recovery words stay until dismissed).
+  const accepted = (op: OperationDto) => {
+    tracked.current.add(op.id);
+    setQueue((q) => (q.active.some((x) => x.id === op.id) ? q : { ...q, active: [...q.active, op] }));
+    setFinished((prev) => prev.filter(hasShownOnce));
+    setTrayCollapsed(false);
+    void pollQueue();
+  };
 
   const failed = (e: unknown) => {
     if (e instanceof ApiError && e.code === 'MACHINE_KEY_LOCKED') {
@@ -158,13 +219,25 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     }
   };
 
+  // Decision 183: a queueable action on a busy app joins the queue without a plan.
+  const queueKind = (action: Action): QueueableKind | null => (isQueueable(action.kind) && 'instance' in action ? action.kind : null);
+  const enterQueueMode = (behind: OperationDto) => {
+    setPlan(null);
+    setQueuedBehind(behind);
+    key.current = newIdempotencyKey();
+  };
+
   const start = async (action: Action) => {
     const token = ++startToken.current;
     setPending(action);
     setPlan(null);
     setPlanError(null);
     setWaitingFor(null);
+    setQueuedBehind(null);
     setLocked(false);
+    const qk = queueKind(action);
+    const behind = qk && 'instance' in action ? activeFor(action.instance.id) : null;
+    if (behind) return enterQueueMode(behind);
     try {
       for (;;) {
         try {
@@ -172,6 +245,14 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
           break;
         } catch (e) {
           if (e instanceof ApiError && e.code === 'BUSY' && e.operationId) {
+            // The app became busy between the render and the click: queue it instead of waiting.
+            if (qk) {
+              const id = e.operationId;
+              const op = await api.operation(id).catch(() => null);
+              if (startToken.current !== token) return;
+              if (op && !isFinal(op)) return enterQueueMode(op);
+              continue; // it finished meanwhile: plan again
+            }
             if (!(await waitTurn(e.operationId, token))) return;
             continue;
           }
@@ -201,9 +282,30 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
     key.current = newIdempotencyKey();
   };
 
+  // Queue mode: one idempotency key per dialog, so a double click queues it once.
+  const approveQueued = async () => {
+    const qk = pending ? queueKind(pending) : null;
+    if (!pending || !qk || !('instance' in pending) || submitting.current) return;
+    submitting.current = true;
+    try {
+      const k = key.current ?? (key.current = newIdempotencyKey());
+      const r = await api.queueAction(qk, pending.instance.id, k);
+      accepted(r.operation);
+      setQueuedBehind(null);
+      setPending(null);
+      setPlan(null);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return onAuthLost();
+      failed(e);
+    } finally {
+      submitting.current = false;
+    }
+  };
+
   // secrets: values typed in the review dialog for operator-provided secrets (decision 125); in memory only.
   // settings: values changed under Options in the review (decision 180), only ids the plan asks about.
   const approve = async (secrets?: Record<string, string>, acceptPermissions = false, settings?: Record<string, SettingValue>) => {
+    if (queuedBehind) return approveQueued();
     if (!plan || submitting.current) return;
     submitting.current = true;
     lastApprove.current = { ...(secrets ? { secrets } : {}), acceptPermissions, ...(settings ? { settings } : {}) };
@@ -213,14 +315,15 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       try {
         r = await api.submit(plan.id, k, submitPassphraseFor(pending), secrets, acceptPermissions, settings);
       } catch (e) {
-        // Another operation started on the app since the review was made: wait for it, then review again.
+        // Another operation started on the app since the review was made: queue it (decision 183), or wait for it
+        // and review again (the kinds that need a plan).
         if (e instanceof ApiError && e.code === 'BUSY' && pending) {
           submitting.current = false;
           return void start(pending);
         }
         throw e;
       }
-      setWatching(r.operation);
+      accepted(r.operation);
       setPending(null);
       setPlan(null);
       void refresh();
@@ -235,10 +338,32 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   const cancel = () => {
     startToken.current++;
     setWaitingFor(null);
+    setQueuedBehind(null);
     setPending(null);
     setPlan(null);
     setPlanError(null);
     setLocked(false);
+  };
+
+  // Decision 183: cancel a waiting item. Resolves to null, or to the reason it could not be cancelled.
+  const cancelOperation = async (id: string): Promise<string | null> => {
+    cancelledHere.current.add(id);
+    try {
+      await api.cancelOperation(id);
+      tracked.current.delete(id);
+      setQueue((q) => ({ ...q, active: q.active.filter((x) => x.id !== id) }));
+      void pollQueue();
+      void refresh();
+      return null;
+    } catch (e) {
+      cancelledHere.current.delete(id);
+      if (e instanceof ApiError && e.status === 401) {
+        onAuthLost();
+        return null;
+      }
+      void pollQueue();
+      return e instanceof ApiError ? `${e.message}${e.nextAction ? ` ${e.nextAction}` : ''}` : String(e);
+    }
   };
 
   // Unlock with the password, then carry on where it stopped (plan again, or approve again). Throws on a
@@ -253,8 +378,8 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
   // Small settings writes (launcher order, an app's look, wallpaper) apply optimistically and re-sync.
   const patchData = useCallback((fn: (d: Data) => Data) => setData(fn), []);
 
-  const busy = Boolean(watching && !isFinal(watching)) || data.system?.busyOperationId != null;
-  return { data, loaded, loadError, pending, plan, planError, waitingFor, locked, unlockAndRetry, watching, lastDone, busy, start, approve, cancel, refresh, patchData, dismiss: () => { setWatching(null); setLastDone(null); } };
+  const dismiss = (id: string) => setFinished((prev) => prev.filter((x) => x.id !== id));
+  return { data, loaded, loadError, pending, plan, planError, waitingFor, queuedBehind, locked, unlockAndRetry, queue, activeFor, finished, dismiss, cancelOperation, trayCollapsed, setTrayCollapsed, start, approve, cancel, refresh, patchData };
 }
 
 export type Console = ReturnType<typeof useConsole>;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import type { CatalogItemDto, InstanceDetail, InstanceSummary, NotificationsDto } from '../../src/contracts/api';
+import type { CatalogItemDto, InstanceDetail, InstanceSummary, NotificationsDto, OperationDto } from '../../src/contracts/api';
 import { ApiError, api, forgetToken, hasToken, restoreRemembered } from './api';
 import { Copy, EventList, RecoveryCard, openUrl as appOpenUrl } from './app/components';
 import { EyeIcon, EyeOffIcon, Mark } from './app/icons';
@@ -17,7 +17,8 @@ import { isMockUi } from './mock/api';
 import { Palette, usePaletteShortcut } from './app/Palette';
 import { SetupWizard } from './app/Setup';
 import type { SetupStatusDto } from '../../src/contracts/api';
-import { isFinal, useConsole, type Console } from './app/store';
+import { useConsole, type Console } from './app/store';
+import { PHASE, VERB, isRunning, notCancellableReason, opTitle, queueSummary, whoOf } from './app/queue';
 
 type View = { kind: 'login' } | { kind: 'console' };
 applyTheme(readTheme());
@@ -445,7 +446,6 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
             setDrawer(i);
           }}
           instances={c.data.instances}
-          busy={c.busy}
           installed={c.data.instances.filter((i) => i.packageId === storeItem.id).length}
           onRemovePackage={() => {
             void api.removePackage(storeItem.id).then(
@@ -470,7 +470,7 @@ function ConsoleShell({ onAuthLost }: { onAuthLost: (msg?: string) => void }) {
         <AppDrawer
           inst={liveDrawer}
           exposures={c.data.exposures.filter((e) => e.instanceId === liveDrawer.id)}
-          busy={c.busy}
+          ops={c.queue.active.filter((o) => o.instanceId === liveDrawer.id)}
           onClose={() => {
             setDrawer(null);
             if (route.page === 'app') go({ page: 'home' });
@@ -631,26 +631,86 @@ function NotificationBell({ c, onOpenApp, onViewAll }: { c: ReturnType<typeof us
   );
 }
 
-const DOING: Record<string, string> = { install: 'Installing', start: 'Starting', stop: 'Stopping', remove: 'Removing', reinstall: 'Reinstalling', purge: 'Uninstalling', update: 'Updating', expose: 'Publishing', unexpose: 'Withdrawing the address of', reconfigure: 'Switching the address of', restart: 'Restarting', configure: 'Applying new settings to', seal: 'Encrypting', move: 'Moving', backup: 'Backing up', restore: 'Restoring', relink: 'Securing the links of' };
-const DONE: Record<string, string> = { install: 'is ready', start: 'is running again', stop: 'is stopped', remove: 'was removed (data kept)', reinstall: 'is back', purge: 'was uninstalled completely', update: 'is up to date', expose: 'is published', unexpose: 'address withdrawn', reconfigure: 'address switched', restart: 'restarted', configure: 'settings applied', seal: 'is encrypted', move: 'moved', backup: 'is backed up', restore: 'is restored', relink: 'links secured' };
-const PHASE: Record<string, string> = { rollback: 'putting the previous version back', purging: 'deleting its data', queued: 'waiting for its turn', preparing: 'preparing', pulling: 'downloading the app', starting: 'starting containers', checking: 'waiting until it answers', stopping: 'stopping', removing: 'cleaning up', reconfiguring: 'applying the new address', verifying: 'checking the result', exposing: 'setting up the address', unexposing: 'removing the address', 'backing-up': 'sending the last changes', restoring: 'restoring its data', copying: 'copying its data' };
-
-// Bottom-right operation tray: progress while running, one-shot result (with credentials) when done.
-
+// Bottom-right queue panel (decision 183): the running operation (phase, progress), the waiting ones in run order
+// (each with Cancel when a person may cancel it), and the operations this console saw finish, each with its own
+// result (credentials and recovery words shown once) until dismissed. Collapses to one line.
 function Tray({ c }: { c: ReturnType<typeof useConsole> }) {
-  const op = c.watching ?? c.lastDone;
-  const inst = op ? c.data.instances.find((i) => i.id === op.instanceId) : undefined;
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const active = c.queue.active;
+  const finished = c.finished;
+  if (!active.length && !finished.length) return null;
+  const running = active.filter(isRunning);
+  const waiting = active.filter((o) => !isRunning(o));
+  const who = (op: OperationDto) => whoOf(c.data.instances.find((i) => i.id === op.instanceId), op.instanceName);
+  const tone = finished.some((f) => f.state === 'failed' || f.state === 'needs_action') ? 'failed' : !active.length && finished.every((f) => f.state === 'succeeded') ? 'succeeded' : '';
+  const cancel = (op: OperationDto) => {
+    setCancelling(op.id);
+    setCancelError(null);
+    void c.cancelOperation(op.id).then((err) => {
+      setCancelling(null);
+      setCancelError(err);
+    });
+  };
+  return (
+    <aside className={`tray ${tone}`} aria-live="polite" aria-labelledby="tray-h">
+      <h2 id="tray-h" className="tray-head">
+        <button className="tray-toggle" aria-expanded={!c.trayCollapsed} onClick={() => c.setTrayCollapsed(!c.trayCollapsed)} title={c.trayCollapsed ? 'Show the queue' : 'Collapse to one line'}>
+          <span>{queueSummary(running.length, waiting.length, finished.length)}</span>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={c.trayCollapsed ? 'chev up' : 'chev'}>
+            <path d="M4 6l4 4 4-4" />
+          </svg>
+        </button>
+      </h2>
+      {!c.trayCollapsed && (
+        <>
+          {running.map((op) => (
+            <section key={op.id} className="tray-item" aria-label={opTitle(op, who(op))}>
+              <h3>{opTitle(op, who(op))}</h3>
+              <p className="muted small">{op.queuedAction && op.phase === 'queued' ? 'planning it now' : (PHASE[op.phase] ?? op.phase)}</p>
+              <progress aria-label="operation progress" />
+            </section>
+          ))}
+          {waiting.length > 0 && (
+            <ol className="plain tray-item tray-waiting" aria-label="Waiting">
+              {waiting.map((op) => (
+                <li key={op.id} className="row between">
+                  <span className="tray-wait-text">
+                    <span>{opTitle(op, who(op))}</span>
+                    <span className="muted small"> · waiting{op.queuedAction ? ', planned at its turn' : ''}</span>
+                    {!op.cancellable && <span className="muted small tray-why">{notCancellableReason(op)}</span>}
+                  </span>
+                  {op.cancellable && (
+                    <button className="btn small ghost" disabled={cancelling === op.id} onClick={() => cancel(op)} aria-label={`Cancel ${VERB[op.kind] ?? op.kind} ${who(op)}`}>
+                      {cancelling === op.id ? 'Cancelling…' : 'Cancel'}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {cancelError && (
+            <p className="error small" role="alert">
+              {cancelError}
+            </p>
+          )}
+          {finished.map((op) => (
+            <FinishedItem key={op.id} c={c} op={op} who={who(op)} />
+          ))}
+        </>
+      )}
+    </aside>
+  );
+}
+
+function FinishedItem({ c, op, who }: { c: ReturnType<typeof useConsole>; op: OperationDto; who: string }) {
+  const inst = c.data.instances.find((i) => i.id === op.instanceId);
   const [detail, setDetail] = useState<InstanceDetail | null>(null);
-  const finishedInstall = Boolean(op && op.state === 'succeeded' && (op.kind === 'install' || op.kind === 'reinstall'));
+  const finishedInstall = op.state === 'succeeded' && (op.kind === 'install' || op.kind === 'reinstall');
   useEffect(() => {
-    if (!op || !finishedInstall) {
-      setDetail(null);
-      return;
-    }
+    if (!finishedInstall) return;
     api.instance(op.instanceId).then(setDetail, () => setDetail(null));
-  }, [op?.id, op?.state, finishedInstall]);
-  if (!op) return null;
-  const final = isFinal(op);
+  }, [op.id, op.instanceId, finishedInstall]);
   const creds = op.result?.['credentials'] as { username: string; password: string } | undefined;
   // decision 138: the package's own name for it (an admin login is not basic-auth), and shown-once values
   const credsLabel = typeof op.result?.['credentialsLabel'] === 'string' ? (op.result['credentialsLabel'] as string) : 'Login';
@@ -661,34 +721,19 @@ function Tray({ c }: { c: ReturnType<typeof useConsole> }) {
   // The Harbor recovery key appears only in the operation that issued it.
   const harborKey = typeof op.result?.['installationRecoveryKey'] === 'string' ? (op.result['installationRecoveryKey'] as string) : null;
   const harborNote = typeof op.result?.['installationRecoveryNote'] === 'string' ? (op.result['installationRecoveryNote'] as string) : null;
-  const who = inst ? (inst.displayName ?? (inst.name === inst.packageId ? inst.packageName : `${inst.packageName} (${inst.name})`)) : 'the app';
-  const title =
-    op.state === 'succeeded'
-      ? op.kind === 'unexpose' || op.kind === 'reconfigure' || op.kind === 'configure' || op.kind === 'relink'
-        ? `${who}: ${DONE[op.kind]}`
-        : `${who} ${DONE[op.kind] ?? 'done'}`
-      : op.state === 'failed'
-        ? `${DOING[op.kind] ?? op.kind} ${who} failed`
-        : op.state === 'needs_action'
-          ? `${who} needs your attention`
-          : `${DOING[op.kind] ?? op.kind} ${who}…`;
+  const title = opTitle(op, who);
   const openUrl = inst ? appOpenUrl(inst) : null;
+  const dismiss = () => c.dismiss(op.id);
   return (
-    <aside className={`tray ${op.state}`} aria-live="polite" aria-labelledby="tray-h">
+    <section className={`tray-item done ${op.state}`} aria-label={title}>
       <div className="row between">
-        <h2 id="tray-h">{title}</h2>
-        {final && (
-          <button className="btn ghost icon" onClick={c.dismiss} aria-label="Dismiss">
-            ×
-          </button>
-        )}
+        <h3>
+          <span className={`dot tone-${op.state === 'succeeded' ? 'ok' : op.state === 'cancelled' ? 'muted' : 'bad'}`} aria-hidden="true" /> {title}
+        </h3>
+        <button className="btn ghost icon" onClick={dismiss} aria-label={`Dismiss: ${title}`} title="Dismiss">
+          ×
+        </button>
       </div>
-      {!final && (
-        <>
-          <p className="muted small">{PHASE[op.phase] ?? op.phase}</p>
-          <progress aria-label="operation progress" />
-        </>
-      )}
       {finishedInstall && inst && (
         <div className="next-step">
           {openUrl && (
@@ -725,20 +770,27 @@ function Tray({ c }: { c: ReturnType<typeof useConsole> }) {
           {x.label}, shown once: <code>{x.value}</code> <Copy text={x.value} />
         </p>
       ))}
-      {harborKey && <RecoveryCard words={harborKey} note={harborNote} title="Your Harbor recovery key" onDismiss={c.dismiss} />}
-      {recoveryKey && <RecoveryCard words={recoveryKey} note={recoveryNote} onDismiss={c.dismiss} />}
-      {op.error && (
+      {harborKey && <RecoveryCard words={harborKey} note={harborNote} title="Your Harbor recovery key" onDismiss={dismiss} />}
+      {recoveryKey && <RecoveryCard words={recoveryKey} note={recoveryNote} onDismiss={dismiss} />}
+      {op.error && op.state === 'cancelled' && <p className="muted small">{[op.error.message, op.error.nextAction].filter(Boolean).join(' ')}</p>}
+      {op.error && op.state !== 'cancelled' && (
         <p className="error">
           {op.error.code}: {op.error.message}
-          <br />
-          <span className="muted">Next: {op.error.nextAction}</span>
+          {op.error.nextAction && (
+            <>
+              <br />
+              <span className="muted">Next: {op.error.nextAction}</span>
+            </>
+          )}
         </p>
       )}
-      <details open={!final && false}>
-        <summary className="muted small">Technical steps</summary>
-        <EventList events={op.events} />
-      </details>
-    </aside>
+      {op.events.length > 0 && (
+        <details>
+          <summary className="muted small">Technical steps</summary>
+          <EventList events={op.events} />
+        </details>
+      )}
+    </section>
   );
 }
 

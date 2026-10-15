@@ -1,4 +1,5 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { reservedUsername } from '../actors.js';
 
 // Bounded memory-hard profile (TDD section 8). Parameters are stored with the hash so
 // they can change later without breaking existing administrators.
@@ -49,5 +50,5 @@ export function validatePasswordPolicy(password: string): string | null {
 
 export function validateUsername(username: string): string | null {
   if (!/^[a-z][a-z0-9_-]{2,31}$/.test(username)) return 'username must be 3-32 lowercase letters, digits, _ or -';
-  return null;
+  return reservedUsername(username);
 }

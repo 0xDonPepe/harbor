@@ -5,6 +5,7 @@ import { HarborError } from '../errors.js';
 import { readFileNoFollow, writeFileNoFollow } from '../bootstrap/safe-write.js';
 import type { Repo } from '../state/repo.js';
 import { hashPassword, validatePasswordPolicy } from './password.js';
+import { reservedUsername } from '../actors.js';
 import { createSealedMachineKey, zeroMachineKey } from './machine-key.js';
 import { INSTALLATION_RECOVERY_SETTING, newInstallationRecoveryKey, sealInstallationRecovery } from '../storage/installation-recovery.js';
 import type { SessionService } from './sessions.js';
@@ -64,6 +65,8 @@ export class SetupService {
     }
     const username = req.username.trim();
     if (!/^[a-z][a-z0-9._-]{1,31}$/i.test(username)) throw new HarborError('INVALID_REQUEST', 'the username must be 2-32 letters, digits, dots, dashes or underscores, starting with a letter');
+    const reserved = reservedUsername(username); // decision 183: never one of Harbor's own actor names
+    if (reserved) throw new HarborError('INVALID_REQUEST', reserved, { nextAction: 'Pick another username.' });
     const policy = validatePasswordPolicy(req.password);
     if (policy) throw new HarborError('INVALID_REQUEST', policy);
     const deviceName = req.deviceName?.trim().replace(/\s+/g, ' ') ?? '';

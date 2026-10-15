@@ -85,12 +85,16 @@ export function exposureDto(e: ExposureRow, instanceName: string, primary: Insta
 }
 
 // Decision 183: operations Harbor queued to protect something; a person cannot cancel them.
-export const PROTECTED_ACTORS: Record<string, string> = {
-  'drive-guard': 'Harbor queued it because a drive went away or came back',
-  'link-guard': 'Harbor queued it to keep the app links safe',
-  'lock-guard': 'Harbor queued it because the app\'s key is back',
-  scheduler: 'it is the cold pass of a backup run',
-};
+export const PROTECTED_ACTORS: ReadonlyMap<string, string> = new Map([
+  ['drive-guard', 'Harbor queued it because a drive went away or came back'],
+  ['link-guard', 'Harbor queued it to keep the app links safe'],
+  ['lock-guard', 'Harbor queued it because the app\'s key is back'],
+  ['scheduler', 'it is the cold pass of a backup run'],
+]);
+// Why a person may not cancel this actor's item, or null (a Map: a login name like 'constructor' is not a protected actor).
+export function protectedReason(actor: string): string | null {
+  return PROTECTED_ACTORS.get(actor) ?? null;
+}
 
 // The app's display name; a freed row (cancelled install, full uninstall) keeps only its archived name `<name>~…`.
 export function operationInstanceName(inst: InstanceRow | null, fallback: string): string {
@@ -100,7 +104,7 @@ export function operationInstanceName(inst: InstanceRow | null, fallback: string
 }
 
 export function isCancellable(o: OperationRow): boolean {
-  return o.state === 'queued' && o.startedAt === null && !(o.actor in PROTECTED_ACTORS);
+  return o.state === 'queued' && o.startedAt === null && protectedReason(o.actor) === null;
 }
 
 export function operationDto(o: OperationRow, events: EventRow[], instanceName = ''): OperationDto {

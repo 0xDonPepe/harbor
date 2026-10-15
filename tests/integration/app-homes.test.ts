@@ -584,4 +584,30 @@ ui:
     const op = await other.api.waitOperation(adopted.operationId!);
     expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
   });
+
+  // Decision 183: an adopt waits in the queue like any install. Cancelled before it ran (by a person or a restart),
+  // it changed nothing, so the drive's app can be adopted again with the same identity.
+  let third: Harness;
+  afterAll(async () => third?.close());
+  it('an adopt cancelled while it waited leaves the app adoptable again', async () => {
+    const home = (await h.api.instances()).find((i) => i.packageId === 'gpullm')!.home!.path;
+    third = await startHarness({ overrides: { crypto } });
+    await third.api.expect(201, 'POST', '/v1/packages', { fileName: 'gpullm.zip', dataUrl: zip() });
+    // the queue is busy with another app's install, held in its readiness check
+    third.fake.behaviour.respond = () => 503;
+    const busy = await third.api.submit((await third.api.plan({ kind: 'install', packageId: 'excalidraw' })).id);
+    await until(async () => (await third.api.expect<{ phase: string }>(200, 'GET', `/v1/operations/${busy.operationId}`)).phase === 'checking', 'the install checking');
+    const waiting = await third.api.expect<InstanceSummary>(201, 'POST', '/v1/found-apps/adopt', { home, passphrase: PASS, acceptPermissions: true });
+    const c = await third.api.json<{ state: string }>('POST', `/v1/operations/${waiting.operationId}/cancel`, {});
+    expect([c.status, c.body.state]).toEqual([200, 'cancelled']);
+    expect((await third.api.instances()).some((i) => i.packageId === 'gpullm')).toBe(false);
+    // adopted again, this time it waits and then runs
+    const again = await third.api.expect<InstanceSummary>(201, 'POST', '/v1/found-apps/adopt', { home, passphrase: PASS, acceptPermissions: true });
+    expect(again.id).toBe(waiting.id); // the identity travels with the drive
+    delete third.fake.behaviour.respond;
+    expect((await third.api.waitOperation(busy.operationId)).state).toBe('succeeded');
+    const op = await third.api.waitOperation(again.operationId!);
+    expect(op.state, JSON.stringify(op.error)).toBe('succeeded');
+    expect((await third.api.instances()).find((i) => i.id === again.id)).toMatchObject({ packageId: 'gpullm', installState: 'installed' });
+  });
 });

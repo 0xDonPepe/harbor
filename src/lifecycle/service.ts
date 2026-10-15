@@ -41,7 +41,7 @@ import { addSeconds, rfc3339 } from '../util.js';
 import { validateGitSourceInput } from '../packages/git.js';
 import { ComposeError } from '../docker/adapter.js';
 import type { Ctx } from './context.js';
-import { exposureDto, instanceSummary, operationDto, operationInstanceName, planDto, PROTECTED_ACTORS } from './dto.js';
+import { exposureDto, instanceSummary, operationDto, operationInstanceName, planDto, protectedReason } from './dto.js';
 import { ONE_TIME_TTL_MS } from '../state/one-time.js';
 import type { ExposureDto, ExposureVia } from '../contracts/api.js';
 import { HOSTNAME_RE, exposureUrl, mainPublicExposure } from '../exposure/urls.js';
@@ -1611,7 +1611,9 @@ export class ApplicationService {
     const { manifest } = describeAppHome(home);
     const masterKey = await unlockAppHome(home, passphrase);
     try {
-      if (this.ctx.repo.instance(manifest.instanceId)) throw new HarborError('NAME_CONFLICT', `this machine already has an instance for ${manifest.displayName}`, { nextAction: 'That app is already adopted here.' });
+      // decision 183: a row freed by an adopt cancelled before it ran is not "adopted here" (acceptPlan brings it back)
+      const here = this.ctx.repo.instance(manifest.instanceId);
+      if (here && !(here.purgedAt && !here.everInstalled)) throw new HarborError('NAME_CONFLICT', `this machine already has an instance for ${manifest.displayName}`, { nextAction: 'That app is already adopted here.' });
       const pkg = this.ctx.packages.load(manifest.packageId);
       // Decision 163/179: the person adopting accepts the package's permissions (gpu included) up front, before
       // anything touches the drive or this machine's records (adopt submits its own plan)
@@ -1804,6 +1806,10 @@ export class ApplicationService {
       const inst = repo.instance(instanceId);
       if (!inst || inst.purgedAt) throw new HarborError('NOT_FOUND', `unknown instance ${instanceId}`);
       const label = inst.displayName ?? inst.name;
+      // the same action already waiting for this app (a second click, another tab) is that item, not a duplicate that
+      // would only fail at its turn ("already runs revision N")
+      const waiting = repo.activeOperationsOf(inst.id).find((o) => o.kind === k && o.state === 'queued' && o.startedAt === null);
+      if (waiting) return { operation: waiting, created: false };
       if (repo.activeOperationsOf(inst.id).some((o) => o.kind === 'purge')) throw new HarborError('INVALID_STATE', `${label} is being removed completely`, { nextAction: 'Wait for it to finish; there is nothing left to act on afterwards.' });
       const operationId = ids.uuid();
       repo.insertQueuedAction({ id: operationId, idempotencyKey, actor, kind: k, instanceId: inst.id });
@@ -1857,24 +1863,38 @@ export class ApplicationService {
     this.cancelListeners.push(fn);
   }
   cancelOperation(id: string, actor: string): OperationDto {
-    const { repo } = this.ctx;
-    const op = repo.operation(id);
+    const op = this.ctx.repo.operation(id);
     if (!op) throw new HarborError('NOT_FOUND', `unknown operation ${id}`);
     const what = `${op.kind} of ${this.operationName(op)}`;
     if (FINAL_OPERATION_STATES.includes(op.state as FinalOperationState)) throw new HarborError('NOT_CANCELLABLE', `the ${what} has finished`, { nextAction: 'Nothing to cancel.' });
-    const protectedWhy = PROTECTED_ACTORS[op.actor];
+    const protectedWhy = protectedReason(op.actor);
     if (protectedWhy) throw new HarborError('NOT_CANCELLABLE', `the ${what} cannot be cancelled: ${protectedWhy}`, { nextAction: 'Let it run; it was queued to protect the app.' });
     const running = () => new HarborError('NOT_CANCELLABLE', `the ${what} is already running; a running step cannot be stopped safely`, { nextAction: 'Let it finish; harbor queue shows its progress.' });
     if (op.state !== 'queued' || op.startedAt !== null) throw running();
+    const done = this.cancelNeverRun(op, { message: 'Cancelled by you before it started; nothing was changed.', nextAction: '', event: `${op.kind} cancelled by ${actor} before it started; nothing was changed` });
+    if (!done) throw running();
+    return this.operation(id);
+  }
+
+  // Decision 183: end an item that never ran as cancelled and give back what accepting it reserved. The one path for a
+  // person's cancel, a restart (OperationRunner.recoverOnStartup, `picked`: also an item the runner had picked but that
+  // never reached its first step) and a shutdown that caught a picked item before its first step (`picked` too).
+  // Released: a queued install's row, name and ports (as a stale plan does; its waiting follow-ups are cancelled),
+  // fixed ports a non-install claimed that the app's current release does not publish, the in-memory handovers (typed
+  // values, settings, passphrases, an adopt's held key), the app's active operation; background actors' one-attempt
+  // memories for that app are reset. No generation bump: nothing changed. False when it was not cancellable any more.
+  cancelNeverRun(op: OperationRow, why: { message: string; nextAction: string; event: string; picked?: boolean; wake?: boolean }): boolean {
+    const { repo } = this.ctx;
     const plans: string[] = [];
-    repo.transaction(() => {
-      if (!repo.cancelOperation(op.id, { message: 'Cancelled by you before it started; nothing was changed.', nextAction: '' })) throw running();
-      repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: `${op.kind} cancelled by ${actor} before it started; nothing was changed` });
-      if (op.planId) plans.push(op.planId);
+    const done = repo.transaction(() => {
+      if (!repo.cancelOperation(op.id, { message: why.message, nextAction: why.nextAction }, why.picked === true)) return false;
+      repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: why.event });
+      const planId = repo.operation(op.id)?.planId ?? null; // a queued action may have been planned since `op` was read
+      if (planId) plans.push(planId);
       const inst = repo.instance(op.instanceId);
-      if (!inst) return;
-      const plan = op.planId ? repo.plan(op.planId) : null;
-      if (op.kind === 'install' && inst.installState === 'installing' && repo.resources(inst.id).filter((r) => r.role !== '__home__').length === 0) {
+      if (!inst) return true;
+      const plan = planId ? repo.plan(planId) : null;
+      if (op.kind === 'install' && inst.installState === 'installing' && !inst.purgedAt && repo.resources(inst.id).filter((r) => r.role !== '__home__').length === 0) {
         // a queued install created nothing: free its row, name and ports (as a stale plan does) and its waiting follow-ups
         for (const f of repo.activeOperationsOf(inst.id)) {
           if (f.id === op.id || f.startedAt !== null) continue;
@@ -1885,20 +1905,13 @@ export class ApplicationService {
         }
         repo.updateInstance(inst.id, { lastOperationId: op.id });
         repo.purgeInstance(inst.id, `${inst.name}~cancelled~${inst.id.slice(0, 8)}`);
-        return;
+        return true;
       }
-      if (plan?.proposal.ports?.length) {
-        // fixed ports this item claimed that the app's current release does not publish go back
-        let current: Set<number>;
-        try {
-          current = new Set(fixedPortsOf(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, inst.id), 'release'), inst.packageId).manifest).map((p) => p.hostPort));
-        } catch {
-          current = new Set(plan.proposal.ports.map((p) => p.hostPort)); // no readable release: keep every claim
-        }
-        for (const p of plan.proposal.ports) if (!current.has(p.hostPort)) repo.releasePort(p.hostPort, inst.id);
-      }
+      if (plan && plan.kind !== 'install') this.releaseClaimedPorts(plan, inst);
       repo.syncActiveOperation(inst.id);
+      return true;
     });
+    if (!done) return false;
     for (const planId of plans) this.dropHandovers(planId);
     if (op.kind === 'install') this.lockApp(op.instanceId); // an adopt's held key
     for (const fn of this.cancelListeners) {
@@ -1908,8 +1921,21 @@ export class ApplicationService {
         this.ctx.log.warn(`a cancel listener failed: ${(e as Error).message}`);
       }
     }
-    this.wake();
-    return this.operation(id);
+    if (why.wake !== false) this.wake();
+    return true;
+  }
+
+  // Fixed ports a reviewed non-install plan claimed at accept (decision 163) that the app's current release does not
+  // publish go back when its item ends without running (inside the caller's transaction).
+  releaseClaimedPorts(plan: PlanRow, inst: InstanceRow): void {
+    if (!plan.proposal.ports?.length) return;
+    let current: Set<number>;
+    try {
+      current = new Set(fixedPortsOf(loadReleaseSnapshot(path.join(instanceDir(this.ctx.config.stateDir, inst.id), 'release'), inst.packageId).manifest).map((p) => p.hostPort));
+    } catch {
+      current = new Set(plan.proposal.ports.map((p) => p.hostPort)); // no readable release: keep every claim
+    }
+    for (const p of plan.proposal.ports) if (!current.has(p.hostPort)) this.ctx.repo.releasePort(p.hostPort, inst.id);
   }
 
   // Every in-memory value handed over with a submission, by plan id (decision 183: a cancelled item drops them).
@@ -3075,22 +3101,23 @@ export class ApplicationService {
     });
     if (result.created && checked) this.operatorValues.set(planId, checked);
     if (result.created && Object.keys(chosen).length) this.submittedSettings.set(planId, chosen);
-    if (result.created) {
-      // decision 177: the operator withdrew an app's tailnet address: the every-app policy leaves it off (now or later)
-      const plan = repo.plan(planId);
-      if (plan?.kind === 'unexpose' && plan.proposal.exposure?.via === 'tailnet' && actor !== TAILNET_POLICY_ACTOR) {
-        const inst = repo.instance(plan.instanceId);
-        let primary: string | null;
-        try {
-          primary = inst ? this.primaryEndpointOf(inst) : null;
-        } catch {
-          primary = null;
-        }
-        if (plan.proposal.exposure.endpointId === primary) this.tailnetAll.operatorWithdrew(plan.instanceId);
-      }
-    }
     if (result.created) this.wake();
     return result;
+  }
+
+  // Decision 177: the operator withdrew an app's main tailnet address: the every-app policy leaves it off (now or later).
+  // Decision 183: noted by the runner when the unexpose runs, not when it is accepted, so an item cancelled while it
+  // waited (by a person or a restart) leaves the policy as it was.
+  noteTailnetWithdrawal(plan: PlanRow): void {
+    if (plan.kind !== 'unexpose' || plan.proposal.exposure?.via !== 'tailnet' || plan.actor === TAILNET_POLICY_ACTOR) return;
+    const inst = this.ctx.repo.instance(plan.instanceId);
+    let primary: string | null;
+    try {
+      primary = inst ? this.primaryEndpointOf(inst) : null;
+    } catch {
+      primary = null;
+    }
+    if (plan.proposal.exposure.endpointId === primary) this.tailnetAll.operatorWithdrew(plan.instanceId);
   }
 
   // The accept half of submit, inside its transaction: the submitted values checked, permissions accepted or refused,
@@ -3124,7 +3151,11 @@ export class ApplicationService {
 
     if (plan.kind === 'install') {
       if (repo.instanceByName(plan.proposal.name)) throw new HarborError('NAME_CONFLICT', `instance name ${plan.proposal.name} is no longer free`);
-      if (repo.instance(plan.instanceId)) throw new HarborError('STATE_CHANGED', 'plan instance already exists');
+      // decision 183: an adopt's id comes from the drive; a row an earlier adopt left when it was cancelled before it
+      // ran is brought back for it (purged, never installed), any other existing row is a conflict
+      const prior = repo.instance(plan.instanceId);
+      const revive = prior !== null && opts.adoptedHome !== undefined && prior.purgedAt !== null && !prior.everInstalled;
+      if (prior && !revive) throw new HarborError('STATE_CHANGED', 'plan instance already exists');
       // Install-location plans need their passphrase at submit time (it is
       // never in the plan itself). Refuse here — not at apply — so a missing
       // secret fails fast with a clear error instead of a stuck operation.
@@ -3138,7 +3169,7 @@ export class ApplicationService {
       for (const e of plan.proposal.endpoints) {
         if (claimed.has(e.hostPort)) throw new HarborError('PORT_CONFLICT', `port ${e.hostPort} was claimed by another operation since planning`);
       }
-      repo.insertInstance({
+      const row: Parameters<typeof repo.insertInstance>[0] = {
         id: plan.instanceId,
         name: plan.proposal.name,
         project: plan.proposal.project,
@@ -3156,7 +3187,10 @@ export class ApplicationService {
         secrets: [],
         activeOperationId: operationId,
         autoUpdate: repo.setting<boolean>('updates.autoDefault') ?? false,
-      });
+      };
+      if (revive) {
+        if (!repo.reviveInstance(row)) throw new HarborError('STATE_CHANGED', 'plan instance already exists');
+      } else repo.insertInstance(row);
       for (const e of plan.proposal.endpoints) repo.claimPort(e.hostPort, plan.instanceId, e.id);
       fixedClaims(plan.instanceId);
       // adopt (adoptApp): the drive's home, recorded with the instance it belongs to, before the runner looks for it

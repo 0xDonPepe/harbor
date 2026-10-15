@@ -2,6 +2,7 @@
 // start/stop/restart/update/remove/reinstall/purge on a busy app are queued WITHOUT a plan and planned when their
 // turn comes; a waiting item can be cancelled (never a running one, never one Harbor queued to protect something);
 // a restart cancels what never ran and marks what was running needs_action (no replay either way).
+import { createSocket } from 'node:dgram';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AppBackupsDto, BackupTargetDto, InstanceSummary, OperationDto, OperationQueueDto, PackageImportResultDto } from '../../src/contracts/api.js';
@@ -52,9 +53,17 @@ storage:
     retention: retain
 ${extra}`;
 const compose = (image = 'nginx:1.27-alpine') => `services:\n  web:\n    image: ${image}\n    volumes:\n      - {type: volume, source: data, target: /data}\nvolumes:\n  data: {}\n`;
-const upload = (id: string, rev: string, extra = '', image?: string) =>
-  h.api.expect<PackageImportResultDto>(201, 'POST', '/v1/packages', { fileName: `${id}-${rev}.zip`, dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': manifest(id, rev, extra), 'compose.yaml': compose(image) }).toString('base64')}` });
+const upload = (id: string, rev: string, extra = '', image?: string, single = false) =>
+  h.api.expect<PackageImportResultDto>(201, 'POST', '/v1/packages', { fileName: `${id}-${rev}.zip`, dataUrl: `data:application/zip;base64,${writeZip({ 'manifest.yaml': single ? manifest(id, rev, extra).replace('multiInstance: true', 'multiInstance: false') : manifest(id, rev, extra), 'compose.yaml': compose(image) }).toString('base64')}` });
 
+// a UDP port nothing listens on
+async function freeUdpPort(): Promise<number> {
+  const s = createSocket('udp4');
+  await new Promise<void>((r) => s.bind(0, '0.0.0.0', () => r()));
+  const port = s.address().port;
+  await new Promise<void>((r) => s.close(() => r()));
+  return port;
+}
 const key = () => `q-${Math.random().toString(36).slice(2, 14)}`;
 const byName = async (name: string) => (await h.api.instances()).find((i) => i.name === name) as InstanceSummary;
 const op = (id: string) => h.api.expect<OperationDto>(200, 'GET', `/v1/operations/${id}`);
@@ -264,7 +273,7 @@ describe('the operation queue (decision 183)', () => {
     expect((await byName('b4')).revision).toBe('2');
   });
 
-  it('a backup cold pass cancelled before it ran ends its run (not done); the scheduler item itself is not cancellable', async () => {
+  it('a backup cold pass that waited is cancelled by a restart: its run fails, the app is untouched; the scheduler item itself is not cancellable', async () => {
     const target = (await h.api.expect<{ target: BackupTargetDto }>(200, 'POST', '/v1/backups/targets', { packageId: 'folder', name: 'USB backup', values: { path: '/mnt/backup/harbor' } })).target;
     const r = await h.api.run({ kind: 'install', packageId: 'epsilon', name: 'b5', location: { dir: path.join(h.userDataDir, 'harbor-apps', 'epsilon') } });
     expect(r.op.state, JSON.stringify(r.op.error)).toBe('succeeded');
@@ -281,16 +290,19 @@ describe('the operation queue (decision 183)', () => {
     expect(cold).toMatchObject({ kind: 'backup', actor: 'scheduler', state: 'queued', cancellable: false });
     const refused = await cancel(coldId);
     expect([refused.status, refused.body.error?.code]).toEqual([409, 'NOT_CANCELLABLE']);
-    // what a restart does to an item that never ran (the backup worker of this process still waits on it)
-    expect(h.daemon.ctx.repo.cancelOperation(coldId, { message: 'Harbor restarted before this ran; nothing was changed.', nextAction: 'Queue it again.' })).toBe(true);
-    h.daemon.ctx.repo.syncActiveOperation(app.id);
-    await h.daemon.ctx.backups!.drain();
+    const gen = generation(app.id);
+    // the real path: Harbor restarts while the cold pass waits behind the other app's install
+    await h.restart();
+    release();
+    expect(await op(coldId)).toMatchObject({ state: 'cancelled', error: { code: 'CANCELLED', message: 'Harbor restarted before this ran; nothing was changed.' } });
+    expect((await op(running)).state).toBe('needs_action');
     const runs = (await h.api.expect<AppBackupsDto>(200, 'GET', `/v1/instances/${app.id}/backups`)).runs;
     expect(runs[0]).toMatchObject({ kind: 'backup', state: 'failed' });
-    expect(runs[0]!.message).toMatch(/cold pass was cancelled before it ran/);
-    expect(await byName('b5')).toMatchObject({ runtime: 'running', desired: 'running', installState: 'installed' });
-    release();
-    expect((await h.api.waitOperation(running)).state).toBe('succeeded');
+    expect(runs[0]!.message).toMatch(/the daemon restarted while this run was in flight/);
+    expect(await byName('b5')).toMatchObject({ desired: 'running', installState: 'installed' });
+    expect(generation(app.id)).toBe(gen);
+    expect(h.daemon.ctx.repo.instance(app.id)!.activeOperationId).toBeNull();
+    expect((await queue()).active).toEqual([]);
   });
 
   it('a restart cancels what never ran (the app untouched, a waiting install freed) and marks what ran needs_action', async () => {
@@ -314,5 +326,109 @@ describe('the operation queue (decision 183)', () => {
     expect((await op(waitingInstall.operationId)).state).toBe('cancelled');
     expect(await byName('b6')).toBeUndefined();
     expect((await queue()).active).toEqual([]);
+  });
+
+  it('the same action queued again while one already waits is that waiting item, not a duplicate that fails at its turn', async () => {
+    const app = await installed('beta', 'b7');
+    const running = await heldInstall('alpha', 'a8');
+    const first = await queueAction('restart', app.id);
+    const again = await queueAction('restart', app.id);
+    expect([again.created, again.operationId]).toEqual([false, first.operationId]);
+    // another kind still joins the queue, and then a restart behind it is a new item again
+    const stop = await queueAction('stop', app.id);
+    expect(stop.created).toBe(true);
+    expect((await queue()).active.filter((o) => o.instanceId === app.id).map((o) => o.id)).toEqual([first.operationId, stop.operationId]);
+    release();
+    expect((await h.api.waitOperation(running)).state).toBe('succeeded');
+    expect((await h.api.waitOperation(first.operationId)).state).toBe('succeeded');
+    expect((await h.api.waitOperation(stop.operationId)).state).toBe('succeeded');
+  });
+
+  it('a reviewed plan whose app changed after it was accepted is refused at its turn and changes nothing', async () => {
+    const app = await installed('beta', 'b8');
+    const running = await heldInstall('alpha', 'a9');
+    const sub = await h.api.submit((await h.api.plan({ kind: 'restart', instanceId: app.id })).id);
+    // something ran for the app between accept and turn (what a reordered queue would do)
+    h.daemon.ctx.repo.bumpGeneration(app.id);
+    const gen = generation(app.id);
+    release();
+    expect((await h.api.waitOperation(running)).state).toBe('succeeded');
+    const done = await h.api.waitOperation(sub.operationId);
+    expect([done.state, done.error?.code]).toEqual(['failed', 'STATE_CHANGED']);
+    expect(done.error?.message).toMatch(/changed since this plan was reviewed; nothing was changed/);
+    expect(done.events.some((e) => e.phase === 'restarting' || e.phase === 'stopping')).toBe(false);
+    expect(generation(app.id)).toBe(gen);
+    expect(await byName('b8')).toMatchObject({ installState: 'installed', runtime: 'running', desired: 'running' });
+    expect(h.daemon.ctx.repo.instance(app.id)!.activeOperationId).toBeNull();
+  });
+
+  it('a shutdown while a queued action is being planned cancels it: nothing ran, the app stays as it was', async () => {
+    const app = await installed('beta', 'b9');
+    const gen = generation(app.id);
+    const svc = h.daemon.service;
+    const plan = svc.planQueuedAction.bind(svc);
+    let stopped: Promise<void> | null = null;
+    svc.planQueuedAction = async (o) => {
+      stopped = h.daemon.runner.shutdown(); // self-update / systemctl stop while createPlan awaits
+      return plan(o);
+    };
+    const q = await queueAction('restart', app.id);
+    await waitFor(() => stopped !== null);
+    await stopped;
+    const row = h.daemon.ctx.repo.operation(q.operationId)!;
+    expect(row).toMatchObject({ state: 'cancelled', errorCode: 'CANCELLED', errorMessage: 'Harbor stopped before this ran; nothing was changed.' });
+    expect(row.planId).not.toBeNull(); // it was planned and accepted, then let go before its first step
+    expect(h.daemon.ctx.repo.instance(app.id)!.activeOperationId).toBeNull();
+    await h.restart();
+    expect((await op(q.operationId)).state).toBe('cancelled');
+    expect(await byName('b9')).toMatchObject({ installState: 'installed', desired: 'running' });
+    expect(generation(app.id)).toBe(gen);
+  });
+
+  it('a restart after the runner picked an item but before its first step treats it as never run', async () => {
+    const app = await byName('b9');
+    const gen = generation(app.id);
+    const other = await heldInstall('alpha', 'a10');
+    const q = await queueAction('stop', app.id);
+    // what a crash right after the runner picked it (while planning it) leaves: started, still queued
+    expect(h.daemon.ctx.repo.claimHead()!.id).toBe(q.operationId);
+    await h.restart();
+    release();
+    expect(await op(q.operationId)).toMatchObject({ state: 'cancelled', error: { code: 'CANCELLED', message: 'Harbor restarted before this ran; nothing was changed.' } });
+    expect(await byName('b9')).toMatchObject({ installState: 'installed', desired: 'running' });
+    expect(generation(app.id)).toBe(gen);
+    expect((await op(other)).state).toBe('needs_action'); // it had reached its readiness check
+  });
+
+  it('a waiting reviewed update gives back the fixed port it claimed when a restart (or a person) cancels it', async () => {
+    const port = await freeUdpPort();
+    await upload('zeta', '1', '', undefined, true);
+    const app = await installed('zeta', 'z1');
+    await upload('zeta', '2', `ports:\n  tunnel:\n    service: web\n    containerPort: 51820\n    hostPort: ${port}\n    protocol: udp\n    purpose: VPN tunnels\n`, undefined, true);
+    const claim = () => h.daemon.ctx.repo.claimedPorts().filter((c) => c.port === port);
+    const waitingUpdate = async () => {
+      const plan = await h.api.plan({ kind: 'update', instanceId: app.id });
+      expect(plan.ports.map((p) => p.hostPort)).toEqual([port]);
+      const sub = await h.api.expect<{ operationId: string }>(202, 'POST', '/v1/operations', { planId: plan.id, acceptPermissions: true }, { 'idempotency-key': key() });
+      expect((await op(sub.operationId)).state).toBe('queued');
+      expect(claim().map((c) => c.instanceId)).toEqual([app.id]);
+      return sub.operationId;
+    };
+    const first = await heldInstall('alpha', 'a11');
+    const u = await waitingUpdate();
+    await h.restart();
+    release();
+    expect((await op(u)).state).toBe('cancelled');
+    expect((await op(first)).state).toBe('needs_action');
+    expect(claim()).toEqual([]);
+    expect((await byName('z1')).revision).toBe('1');
+    // the same through a person's cancel
+    const second = await heldInstall('alpha', 'a12');
+    const u2 = await waitingUpdate();
+    expect((await cancel(u2)).status).toBe(200);
+    expect(claim()).toEqual([]);
+    release();
+    expect((await h.api.waitOperation(second)).state).toBe('succeeded');
+    expect((await byName('z1')).revision).toBe('1');
   });
 });

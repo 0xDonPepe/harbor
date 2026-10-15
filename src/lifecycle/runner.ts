@@ -60,27 +60,25 @@ export class OperationRunner {
 
   constructor(private readonly ctx: Ctx) {}
 
-  // Mark leftovers from a previous process. Never replay (decision 12). Decision 183: an operation the runner never
-  // picked (started_at NULL) did nothing, so it is cancelled and its app is left as it was (a queued install's row is
-  // freed); a picked one becomes needs_action as before.
+  // Mark leftovers from a previous process. Never replay (decision 12). Decision 183: an operation that never reached
+  // its first step (state still queued: never picked, or picked and cut short while it was being planned; execute
+  // marks every item applying before its first step) did nothing, so it is cancelled the way a person's cancel is
+  // (what accepting reserved goes back, a queued install's row is freed) and its app is left as it was; one that
+  // reached its first step becomes needs_action as before.
   recoverOnStartup(): number {
     const { repo } = this.ctx;
     const stale = repo.activeOperations();
     const touched = new Set<string>();
-    for (const op of stale) {
+    for (const listed of stale) {
+      touched.add(listed.instanceId);
+      const op = repo.operation(listed.id);
+      // gone from the active list since it was read: cancelled together with the install it waited for
+      if (!op || (op.state !== 'queued' && op.state !== 'applying' && op.state !== 'verifying')) continue;
+      if (op.state === 'queued') {
+        this.ctx.service.cancelNeverRun(op, { message: 'Harbor restarted before this ran; nothing was changed.', nextAction: 'Queue it again.', event: 'daemon restarted before the operation ran; nothing was changed', picked: true, wake: false });
+        continue;
+      }
       repo.transaction(() => {
-        touched.add(op.instanceId);
-        // applying/verifying means it was picked even without started_at (a row written before v13)
-        if (op.startedAt === null && op.state === 'queued') {
-          repo.finishOperation(op.id, 'cancelled', { errorCode: 'CANCELLED', errorMessage: 'Harbor restarted before this ran; nothing was changed.', nextAction: 'Queue it again.' });
-          repo.addEvent({ operationId: op.id, instanceId: op.instanceId, phase: 'cancelled', message: 'daemon restarted before the operation ran; nothing was changed' });
-          const inst = repo.instance(op.instanceId);
-          if (inst && op.kind === 'install' && inst.installState === 'installing' && !inst.purgedAt && repo.resources(inst.id).filter((r) => r.role !== '__home__').length === 0) {
-            repo.updateInstance(inst.id, { lastOperationId: op.id });
-            repo.purgeInstance(inst.id, `${inst.name}~cancelled~${inst.id.slice(0, 8)}`);
-          }
-          return;
-        }
         repo.finishOperation(op.id, 'needs_action', {
           errorCode: 'STATE_CHANGED',
           errorMessage: `operation was ${op.state} (${op.phase}) when the daemon stopped; its effects were not replayed`,
@@ -187,14 +185,39 @@ export class OperationRunner {
       });
       return;
     }
+    // Decision 183: a shutdown that caught a picked item before its first step (a queued action awaits its planning)
+    // ends it as never run: cancelled, with what accepting reserved given back, the app as it was.
+    if (this.stopping) {
+      this.ctx.service.cancelNeverRun(op, { message: 'Harbor stopped before this ran; nothing was changed.', nextAction: 'Queue it again.', event: 'Harbor stopped before the operation ran; nothing was changed', picked: true, wake: false });
+      return;
+    }
+    // Decision 183, defense in depth: a reviewed plan is a snapshot of its app. Only a finished operation of the app
+    // moves its generation, and acceptPlan refuses a busy app, so a mismatch means something ran for it in between.
+    if (plan.kind !== 'install' && inst.generation !== plan.expectedGeneration) {
+      const label = inst.displayName ?? inst.name;
+      const message = `${label} changed since this plan was reviewed; nothing was changed (generation ${inst.generation}, expected ${plan.expectedGeneration})`;
+      this.ctx.log.warn(`${op.kind} refused: ${message}`, { operationId: op.id, instanceId: inst.id });
+      repo.transaction(() => {
+        repo.finishOperation(op.id, 'failed', { errorCode: 'STATE_CHANGED', errorMessage: message, nextAction: `Open ${label} and choose ${op.kind.charAt(0).toUpperCase()}${op.kind.slice(1)} again to review it as it is now.` });
+        repo.addEvent({ operationId: op.id, instanceId: inst.id, phase: 'failed', message: `${op.kind} not run: ${message}` });
+        this.ctx.service.releaseClaimedPorts(plan, inst);
+        repo.updateInstance(inst.id, { lastOperationId: op.id });
+        repo.syncActiveOperation(inst.id);
+      });
+      this.ctx.service.takeOperatorSecrets(plan.id);
+      this.ctx.service.takeSubmittedSettings(plan.id);
+      return;
+    }
     const secretValues: string[] = [];
     this.opResult = null;
     // Taken first, whatever happens next: values never outlive their operation.
     this.supplied = this.ctx.service.takeOperatorSecrets(plan.id);
     secretValues.push(...Object.values(this.supplied.store));
     this.chosenSettings = this.ctx.service.takeSubmittedSettings(plan.id);
+    // Decision 183: from here on the item may change something. Marked before its first step (some kinds act before
+    // their first phase), so a restart tells "never ran" (still queued: cancelled) from "ran" (needs_action).
+    repo.setOperationPhase(op.id, 'applying', 'preparing');
     try {
-      if (this.stopping) throw new InterruptedError();
       switch (op.kind) {
         case 'install': await this.install(op, plan, inst, secretValues); break;
         case 'reinstall': await this.reinstall(op, plan, inst, secretValues); break;
@@ -806,6 +829,9 @@ export class OperationRunner {
     const { repo } = this.ctx;
     const x = plan.proposal.exposure;
     if (!x) throw new HarborError('STATE_CHANGED', 'plan carries no exposure');
+    // decision 177/183: a hand-made withdrawal of the main tailnet address keeps the every-app policy off this app,
+    // noted once it runs (an item cancelled while it waited changed nothing, the policy included)
+    this.ctx.service.noteTailnetWithdrawal(plan);
     if (x.forget) {
       const kept = retainedExposures(repo, inst.id);
       setRetainedExposures(repo, inst.id, kept ? { ...kept, items: kept.items.filter((k) => !(k.endpointId === x.endpointId && k.via === x.via && k.hostname === x.hostname)) } : null);

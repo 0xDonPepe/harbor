@@ -159,6 +159,23 @@ describe('every app gets a Tailscale address (decision 177)', () => {
     expect((await policy()).except.sort()).toEqual([ids['alpha'], ids['gamma']].sort());
   });
 
+  it('a withdrawal cancelled while it waited (decision 183) leaves the app in the policy: nothing was changed', async () => {
+    // keep the queue busy with another app's restart, held in its readiness check
+    h.fake.behaviour.respond = () => 503;
+    const held = await h.api.submit((await h.api.plan({ kind: 'restart', instanceId: ids['alpha'] })).id); // alpha: kept off the tailnet already
+    await until('the restart checking', async () => h.daemon.ctx.repo.operation(held.operationId)?.phase === 'checking');
+    const plan = await h.api.plan({ kind: 'unexpose', instanceId: ids['beta'], via: 'tailnet' });
+    const waiting = await h.api.submit(plan.id);
+    expect(waiting.operation.state).toBe('queued');
+    const c = await h.api.json<{ state: string }>('POST', `/v1/operations/${waiting.operationId}/cancel`, {});
+    expect([c.status, c.body.state]).toEqual([200, 'cancelled']);
+    expect((await policy()).except).not.toContain(ids['beta']);
+    expect((await tailnetOf()).map((e) => e.instanceId)).toContain(ids['beta']);
+    delete h.fake.behaviour.respond;
+    expect((await h.api.waitOperation(held.operationId)).state).toBe('succeeded');
+    expect((await policy()).except).not.toContain(ids['beta']);
+  });
+
   it('plans open for review: the policy keeps away from their app and from their tailnet port, so approving them still works', async () => {
     for (const name of ['kappa', 'lambda', 'mu']) await install(name); // the policy is off
     const reviewLambda = await h.api.plan({ kind: 'expose', instanceId: ids['lambda'], via: 'tailnet' }); // a manual Publish… under review

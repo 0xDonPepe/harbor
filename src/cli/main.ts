@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { confirm, promptHidden, promptVisible, readStdinAll } from './prompt.js';
 import { exitAfterFlush } from './exit.js';
 import { gpuFact, planSummary } from './plan-summary.js';
-import { busyQuestion, queueStatusLine, queueText } from './queue-view.js';
+import { busyQuestion, canQueueAction, queueStatusLine, queueText } from './queue-view.js';
 import { gpuStatusLine } from '../planner/gpu.js';
 import { formatSettingValue, parseSettingInput } from '../planner/settings.js';
 import type { SettingDto, SettingValue } from '../contracts/api.js';
@@ -403,9 +403,11 @@ async function createPlan(api: ApiClient, kind: string, target: string | undefin
 // Decision 183: a queueable action (start, stop, restart, update, remove, reinstall, purge) on a busy app is queued
 // instead of waited for: Harbor plans it when its turn comes. Returns the plan when the app is free (review it as
 // usual), or null once the action was queued (and followed, unless --no-wait). `confirmQueue` runs before queueing
-// (purge asks for the typed name there).
-async function planOrQueue(api: ApiClient, kind: QueueableKind, ref: string, opts: { yes: boolean; wait: boolean; confirmQueue?: (name: string) => Promise<void> }): Promise<PlanDto | null> {
+// (purge asks for the typed name there). An action with something to hand over (accepted permissions, a passphrase,
+// values: `handover`) is never queued: it waits for the app, then plans (canQueueAction).
+async function planOrQueue(api: ApiClient, kind: QueueableKind, ref: string, opts: { yes: boolean; wait: boolean; confirmQueue?: (name: string) => Promise<void>; handover?: { passphraseStdin?: boolean; values?: number } }): Promise<PlanDto | null> {
   const inst = await resolveInstance(api, ref);
+  if (!canQueueAction({ acceptPermissions: globals().acceptPermissions, ...(opts.handover ?? {}) })) return planWhenFree(api, { kind, instanceId: inst.id });
   let busyId: string;
   try {
     return await api.post<PlanDto>('/v1/plans', { kind, instanceId: inst.id });
@@ -510,7 +512,8 @@ program
     const links = await readLinkFlags(api, opts.link);
     const secrets = await readSecretFlags(opts.secret);
     const settings = readSetFlags(opts.set);
-    // decision 183: a plain update of a busy app is queued (asked once); one with values to give waits for the app, then plans
+    // decision 183: a plain update of a busy app is queued (asked once); one with values to give (or --accept-permissions,
+    // checked by planOrQueue) waits for the app, then plans
     const plain = !Object.keys(storage).length && !Object.keys(links).length && !Object.keys(secrets).length && !Object.keys(settings).length;
     const plan = plain ? await planOrQueue(api, 'update', ref, { yes: opts.yes, wait: opts.wait }) : await createPlan(api, 'update', ref, undefined, { ...(Object.keys(storage).length ? { storage } : {}), ...(Object.keys(links).length ? { links } : {}) });
     if (!plan) return;
@@ -1045,8 +1048,8 @@ for (const kind of ['start', 'stop', 'restart', 'remove', 'reinstall'] as const)
     .option('--passphrase-stdin', 'read the app encryption passphrase from stdin (for starting a locked app)', false)
     .action(async (ref: string, opts: { yes: boolean; wait: boolean; passphraseStdin?: boolean }) => {
       const api = client();
-      // decision 183: a busy app gets the action queued (asked once; --yes accepts)
-      const plan = await planOrQueue(api, kind, ref, { yes: opts.yes, wait: opts.wait });
+      // decision 183: a busy app gets the action queued (asked once; --yes accepts), unless a passphrase comes with it
+      const plan = await planOrQueue(api, kind, ref, { yes: opts.yes, wait: opts.wait, handover: { passphraseStdin: opts.passphraseStdin === true } });
       if (!plan) return;
       // A locked custom app refuses the start plan with INVALID_STATE; retry
       // with the passphrase so `harbor start immich` just works after a prompt.

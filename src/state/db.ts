@@ -48,7 +48,8 @@ CREATE INDEX backup_runs_instance ON backup_runs(instance_id, started_at);
 `;
 
 // v13 (decision 183): plan_id NULL while a queued action waits to be planned at its turn (request_json holds
-// {kind, instanceId}, never a secret); 'cancelled' = a waiting item cancelled before it started.
+// {kind, instanceId}, never a secret); 'cancelled' = a waiting item cancelled before it started. seq = run order
+// (insertion order, assigned as MAX(seq)+1 by the insert itself; never the wall clock, which can step back).
 const OPERATIONS_SQL = `
 CREATE TABLE operations (
   id TEXT PRIMARY KEY,
@@ -66,7 +67,8 @@ CREATE TABLE operations (
   error_message TEXT,
   next_action TEXT,
   result_json TEXT,
-  request_json TEXT
+  request_json TEXT,
+  seq INTEGER NOT NULL UNIQUE
 );`;
 
 export const SCHEMA_SQL = `
@@ -493,13 +495,13 @@ function migrateV11toV12(db: Db): void {
 
 // v13 (decision 183): the operation queue. Table rebuild (SQLite cannot alter a CHECK or drop NOT NULL): plan_id
 // nullable (a queued action is planned at its turn), state accepts 'cancelled', request_json holds the queued action.
-// Rows are copied in run order (created_at, rowid) so the queue order survives the rebuild.
+// Rows are copied in run order (created_at, rowid) and numbered in that order (seq), so the queue order survives the rebuild.
 function migrateV12toV13(db: Db): void {
   db.transaction(() => {
     db.exec(`
       ${OPERATIONS_SQL.replace('CREATE TABLE operations (', 'CREATE TABLE operations_v13 (')}
-      INSERT INTO operations_v13 (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json)
-        SELECT id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json FROM operations ORDER BY created_at, rowid;
+      INSERT INTO operations_v13 (id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json, seq)
+        SELECT id, idempotency_key, plan_id, actor, kind, instance_id, state, phase, created_at, started_at, finished_at, error_code, error_message, next_action, result_json, ROW_NUMBER() OVER (ORDER BY created_at, rowid) FROM operations ORDER BY created_at, rowid;
       DROP TABLE operations;
       ALTER TABLE operations_v13 RENAME TO operations;
     `);

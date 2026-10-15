@@ -9,8 +9,11 @@ import { HarborError, needsReview, personCanResolve } from '../../src/errors.js'
 import { initializeState, openState } from '../../src/state/db.js';
 import { Repo } from '../../src/state/repo.js';
 import { isCancellable, operationInstanceName } from '../../src/lifecycle/dto.js';
-import { busyQuestion, queueStatus, queueStatusLine, queueText } from '../../src/cli/queue-view.js';
+import { busyQuestion, canQueueAction, queueStatus, queueStatusLine, queueText } from '../../src/cli/queue-view.js';
 import { systemIds } from '../../src/util.js';
+import { INTERNAL_ACTORS, reservedUsername } from '../../src/actors.js';
+import { TAILNET_POLICY_ACTOR } from '../../src/lifecycle/tailnet-all.js';
+import { validateUsername } from '../../src/auth/password.js';
 
 const FIXED = new Date('2026-10-15T09:00:00Z');
 function repo(): Repo {
@@ -63,6 +66,25 @@ describe('run order and claiming (decision 183)', () => {
     expect(r.operation(ids[2]!)!.planId).toBe('33333333-3333-4333-8333-333333333333');
   });
 
+  it('runs in insertion order even when the clock steps back between two items (seq, not created_at)', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'harbor-queue-clock-'));
+    initializeState(dir, { clock: { now: () => FIXED }, ids: systemIds, config: {} });
+    let now = new Date('2026-10-15T10:00:05Z');
+    const r = new Repo(openState(dir), { now: () => now });
+    app(r, A, 'alpha');
+    const U = 'ffffffff-0000-4000-8000-0000000000aa';
+    const R = '00000000-0000-4000-8000-0000000000bb';
+    r.insertQueuedAction({ id: U, idempotencyKey: 'ku', actor: 'admin', kind: 'update', instanceId: A });
+    now = new Date('2026-10-15T10:00:02Z'); // NTP stepped the clock back 3 s
+    r.insertQueuedAction({ id: R, idempotencyKey: 'kr', actor: 'admin', kind: 'remove', instanceId: A });
+    expect(r.activeOperations().map((o) => o.id)).toEqual([U, R]);
+    expect(r.activeOperationsOf(A).map((o) => o.id)).toEqual([U, R]);
+    expect(r.syncActiveOperation(A)).toBe(U);
+    expect(r.listQueue(5).active.map((o) => o.id)).toEqual([U, R]);
+    expect(r.claimHead()!.id).toBe(U);
+    expect(r.claimHead()!.id).toBe(R);
+  });
+
   it('a person may cancel only a waiting item nobody protects', () => {
     const base = { state: 'queued' as const, startedAt: null, actor: 'admin' };
     expect(isCancellable(base as never)).toBe(true);
@@ -70,6 +92,8 @@ describe('run order and claiming (decision 183)', () => {
     expect(isCancellable({ ...base, state: 'applying' } as never)).toBe(false);
     for (const actor of ['drive-guard', 'link-guard', 'lock-guard', 'scheduler']) expect(isCancellable({ ...base, actor } as never)).toBe(false);
     expect(isCancellable({ ...base, actor: 'auto-update' } as never)).toBe(true);
+    // a login name that happens to be an Object.prototype key is an ordinary person
+    for (const actor of ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty']) expect(isCancellable({ ...base, actor } as never)).toBe(true);
     // a freed row keeps only its archived name
     expect(operationInstanceName({ name: 'immich~cancelled~12345678', purgedAt: 't', displayName: null } as never, 'x')).toBe('immich');
     expect(operationInstanceName({ name: 'immich', purgedAt: null, displayName: 'Photos' } as never, 'x')).toBe('Photos');
@@ -98,6 +122,17 @@ describe('queueable kinds and error codes (decision 183)', () => {
   });
 });
 
+describe("Harbor's own actor names are not login names (decision 183)", () => {
+  it('lists every background actor, and setup / enroll refuse them as usernames (any case)', () => {
+    expect([...INTERNAL_ACTORS].sort()).toEqual(['auto-update', 'drive-guard', 'git-source', 'link-guard', 'lock-guard', 'scheduler', TAILNET_POLICY_ACTOR].sort());
+    for (const name of [...INTERNAL_ACTORS, 'Scheduler', 'DRIVE-GUARD']) expect(reservedUsername(name)).toMatch(/Harbor uses for its own background work/);
+    expect(reservedUsername('carlos')).toBeNull();
+    expect(reservedUsername('constructor')).toBeNull();
+    expect(validateUsername('scheduler')).toMatch(/Harbor uses for its own background work/);
+    expect(validateUsername('carlos')).toBeNull();
+  });
+});
+
 describe('harbor queue wording (decision 183)', () => {
   const op = (o: Partial<OperationDto>): OperationDto => ({ id: 'id', kind: 'update', instanceId: A, instanceName: 'immich', planId: null, actor: 'admin', queuedAction: true, cancellable: true, state: 'queued', phase: 'queued', createdAt: 't', startedAt: null, finishedAt: null, error: null, result: null, events: [], ...o });
   it('marks running, waiting and finished items', () => {
@@ -119,5 +154,12 @@ describe('harbor queue wording (decision 183)', () => {
     expect(busyQuestion('Immich', 'stop', { kind: 'update', state: 'queued', startedAt: null })).toContain('(update waiting)');
     expect(queueStatusLine({ active: [], recent: [] })).toBe('Queue: idle');
     expect(queueStatusLine({ active: [op({ kind: 'install', state: 'applying', phase: 'pulling', startedAt: 't' }), op({}), op({})], recent: [] })).toBe('Queue: install of immich running (pulling), 2 waiting');
+  });
+  it('queues only an action with nothing to hand over; accepted permissions, a passphrase or values wait for the app', () => {
+    expect(canQueueAction({})).toBe(true);
+    expect(canQueueAction({ acceptPermissions: false, passphraseStdin: false, values: 0 })).toBe(true);
+    expect(canQueueAction({ acceptPermissions: true })).toBe(false);
+    expect(canQueueAction({ passphraseStdin: true })).toBe(false);
+    expect(canQueueAction({ values: 2 })).toBe(false);
   });
 });

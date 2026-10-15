@@ -36,3 +36,10 @@ export function queueStatusLine(q: OperationQueueDto): string {
   if (!running && !waiting) return 'Queue: idle';
   return `Queue: ${running ? `${running.kind} of ${running.instanceName || running.instanceId} running (${running.phase})` : 'nothing running'}${waiting ? `, ${waiting} waiting` : ''}`;
 }
+
+// Decision 183: a CLI action on a busy app is queued only when it has nothing to hand over. A queued item is planned
+// at its turn with no typed values and no permissions accepted, so accepted permissions (--accept-permissions), a
+// passphrase (--passphrase-stdin) or values (--set, --secret, --link, storage) wait for the app instead, then plan.
+export function canQueueAction(h: { acceptPermissions?: boolean; passphraseStdin?: boolean; values?: number }): boolean {
+  return h.acceptPermissions !== true && h.passphraseStdin !== true && (h.values ?? 0) === 0;
+}

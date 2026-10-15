@@ -456,8 +456,9 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Tests: unit `queue.test.ts`, `web-queue.test.ts`, `fake-pull-hold.test.ts`, migration v12→v13; integration `queue.test.ts` (+ app-homes adopt/locked-start, tailnet-all withdrawal); e2e `queue` (held install via `HARBOR_DEV_FAKE_CONTROL`); trayDone waits by operation id
 - [x] Three adversarial review rounds (4 + 3 + 2 reviewers, a skeptic per finding): 21 + 10 + 3 confirmed defects, all fixed with tests
 - [x] 0.35.0: `package.json` bumped, release notes `docs/releases/v0.35.0.md`; gate: lint, typecheck, unit 604 (+2 skipped), integration 351 + 3 skipped, e2e 42, catalog verify/hash (fixtures), openapi current (new routes regenerated)
-- [ ] After release: `node scripts/make-state-fixture.mjs v0.35.0` + the tag in `tests/integration/upgrade-jump.test.ts`
-- [ ] Live on harbor-old: queue an install behind another, a same-app Update behind an install, cancel one, restart the daemon with items waiting
+- [x] After release: `tests/fixtures/state/v0.35.0/` + the tag in `tests/integration/upgrade-jump.test.ts` (driver: fixture catalog for releases without `catalog/`)
+- [x] Live on harbor-old: self-update 0.34.1 → 0.35.0, the real database migrated to v13 (47 operations, seq 1–47, foreign keys clean)
+- [ ] Live on harbor-old: queue an install behind another, a same-app Update behind an install, cancel one, restart the daemon with items waiting (needs a CLI session there)
 
 ## Phase 64 — read-only NVIDIA driver checks (2026-10-14, 0.34.1) ✅
 - [x] Decision 181: `src/system/gpu.ts` counts an NVIDIA card on the PCI bus with no driver (`/sys/bus/pci/devices`, vendor 0x10de, class 0x0300/0x0302); reads `driverVersion` (`/proc/driver/nvidia/version`, proprietary and open wording) and `libraryVersion` (highest `libnvidia-ml.so.<v>`); new problems before the toolkit checks: `NVIDIA_DRIVER_MISSING`, `NVIDIA_REBOOT_NEEDED`, `NVIDIA_DRIVER_TOO_OLD` (`NVIDIA_DRIVER_MIN_MAJOR` = 525, `src/planner/gpu.ts`); `HostGpu`/`GpuDto` gain optional `driverVersion`/`libraryVersion`; Harbor never installs drivers (review fixes below)

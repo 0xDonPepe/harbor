@@ -1108,8 +1108,19 @@ Every bundled package is installed with the CLI on the designated droplet (fresh
 Integration runs while two other suites ran on the same machine timed out in unrelated long tests (6–16 min per test
 under load); the same suite passed in full on a quiet machine. Recorded so a red run under load is not misread.
 
-Still to do live (harbor-old, never .192): queue an install behind another app's install, a same-app Update
-behind an install, cancel one, restart the daemon with items waiting (they end `cancelled`, apps untouched).
+**Live, harbor-old (2026-10-15):** `sudo harbor self-update apply --to 0.35.0` from 0.34.1: signature
+(`harbor-2026-10`) and checksum verified, bootstrap done, `harbor.service` active, console `GET /` 200. The real state
+database migrated to v13 at the first start: `user_version` 13, `operations` with `cancelled`, nullable `plan_id`,
+`request_json` and `seq NOT NULL UNIQUE`; its 47 operations (all `succeeded`) numbered `seq` 1–47 with no duplicate,
+`PRAGMA foreign_key_check` empty. `GET /v1/operations` answers 401 without a session (the route exists).
+
+Still to do live (needs a logged-in CLI session on harbor-old): queue an install behind another app's install, a
+same-app Update behind an install, cancel one, restart the daemon with items waiting (they end `cancelled`, apps
+untouched).
+
+**Upgrade-jump fixture:** `tests/fixtures/state/v0.35.0/` (written by the 0.35.0 daemon in fake mode, schema 13);
+`upgrade-jump.test.ts` jumps v0.35.0, v0.22.1 and v0.19.1 to the current code (30 tests). The fixture driver now uses
+`tests/fixtures/catalog` for releases that no longer ship `catalog/` (0.28.0 and later).
 
 ## 4. Qualified versions
 

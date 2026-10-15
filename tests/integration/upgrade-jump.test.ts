@@ -95,7 +95,14 @@ const sqlRows = <T>(file: string, sql: string): T[] => {
   }
 };
 
-describe.each(['v0.22.1', 'v0.19.1'])('upgrade jump from Harbor %s state', (tag) => {
+// The schema version each fixture's release wrote (tests/fixtures/state/README.md). 0.35.0 is the newest schema at the
+// time it was added, so its jump runs no migration until a later release changes the schema again.
+const ON_DISK: Record<string, number> = { 'v0.35.0': 13, 'v0.22.1': 10, 'v0.19.1': 8 };
+// Through 0.30 the first encrypted install left the installation's recovery words in its operation result; 0.31.0 stopped
+// storing them (decision 165), so a later fixture has none for the current daemon to remove.
+const STORED_WORDS = new Set(['v0.22.1', 'v0.19.1']);
+
+describe.each(['v0.35.0', 'v0.22.1', 'v0.19.1'])('upgrade jump from Harbor %s state', (tag) => {
   const meta = JSON.parse(readFileSync(path.join(FIXTURES, tag, 'fixture.json'), 'utf8')) as FixtureMeta;
   let root = '';
   let stateDir = '';
@@ -212,8 +219,10 @@ describe.each(['v0.22.1', 'v0.19.1'])('upgrade jump from Harbor %s state', (tag)
 
   it(`the fixture really is ${tag} state`, () => {
     expect(meta.harborVersion).toBe(tag.slice(1));
-    expect(before.userVersion).toBeLessThan(SCHEMA_VERSION);
-    expect(before.words.length).toBeGreaterThan(0); // the old release stored the recovery words in the result
+    expect(before.userVersion).toBe(ON_DISK[tag]);
+    expect(before.userVersion).toBeLessThanOrEqual(SCHEMA_VERSION);
+    if (STORED_WORDS.has(tag)) expect(before.words.length).toBeGreaterThan(0); // the old release stored the recovery words in the result
+    else expect(before.words).toEqual([]);
   });
 
   it('migrates to the current schema version, keeping every installation row', () => {

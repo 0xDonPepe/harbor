@@ -8,6 +8,7 @@ open it and keep working: `tests/integration/upgrade-jump.test.ts` checks that. 
 |---|---|---|
 | `v0.19.1/` | 0.19.1 | 8 |
 | `v0.22.1/` | 0.22.1 | 10 |
+| `v0.35.0/` | 0.35.0 | 13 |
 
 These folders are **frozen test data**. Never edit them by hand, and do not regenerate them to match the current
 code. When a release changes the schema, add a fixture for that release's tag instead.
@@ -47,7 +48,8 @@ pnpm's cache.
   auto-update default (off), an ntfy channel, and excalidraw's display name, icon and auto-update.
 
 The first encrypted install stored the installation's 12 recovery words in its operation result, as those
-releases did. The current daemon has to remove them (decision 165).
+releases did (0.19.1, 0.22.1). The current daemon has to remove them (decision 165). From 0.31.0 the words are shown
+once and never stored, so the `v0.35.0/` database has none.
 
 ## Files
 

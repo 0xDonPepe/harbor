@@ -3,11 +3,11 @@
 // an operator would. It leaves a realistic state directory behind for the upgrade-jump test.
 //
 // Usage (from the old checkout root): tsx driver.mts <root>
-//   <root>/state, <root>/data and <root>/catalog are created; <root>/fixture.json describes what was made.
+//   <root>/state, <root>/data and <root>/catalog (a copy of that release's catalog) are created; <root>/fixture.json describes what was made.
 //
 // Imports are relative to the old checkout root, so this file is not type-checked against the current tree.
 import nodeCrypto from 'node:crypto';
-import { cpSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import path from 'node:path';
 import { normalizeConfig } from './src/config.js';
@@ -74,9 +74,13 @@ const stateDir = path.join(root, 'state');
 const userDataDir = path.join(root, 'data');
 const catalogDir = path.join(root, 'catalog');
 mkdirSync(root, { recursive: true });
-cpSync(path.resolve('catalog'), catalogDir, { recursive: true });
+// Before 0.28.0 the official apps sat in catalog/ at the checkout root. From 0.28.0 they live in harbor-apps
+// (decision 158): the release keeps frozen copies in tests/fixtures/catalog/, and its daemon downloads the official
+// catalog unless `catalog.url` is null. That key only exists from 0.28.0, so it is passed only with that layout.
+const split = !existsSync(path.resolve('catalog'));
+cpSync(path.resolve(split ? 'tests/fixtures/catalog' : 'catalog'), catalogDir, { recursive: true });
 const config = normalizeConfig(
-  { stateDir, catalogDir, userDataDir, docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port: LISTEN_PORT }, appPortRange: RANGE, planTtlSeconds: 900, sessionTtlSeconds: 3600, logLevel: 'error' },
+  { stateDir, catalogDir, userDataDir, docker: { mode: 'fake' }, listen: { host: '127.0.0.1', port: LISTEN_PORT }, appPortRange: RANGE, planTtlSeconds: 900, sessionTtlSeconds: 3600, logLevel: 'error', ...(split ? { catalog: { url: null } } : {}) },
   root,
 );
 initializeState(stateDir, { clock: systemClock, ids: systemIds, config: {} });

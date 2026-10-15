@@ -1,0 +1,36 @@
+apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: bentopdf
+  name: BentoPDF
+  description: Browser PDF tools
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: true
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 8080
+    scheme: http
+    exposure: direct
+    browserContext: secure
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 90
+ui:
+  primaryEndpoint: web
+presentation:
+  tagline: Merge, split and convert PDFs in your browser
+  sizeHint: "About 100 MB"
+  category: files
+  icon: icon.svg
+  developer: alam00000
+  website: https://github.com/alam00000/bentopdf
+  releaseNotes: v2.8.8 pinned by digest; all processing stays in the browser.

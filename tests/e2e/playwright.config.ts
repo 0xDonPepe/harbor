@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +10,10 @@ const PORT = Number(process.env['HARBOR_E2E_PORT'] ?? 18500);
 const SETUP_PORT = PORT + 200; // a second daemon with no administrator, for the first-run wizard
 const root = process.env['HARBOR_E2E_ROOT'] ?? mkdtempSync(path.join(tmpdir(), 'harbor-e2e-'));
 const setupRoot = mkdtempSync(path.join(tmpdir(), 'harbor-e2e-setup-'));
+// Decision 183: the queue spec makes fake pulls slow through this file (dev-only knob in src/dev.ts, read on every
+// pull; missing or `{}` = instant). One fixed name per port, so the runner and its workers agree on it.
+process.env['HARBOR_E2E_FAKE_CONTROL'] ??= path.join(tmpdir(), `harbor-e2e-fake-control-${PORT}.json`);
+writeFileSync(process.env['HARBOR_E2E_FAKE_CONTROL'], '{}'); // never inherit a slow setting from an aborted run
 
 export default defineConfig({
   testDir: path.resolve(import.meta.dirname),
@@ -39,6 +43,7 @@ export default defineConfig({
         HARBOR_DEV_PORT_TO: String(PORT + 99),
         HARBOR_DEV_PASSWORD: 'e2e-fixture-password',
         HARBOR_DEV_LOG_LEVEL: 'warn',
+        HARBOR_DEV_FAKE_CONTROL: process.env['HARBOR_E2E_FAKE_CONTROL'],
         // Catalog checks on, pointed at a closed loopback port: Store → Check for new apps fails and says why.
         // (The setup daemon below keeps catalog updates off.)
         HARBOR_DEV_CATALOG_URL: 'http://127.0.0.1:9/',

@@ -1,4 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 const ADMIN = { username: 'admin', password: 'e2e-fixture-password' };
 
@@ -35,8 +38,9 @@ async function dismissRecovery(page: Page) {
     await page.getByLabel('I wrote down the recovery key').first().check();
     await gate.click();
   }
-  const plain = page.getByRole('button', { name: 'Dismiss' });
-  if (await plain.count()) await plain.click();
+  // decision 183: the tray is the queue; every finished item has its own Dismiss
+  const plain = page.locator('aside.tray').getByRole('button', { name: /^Dismiss: / });
+  for (let n = await plain.count(); n > 0; n--) await plain.first().click();
 }
 
 async function installFromStore(page: Page, pkgName: string) {
@@ -1698,6 +1702,98 @@ test('decision 164: a notification brings its own button — Harbor X is availab
   await expect(page.getByRole('dialog')).toContainText('verifies its checksum', { timeout: 15_000 });
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.unroute('**/v1/notifications');
+});
+
+// Decision 183: the tray is the queue. A dev-only knob (HARBOR_DEV_FAKE_CONTROL, src/dev.ts) makes one image's fake
+// pull slow, so an install keeps running while the console queues more behind it.
+test.describe('queue', () => {
+  const control = process.env['HARBOR_E2E_FAKE_CONTROL'] ?? path.join(tmpdir(), 'harbor-e2e-fake-control-18500.json');
+  const slowPulls = (c: { pullDelayMs: number; match: string } | null) => writeFileSync(control, JSON.stringify(c ?? {}));
+  test.afterEach(() => slowPulls(null));
+
+  test('nothing greys out while an app installs; a second install and a same-app action queue; Cancel takes a waiting one out', async ({ page }) => {
+    test.setTimeout(150_000);
+    await login(page);
+    // an app of this test's own, installed at normal speed
+    await installFromStore(page, 'n8n');
+    await approve(page, 'Install');
+    await trayDone(page, 'Install');
+    await dismissRecovery(page);
+
+    // Uptime Kuma downloads slowly: it keeps the queue's single runner busy while the rest happens
+    slowPulls({ pullDelayMs: 30_000, match: 'louislam/uptime-kuma' });
+    await installFromStore(page, 'Uptime Kuma');
+    await approve(page, 'Install');
+    const tray = page.locator('aside.tray');
+    await expect(tray.getByRole('heading', { name: 'Installing Uptime Kuma…', exact: true })).toBeVisible();
+    await expect(tray.getByRole('heading', { name: /^Queue · 1 running/ })).toBeVisible();
+
+    // Home: the busy app says so; the other app's buttons and the busy app's own stay enabled
+    await page.getByRole('link', { name: 'Home' }).click();
+    await expect(page.locator('.icon-tile[data-instance="uptime-kuma"]')).toContainText('Installing…');
+    await page.getByRole('button', { name: 'Details of uptime-kuma', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('status', { name: 'Queue for uptime-kuma' })).toContainText('Installing…');
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Customize uptime-kuma', exact: true })).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
+    let drawer = page.getByRole('dialog');
+    for (const name of ['Stop n8n', 'Restart n8n', 'Remove n8n', 'Customize n8n']) await expect(drawer.getByRole('button', { name, exact: true })).toBeEnabled();
+
+    // a reviewed plan for another app is approved at once and waits its turn
+    await drawer.getByRole('button', { name: 'Restart n8n', exact: true }).click();
+    await approve(page, 'Restart');
+    const waiting = tray.getByRole('list', { name: 'Waiting' });
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Restart n8n' })).toHaveCount(1);
+    await expect(tray.getByRole('heading', { name: 'Installing Uptime Kuma…', exact: true })).toBeVisible();
+    await expect(page.locator('.icon-tile[data-instance="n8n"]')).toContainText('Waiting…');
+
+    // n8n is busy now (its restart waits): Stop joins the queue without a plan, after one question
+    await page.getByRole('button', { name: 'Details of n8n', exact: true }).click();
+    drawer = page.getByRole('dialog');
+    await expect(drawer.getByRole('status', { name: 'Queue for n8n' })).toContainText('Restart waiting');
+    await drawer.getByRole('button', { name: 'Stop n8n', exact: true }).click();
+    const ask = page.getByRole('dialog');
+    await expect(ask.getByRole('heading', { name: 'Queue: Stop n8n', exact: true })).toBeVisible();
+    await expect(ask).toContainText('n8n is waiting to restart first. Harbor will stop it as soon as that finishes, planning it then.');
+    await expect(ask.getByRole('button', { name: 'Queue stop', exact: true })).toBeEnabled();
+    await ask.getByRole('button', { name: 'Queue stop', exact: true }).dblclick(); // one idempotency key per dialog: queued once
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toHaveCount(1);
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toContainText('planned at its turn');
+
+    // a second app's install, approved while the first one still downloads
+    await page.getByRole('link', { name: 'App Store' }).click();
+    await expect(page.getByRole('button', { name: 'Install Immich', exact: true })).toBeEnabled();
+    await installFromStore(page, 'Immich');
+    await approve(page, 'Install');
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Install Immich' })).toHaveCount(1);
+    await expect(tray.getByRole('heading', { name: 'Queue · 1 running, 3 waiting', exact: true })).toBeVisible();
+    // run order: what was queued first runs first
+    await expect(waiting.getByRole('listitem')).toHaveText([/^Restart n8n/, /^Stop n8n/, /^Install Immich/]);
+
+    // cancel the waiting Stop: it leaves the queue, the rest stays
+    await tray.getByRole('button', { name: 'Cancel stop n8n', exact: true }).click();
+    await expect(waiting.getByRole('listitem').filter({ hasText: 'Stop n8n' })).toHaveCount(0);
+    await expect(waiting.getByRole('listitem')).toHaveText([/^Restart n8n/, /^Install Immich/]);
+
+    // the slow one finishes, then the rest in order; each result stays in the tray
+    slowPulls(null);
+    await expect(tray.getByRole('heading', { name: 'Uptime Kuma is ready', exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(tray.getByRole('heading', { name: 'n8n restarted', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(tray.getByRole('heading', { name: 'Immich is ready', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(tray.getByRole('list', { name: 'Waiting' })).toHaveCount(0);
+    await expect(tray.getByRole('heading', { name: /^Queue · \d+ done$/ })).toBeVisible(); // a guard's own run may finish meanwhile
+    await expect(tray.getByRole('link', { name: 'Launch uptime-kuma', exact: true })).toBeVisible();
+    // n8n was not stopped (its Stop was cancelled before it started)
+    await page.getByRole('link', { name: 'Home' }).click();
+    await expect(page.locator('.icon-tile[data-instance="n8n"]')).not.toContainText('Stopped');
+    // collapse to one line, open again, dismiss each result
+    await tray.getByRole('button', { name: /^Queue · / }).click();
+    await expect(tray.getByRole('heading', { name: 'n8n restarted', exact: true })).toHaveCount(0);
+    await tray.getByRole('button', { name: /^Queue · / }).click();
+    await dismissRecovery(page);
+    await expect(tray).toHaveCount(0);
+  });
 });
 
 // Last on purpose: with the policy on, the daemon publishes apps on the tailnet in the background.

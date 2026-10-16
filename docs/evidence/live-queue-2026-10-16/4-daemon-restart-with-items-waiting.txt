@@ -1,0 +1,32 @@
+Queued stop of q-bento as operation 8d56b08f-2dde-426d-9c1d-4baef76c400b (not waiting). See it with: harbor queue
+Submitted operation 78dbe4ff-0a40-4b10-939a-f0fe9d755e08 (not waiting). Check with: harbor operation 78dbe4ff-0a40-4b10-939a-f0fe9d755e08
+--- before restart
+#  STATE    ACTION   APP      PHASE     BY     CANCEL  ID
+1  running  install  q-bento  starting  admin  -       d740f646-18ef-4d65-9290-be958c84985b
+2  waiting  stop     q-bento  queued    admin  yes     8d56b08f-2dde-426d-9c1d-4baef76c400b
+3  waiting  restart  q-memos  queued    admin  yes     78dbe4ff-0a40-4b10-939a-f0fe9d755e08
+
+Cancel a waiting item with: harbor queue cancel <id>
+q-fresh installed stopped stopped unknown
+q-memos installed running running healthy
+q-excal installed running running healthy
+q-kuma installed running running healthy
+q-bento installed stopped running healthy
+14:51:22
+active
+--- after restart
+Nothing is running or waiting.
+
+Finished:
+#  STATE                ACTION   APP      FINISHED              BY     CANCEL  ID
+-  finished: cancelled  restart  q-memos  2026-10-16T14:51:23Z  admin  -       78dbe4ff-0a40-4b10-939a-f0fe9d755e08
+-  finished: succeeded  stop     q-bento  2026-10-16T14:51:22Z  admin  -       8d56b08f-2dde-426d-9c1d-4baef76c400b
+-  finished: succeeded  install  q-bento  2026-10-16T14:51:22Z  admin  -       d740f646-18ef-4d65-9290-be958c84985b
+-  finished: succeeded  install  q-kuma   2026-10-16T14:51:20Z  admin  -       dd23a35d-c41d-49b5-86de-6bc392555445
+-  finished: succeeded  install  q-excal  2026-10-16T14:50:59Z  admin  -       09444cf4-2aa3-4424-bdce-bee5613c1cd7
+-  finished: cancelled  install  q-bento  2026-10-16T14:50:50Z  admin  -       78e3e3e1-38b5-4c55-908d-cd01730d1de9
+q-fresh installed stopped stopped unknown
+q-memos installed running running healthy
+q-excal installed running running healthy
+q-kuma installed running running healthy
+q-bento installed stopped stopped unknown

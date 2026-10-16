@@ -1,0 +1,17 @@
+#  STATE    ACTION   APP      PHASE     BY     CANCEL  ID
+1  running  install  q-excal  starting  admin  -       09444cf4-2aa3-4424-bdce-bee5613c1cd7
+2  waiting  install  q-kuma   queued    admin  yes     dd23a35d-c41d-49b5-86de-6bc392555445
+3  waiting  install  q-bento  queued    admin  yes     78e3e3e1-38b5-4c55-908d-cd01730d1de9
+--- cancel 78e3e3e1-38b5-4c55-908d-cd01730d1de9
+Cancelled install of q-bento (operation 78e3e3e1-38b5-4c55-908d-cd01730d1de9); nothing was changed.
+--- q-bento in list (0 = name freed):
+0
+--- the cancelled op:
+cancelled {'code': 'CANCELLED', 'message': 'Cancelled by you before it started; nothing was changed.', 'nextAction': ''}
+--- same name again works?
+new op d740f646-18ef-4d65-9290-be958c84985b
+#  STATE    ACTION   APP      PHASE     BY     CANCEL  ID
+1  running  install  q-excal  starting  admin  -       09444cf4-2aa3-4424-bdce-bee5613c1cd7
+2  waiting  install  q-kuma   queued    admin  yes     dd23a35d-c41d-49b5-86de-6bc392555445
+3  waiting  install  q-bento  queued    admin  yes     d740f646-18ef-4d65-9290-be958c84985b
+

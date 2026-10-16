@@ -1,0 +1,18 @@
+Submitted operation 76f2fa31-f021-4f6c-850a-5c181602761c (not waiting). Check with: harbor operation 76f2fa31-f021-4f6c-850a-5c181602761c
+Submitted operation 20b609bb-5b6c-4af8-a23e-7192015aca71 (not waiting). Check with: harbor operation 20b609bb-5b6c-4af8-a23e-7192015aca71
+Submitted operation b38afa39-631f-4768-8489-cd4f5a366e94 (not waiting). Check with: harbor operation b38afa39-631f-4768-8489-cd4f5a366e94
+Submitted operation bf5c565e-f6d7-4ce1-aad2-6439187362b9 (not waiting). Check with: harbor operation bf5c565e-f6d7-4ce1-aad2-6439187362b9
+Submitted operation d55627a1-45e6-4d92-ae53-39eed94a2999 (not waiting). Check with: harbor operation d55627a1-45e6-4d92-ae53-39eed94a2999
+#  STATE    ACTION  APP      PHASE     BY     CANCEL  ID
+1  running  purge   q-bento  removing  admin  -       d55627a1-45e6-4d92-ae53-39eed94a2999
+--- after
+Finished:
+#  STATE                ACTION  APP      FINISHED              BY     CANCEL  ID
+-  finished: succeeded  purge   q-bento  2026-10-16T14:51:55Z  admin  -       d55627a1-45e6-4d92-ae53-39eed94a2999
+-  finished: succeeded  purge   q-kuma   2026-10-16T14:51:55Z  admin  -       bf5c565e-f6d7-4ce1-aad2-6439187362b9
+-  finished: succeeded  purge   q-excal  2026-10-16T14:51:55Z  admin  -       b38afa39-631f-4768-8489-cd4f5a366e94
+-  finished: succeeded  purge   q-memos  2026-10-16T14:51:54Z  admin  -       20b609bb-5b6c-4af8-a23e-7192015aca71
+-  finished: succeeded  purge   q-fresh  2026-10-16T14:51:53Z  admin  -       76f2fa31-f021-4f6c-850a-5c181602761c
+0
+0
+0

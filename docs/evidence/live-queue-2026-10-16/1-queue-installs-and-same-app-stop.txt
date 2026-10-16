@@ -1,0 +1,17 @@
+14:50:20
+  · After install you'll create your FreshRSS account; Harbor does not create it.
+Submitted operation 81443462-6777-4d20-8658-52f1db2e46b1 (not waiting). Check with: harbor operation 81443462-6777-4d20-8658-52f1db2e46b1
+  · After install you'll create your Memos account; Harbor does not create it.
+Submitted operation 6ca8f331-4339-4c12-931c-cff10e12efb9 (not waiting). Check with: harbor operation 6ca8f331-4339-4c12-931c-cff10e12efb9
+q-fresh is busy (install running). Queue stop to run after it? Harbor plans it when its turn comes. Yes (--yes).
+Queued stop of q-fresh as operation b24ef975-7f3d-4ec5-8e69-42eb61eda1c8 (not waiting). See it with: harbor queue
+  ! Not encrypted: the app keeps its data on plain Docker volumes, readable on disk, and starts on its own after a reboot before anyone logs in.
+Submitted operation 09444cf4-2aa3-4424-bdce-bee5613c1cd7 (not waiting). Check with: harbor operation 09444cf4-2aa3-4424-bdce-bee5613c1cd7
+--- queue
+#  STATE    ACTION   APP      PHASE    BY     CANCEL  ID
+1  running  install  q-fresh  pulling  admin  -       81443462-6777-4d20-8658-52f1db2e46b1
+2  waiting  install  q-memos  queued   admin  yes     6ca8f331-4339-4c12-931c-cff10e12efb9
+3  waiting  stop     q-fresh  queued   admin  yes     b24ef975-7f3d-4ec5-8e69-42eb61eda1c8
+4  waiting  install  q-excal  queued   admin  yes     09444cf4-2aa3-4424-bdce-bee5613c1cd7
+
+Cancel a waiting item with: harbor queue cancel <id>

@@ -1114,9 +1114,12 @@ database migrated to v13 at the first start: `user_version` 13, `operations` wit
 `request_json` and `seq NOT NULL UNIQUE`; its 47 operations (all `succeeded`) numbered `seq` 1–47 with no duplicate,
 `PRAGMA foreign_key_check` empty. `GET /v1/operations` answers 401 without a session (the route exists).
 
-Still to do live (needs a logged-in CLI session on harbor-old): queue an install behind another app's install, a
-same-app Update behind an install, cancel one, restart the daemon with items waiting (they end `cancelled`, apps
-untouched).
+**Live queue run, harbor-old (2026-10-16), evidence `docs/evidence/live-queue-2026-10-16/`:** installs queued in run
+order behind a running install; a Stop of an app queued while its own install ran, planned at its turn and applied
+after it; cancelling a waiting install freed its name (installed again at once) while cancelling a running or finished
+item was refused `NOT_CANCELLABLE`; a daemon restart with items waiting ended the waiting reviewed Restart `cancelled`
+(*Harbor restarted before this ran*) with its app still healthy and no app `needs_action`; five full uninstalls
+queued at once ran in order. The box's own apps stayed healthy throughout.
 
 **Upgrade-jump fixture:** `tests/fixtures/state/v0.35.0/` (written by the 0.35.0 daemon in fake mode, schema 13);
 `upgrade-jump.test.ts` jumps v0.35.0, v0.22.1 and v0.19.1 to the current code (30 tests). The fixture driver now uses

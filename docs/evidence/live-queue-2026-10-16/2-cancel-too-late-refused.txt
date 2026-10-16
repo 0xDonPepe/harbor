@@ -1,0 +1,15 @@
+error NOT_CANCELLABLE: the install of q-excal is already running; a running step cannot be stopped safely
+next: Let it finish; harbor queue shows its progress.
+--- cancel the running one (must be refused)
+error NOT_CANCELLABLE: the install of q-fresh has finished
+next: Nothing to cancel.
+exit 0
+--- is q-excal gone?
+1
+--- queue
+#  STATE    ACTION   APP      PHASE     BY     CANCEL  ID
+1  running  install  q-excal  starting  admin  -       09444cf4-2aa3-4424-bdce-bee5613c1cd7
+
+Finished:
+#  STATE                ACTION  APP      FINISHED              BY     CANCEL  ID
+-  finished: succeeded  stop    q-fresh  2026-10-16T14:50:27Z  admin  -       b24ef975-7f3d-4ec5-8e69-42eb61eda1c8

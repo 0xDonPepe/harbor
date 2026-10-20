@@ -9,6 +9,7 @@ import { gpuChanges, gpuDto, gpuFromRendered, gpuServicesOf } from '../planner/g
 import { linkAlias, linkNetworkName, linkValue } from '../planner/links.js';
 import { checkSubmittedSecrets, plannedSecrets } from '../planner/secrets.js';
 import { checkSubmittedSettings, formatSettingValue, installSettingChanges, plannedConfigureSettings, plannedInstallSettings, plannedUpdateSettings, settingDtos } from '../planner/settings.js';
+import { plannedConfigureInternet, plannedInstallInternet, plannedUpdateInternet, packageInternet } from '../planner/internet.js';
 import type { LinkRow, PlannedLink, PlannedSecret } from '../state/repo.js';
 import type { AddSourceResult, CatalogItemDto, CatalogStatusDto, GpuDto, DiagnosticsDto, DomainDto, DomainsDto, FoundAppDto, PermissionDto, InstallCandidateDto, InstanceDetail, InstanceLogsDto, InstanceSummary, LogsDto, AddressOptionsDto, NetworkHttpsDto, NotificationActionDto, NotificationChannelDto, NotificationsDto, OperationDto, OperationQueueDto, PackageImportResultDto, PackageSourceDto, PlanDto, PlanRequest, SelfUpdateStatusDto, StorageUsageDto, SystemDto, SystemMetricsDto, WidgetDto } from '../contracts/api.js';
 import { journalTail } from '../system/logs.js';
@@ -929,11 +930,11 @@ export class ApplicationService {
 
   // Read-time look that is not a column: links, operator secrets and Hide from Home (decision 131: the
   // operator's per-app choice in the `home.hidden` setting wins over the package's suggestion).
-  private extraLook(i: InstanceRow, meta: { version: string | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; settings: ManifestSetting[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { version: string | null; hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[]; settings: NonNullable<InstanceSummary['settings']> } {
+  private extraLook(i: InstanceRow, meta: { version: string | null; operatorSecrets: SecretClaim[]; links: LinkClaim[]; settings: ManifestSetting[]; hideFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[] }): ReturnType<ApplicationService['linkLook']> & { version: string | null; hiddenFromHome: boolean; apiOnly: boolean; ports: FixedPortDto[]; settings: NonNullable<InstanceSummary['settings']>; internet?: InstanceSummary['internet'] } {
     const choice = this.ctx.repo.setting<Record<string, boolean>>('home.hidden')?.[i.id];
     // decision 180: effective values (the operator's overrides, else the installed release's defaults)
     const settings = meta.settings.length ? settingDtos({ settings: meta.settings }, readSettingOverrides(this.ctx.config.stateDir, i.id)) : [];
-    return { ...this.linkLook(i, meta), version: meta.version, hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports, settings };
+    return { ...this.linkLook(i, meta), version: meta.version, hiddenFromHome: choice ?? meta.hideFromHome, apiOnly: meta.apiOnly, ports: meta.ports, settings, ...(this.ctx.egress ? { internet: this.ctx.egress.internetDto(i) } : {}) };
   }
 
   private linkLook(i: InstanceRow, meta: { operatorSecrets: SecretClaim[]; links: LinkClaim[] }): { links: AppLinkDto[]; linkedBy: InstanceSummary['linkedBy']; operatorSecrets: InstanceSummary['operatorSecrets'] } {
@@ -2093,6 +2094,7 @@ export class ApplicationService {
         throw new HarborError('INVALID_STATE', `${pkg.manifest.metadata.name} needs HTTPS: browsers block what it needs on a plain http:// address`, { nextAction: 'Turn on secure addresses in Settings → Network, or install it with Tailscale or one of your domains as its main address.' });
       }
       const tailnetNote = await this.tailnetAll.installNote();
+      const internetPlan = plannedInstallInternet(pkg.manifest, proposed.name, req.internet, this.internetContext());
       const proposal: PlanProposal = {
         packageId: pkg.id,
         revision: pkg.revision,
@@ -2107,6 +2109,7 @@ export class ApplicationService {
         secrets: plannedSecrets(pkg.manifest),
         links,
         ...(pkg.manifest.settings?.length ? { settings: plannedInstallSettings(pkg.manifest) } : {}),
+        internet: internetPlan.internet,
         changes: [
           `Install ${pkg.manifest.metadata.name} (${pkg.id} revision ${pkg.revision}) as instance "${proposed.name}"`,
           `Create Compose project ${identity.project} with a private bridge network`,
@@ -2124,12 +2127,14 @@ export class ApplicationService {
           ...(pkg.manifest.secrets ?? []).map((s) => (s.source === 'operator' ? `Store the value you provide for ${s.id} (${s.prompt ?? s.id}) as a retained secret${s.optional ? ' (optional)' : ''}` : `Generate retained secret ${s.id} (${s.bytes ?? 32} bytes)`)),
           ...this.linkChanges(links, pkg.manifest.metadata.name),
           ...installSettingChanges(pkg.manifest),
+          ...internetPlan.changes,
           ...(mainExposure ? [`Publish it at ${exposureUrl(mainExposure)} and make that its main address`] : []),
           ...Object.values(pkg.release.images).map((i) => `Pull image ${i.reference} (${i.tag})`),
           ...Object.entries(pkg.release.builds ?? {}).map(([svc, b]) => `Build ${svc} from source at commit ${b.commit.slice(0, 12)} (${b.tag})`),
         ],
         warnings: [
           ...mainWarnings,
+          ...internetPlan.warnings,
           ...(Object.keys(pkg.release.builds ?? {}).length ? ['Parts of this app are built from source on this machine; their provenance is the git commit, not a registry digest.'] : []),
           ...(pkg.release.qualification.status !== 'passed' ? [pkg.origin === 'local' ? 'This is your own uploaded app; Harbor has not checked it on a real machine the way it checks the built-in catalog.' : `Package qualification is ${pkg.release.qualification.status}`] : []),
           ...(pkg.manifest.defaultCredentials ? [`This app ships with a default login (${pkg.manifest.defaultCredentials.username}); change it right after the first sign-in.`] : []),
@@ -2323,6 +2328,8 @@ export class ApplicationService {
     const toVersion = packageVersionOf(next);
     // decision 180: new settings start at their default (the submission may choose); dropped and no longer allowed ones say so
     const settingPlan = plannedUpdateSettings(current.manifest, next.manifest, readSettingOverrides(this.ctx.config.stateDir, inst.id));
+    // decision 184: an app that follows its package's default moves with it
+    const internetPlan = plannedUpdateInternet(current.manifest, next.manifest, this.ctx.egress?.choice(inst.id) ?? null, inst.name, this.internetContext());
     const proposal: PlanProposal = {
       packageId: inst.packageId,
       revision: next.revision,
@@ -2338,6 +2345,7 @@ export class ApplicationService {
       secrets: plannedSecrets(next.manifest, keptSecrets),
       links,
       ...(settingPlan.settings.length ? { settings: settingPlan.settings } : {}),
+      ...(internetPlan ? { internet: internetPlan.internet } : {}),
       changes: [
         `Update ${pkgName} "${inst.name}" from revision ${inst.revision}${fromVersion ? ` (${fromVersion})` : ''} to revision ${next.revision}${toVersion ? ` (${toVersion})` : ''}`,
         'Keep the name, addresses, ports, data volumes, your folders and secrets',
@@ -2348,6 +2356,7 @@ export class ApplicationService {
         ...this.linkChanges(links, pkgName),
         ...droppedLinks.map((l) => `Remove link ${l.linkId} (this release no longer uses it) and its network ${l.networkName}`),
         ...settingPlan.changes,
+        ...(internetPlan?.changes ?? []),
         ...fresh.map((e) => `Publish new endpoint ${e.id}: 127.0.0.1:${e.hostPort} -> ${e.service}:${e.containerPort}`),
         ...this.fixedPortChanges(fixedPorts.filter((p) => !heldPorts.has(p.hostPort)), addedPermissions),
         ...(gpu ? gpuChanges(next.manifest, gpu) : []),
@@ -2357,6 +2366,7 @@ export class ApplicationService {
       ],
       warnings: [
         ...(next.origin === 'local' ? ['This is your own uploaded package; Harbor has not checked it on a real machine.'] : []),
+        ...(internetPlan?.warnings ?? []),
         'Apps usually migrate their own data forward on first start. Going back to the old release afterwards is only as safe as the app makes it; Harbor keeps your data as it is.',
         ...(next.manifest.presentation?.releaseNotes ? [`Release notes: ${next.manifest.presentation.releaseNotes}`] : []),
       ],
@@ -2366,6 +2376,12 @@ export class ApplicationService {
     const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'update', instanceId: inst.id, proposal, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };
     repo.insertPlan(plan);
     return this.plan(plan.id);
+  }
+
+  // decision 184: what the internet plans need to know about this machine
+  private internetContext(): { allApps: boolean; vpnReady: boolean } {
+    const s = this.ctx.egress?.setting();
+    return { allApps: s?.allApps ?? false, vpnReady: Boolean(s?.tunnel) };
   }
 
   // Configure (decisions 125/126): replace operator-provided secrets (values arrive with the submission)
@@ -2382,9 +2398,13 @@ export class ApplicationService {
     }
     // decision 180: setting values are checked here (they are not secret: the plan lists them as changes)
     const settingPlan = req.settings ? plannedConfigureSettings(pkg.manifest, readSettingOverrides(this.ctx.config.stateDir, inst.id), req.settings) : null;
-    if (!wanted.length && !Object.keys(req.links ?? {}).length && !settingPlan?.changes.length) {
+    // decision 184: internet access (rules + the resolver rendered into its containers: a running app is re-created)
+    const internetPlan = req.internet !== undefined ? plannedConfigureInternet(packageInternet(pkg.manifest), this.ctx.egress?.choice(inst.id) ?? null, req.internet, inst.name, { ...this.internetContext(), running: inst.desired === 'running' }) : null;
+    const othersChange = wanted.length > 0 || Object.keys(req.links ?? {}).length > 0 || Boolean(settingPlan?.changes.length);
+    if (!othersChange && !internetPlan) {
+      if (req.internet !== undefined) throw new HarborError('INVALID_REQUEST', 'nothing to change: the app already uses that internet access', { nextAction: 'Choose a different one.' });
       if (req.settings && Object.keys(req.settings).length) throw new HarborError('INVALID_REQUEST', `nothing to change: ${Object.keys(req.settings).length === 1 ? 'that setting already has this value' : 'those settings already have these values'}`, { nextAction: 'Choose a different value.' });
-      throw new HarborError('INVALID_REQUEST', 'nothing to change', { nextAction: 'Name a secret to replace (--secret id=@file), a link provider (--link id=<app>) and/or a setting (--set id=value).' });
+      throw new HarborError('INVALID_REQUEST', 'nothing to change', { nextAction: 'Name a secret to replace (--secret id=@file), a link provider (--link id=<app>), a setting (--set id=value) and/or internet access (--internet direct|vpn|offline|default).' });
     }
     const identity = identityFor(this.ctx.installationId, inst.id);
     const keep = new Set((pkg.manifest.secrets ?? []).filter((s) => !wanted.includes(s.id)).map((s) => s.id));
@@ -2401,13 +2421,15 @@ export class ApplicationService {
       secrets,
       links,
       ...(settingPlan?.settings.length ? { settings: settingPlan.settings, settingValues: settingPlan.values } : {}),
+      ...(internetPlan ? { internet: internetPlan.internet, internetOnly: !othersChange } : {}),
       changes: [
         ...wanted.map((id) => `Replace the stored value of ${id} with the one you provide (kept as a retained secret, never shown)`),
         ...this.linkChanges(links, pkgName),
         ...(settingPlan?.changes ?? []),
-        `Re-render the private Compose file of "${inst.name}" and recreate the containers whose configuration changed (same volumes and ports), then check readiness`,
+        ...(internetPlan?.changes ?? []),
+        ...(othersChange ? [`Re-render the private Compose file of "${inst.name}" and recreate the containers whose configuration changed (same volumes and ports), then check readiness`] : []),
       ],
-      warnings: [],
+      warnings: [...(internetPlan?.warnings ?? [])],
       releaseHashes: inst.releaseHashes,
     };
     const plan: Omit<PlanRow, 'consumedOperationId'> = { id: ids.uuid(), actor, kind: 'configure', instanceId: inst.id, proposal, expectedGeneration: inst.generation, createdAt: rfc3339(now), expiresAt };

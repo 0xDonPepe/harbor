@@ -1,0 +1,91 @@
++ /opt/harbor/bin/harbor vpn every-app on
++ tail -6
+Every app through the VPN: ON
+APP             INTERNET
+comfyui-gpu     through the VPN
+nextcloud       through the VPN
+ollama-gpu      through the VPN
+open-webui-gpu  through the VPN
+++ seq 1 90
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=2
++ '[' 2 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=1
++ '[' 1 = 0 ']'
++ sleep 5
++ for i in $(seq 1 90)
+++ /opt/harbor/bin/harbor --json queue
+++ python3 -c 'import json,sys; print(len(json.load(sys.stdin)["active"]))'
++ n=0
++ '[' 0 = 0 ']'
++ break
++ /opt/harbor/bin/harbor --json queue
++ python3 -c 'import json,sys; [print(o["kind"], o["actor"], o["instanceName"], o["state"]) for o in json.load(sys.stdin)["recent"][:4]]'
+restart vpn-policy open-webui-gpu succeeded
+restart vpn-policy ollama-gpu succeeded
+configure admin comfyui-gpu succeeded
+configure admin comfyui-gpu succeeded
+++ docker ps --format '{{.Names}}'
+++ grep -E '^hb_(62906563|bc68b240)'
++ for c in $(docker ps --format "{{.Names}}" | grep -E "^hb_(62906563|bc68b240)")
+++ docker inspect hb_bc68b24041074de08f5c43b5177db9e0-web-1 --format 'dns={{.HostConfig.Dns}}'
+hb_bc68b24041074de08f5c43b5177db9e0-web-1 dns=[198.51.100.53]
++ echo 'hb_bc68b24041074de08f5c43b5177db9e0-web-1 dns=[198.51.100.53]'
++ for c in $(docker ps --format "{{.Names}}" | grep -E "^hb_(62906563|bc68b240)")
+++ docker inspect hb_62906563a20b4029a8e31bd833ae8e77-ollama-1 --format 'dns={{.HostConfig.Dns}}'
+hb_62906563a20b4029a8e31bd833ae8e77-ollama-1 dns=[198.51.100.53]
++ echo 'hb_62906563a20b4029a8e31bd833ae8e77-ollama-1 dns=[198.51.100.53]'
++ docker exec hb_bc68b24041074de08f5c43b5177db9e0-open-webui-1 python3 -c 'import urllib.request; print("open-webui public ip:", urllib.request.urlopen("https://ifconfig.me/ip", timeout=10).read().decode())'
+Error response from daemon: No such container: hb_bc68b24041074de08f5c43b5177db9e0-open-webui-1
++ sudo -n nft list chain inet harbor_egress egress_mark
++ grep -c 'mark set'
+6
+open-webui-gpu public ip: <droplet-ip>
+VPN droplet test: connected (last handshake 2026-10-20T07:13:37.000Z)
+after off: dns=<no value>
+open-webui-gpu public ip: <home-public-ip>
+ollama-gpu      ollama-gpu@3      0.40.3   -              installed  running   running  healthy    yes        http://localhost:18082/  62906563-a20b-4029-a8e3-1bd833ae8e77
+open-webui-gpu  open-webui-gpu@3  -        -              installed  running   running  healthy    yes        http://localhost:18083/  bc68b240-4107-4de0-8f5c-43b5177db9e0
+comfyui-gpu     comfyui-gpu@2     0.40.0   -              installed  running   running  healthy    no         http://localhost:18081/  8176d66e-eed8-46b4-8eb6-aafe50ea4c4a

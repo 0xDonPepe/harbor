@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **184**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **186**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -50,6 +50,10 @@ src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
   backups/      app backups (decisions 149–154): restic.ts + step.ts + schedule.ts + targets.ts are PURE;
               engine.ts = root handoff (`harbor-backup@<requestId>`, bootstrap/backup-apply.ts runs restic)
               + FAKE engine; service.ts = places, policy, sequential worker, restore points
+  egress/       VPN and offline apps (decisions 184–185): wireguard.ts + rules.ts are PURE (wg-quick parser, nft
+              ruleset, ip rules, effective mode); provider.ts = root handoff (`harbor-egress@<action>`,
+              bootstrap/egress-apply.ts loads nft/routes/WireGuard) + FAKE provider; service.ts = desired state from
+              every app, the VPN page, the `vpn-down` notification
   cli/          commander CLI (mirrors every console action)
   notify/       notifications engine + channels (ntfy/webhook/email; resolved rows delete fully)
 web/src/        React 19 + Vite, plain CSS tokens, strict CSP; App.tsx, app/pages/*, app/icons.tsx,
@@ -67,7 +71,7 @@ scripts/        catalog-pin/hash/verify/bundle (take --catalog <dir> or HARBOR_C
                 the zip against its catalog.json), openapi.ts, package.mjs (ships that catalog as the seed), vm/ controllers
 docs/           OPERATOR_GUIDE.md (user manual), DEVELOPER_PACKAGES.md (package authoring),
                 VERIFICATION.md (evidence log), FUTURE.md (deliberately not built), TODO.md (wanted, not built yet),
-                design/ (UI, CATALOG, EXPOSURE, ROUND9, APP_HOMES, BACKUPS), openapi.json (GENERATED — never hand-edit)
+                design/ (UI, CATALOG, EXPOSURE, ROUND9, APP_HOMES, BACKUPS, VPN), openapi.json (GENERATED — never hand-edit)
 ```
 
 Key separations (do not blur them):
@@ -135,16 +139,16 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (604 + 2 skipped)
-   pnpm test:integration        # 351 + 3 live-Docker skipped (~9 min)
-   pnpm build && pnpm test:e2e  # 42 Playwright (~3 min, ports 18500/18700; HARBOR_E2E_PORT moves them)
+   pnpm test                    # unit (630 + 2 skipped)
+   pnpm test:integration        # 375 + 3 live-Docker skipped (~9 min)
+   pnpm build && pnpm test:e2e  # 43 Playwright (~3 min, ports 18500/18700; HARBOR_E2E_PORT moves them)
    pnpm catalog:verify tests/fixtures/catalog --quiet
    pnpm catalog:hash --catalog tests/fixtures/catalog --check
    pnpm openapi -- --check
    ```
    Never `pnpm package | head` (SIGPIPE leaves a stale archive — always `| tail`).
 5. **Docs are part of done.** Update together with the code:
-   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **184**).
+   - Non-obvious choice → new row in `docs/DECISIONS.md` (next number **186**).
    - User-visible behavior → `docs/OPERATOR_GUIDE.md` (and `README.md` catalog/layout/scope if
      it changed).
    - Package format change → `docs/DEVELOPER_PACKAGES.md` (+ template) and the relevant

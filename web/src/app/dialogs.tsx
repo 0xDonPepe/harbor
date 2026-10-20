@@ -7,7 +7,8 @@ import { AppIcon, Copy, Dialog, EventList, FolderPicker, InstanceIcon, OpenCopy,
 import { defaultCopyName, installView, nameProblem } from './copies';
 import { categoryLabel, fmtBytes, fmtTime, fmtVersion, updateLine } from './format';
 import { gpuAppText, gpuReviewText } from './gpu-text';
-import { DriveIcon, LockIcon, PeopleIcon } from './icons';
+import { DriveIcon, GlobeIcon, LockIcon, PeopleIcon } from './icons';
+import { INTERNET_CHOICES, internetHint, internetLabel, internetSummary, type InternetMode } from './internet-text';
 import type { Action, Console } from './store';
 import { DOING, VERB, appActionGates, appQueueLine, capitalize as cap, isRunning, notCancellableReason, whoOf } from './queue';
 import { SettingFields, SettingsDialog } from './settings-fields';
@@ -145,7 +146,7 @@ export function PlanDialog({ c }: { c: Console }) {
   const needsPermission = plan ? (plan.permissions.length > 0 || opensPorts.length > 0) && !permissionsAccepted : false;
   const settingProblem = chosenSettings.problem;
   const typed = Object.fromEntries(Object.entries(secretValues).filter(([id, v]) => v !== '' || plan?.secrets.find((s) => s.id === id)?.ask === 'optional' && plan.kind === 'configure'));
-  const title = plan ? (plan.kind === 'install' && pending.kind === 'restore-app' ? 'Review restore' : `Review ${verb(plan.kind)}`) : `Planning ${pending.kind === 'restore-app' ? 'restore' : verb(pending.kind)}…`;
+  const title = plan ? (plan.kind === 'install' && pending.kind === 'restore-app' ? 'Review restore' : plan.kind === 'configure' && internetOnly(plan) ? 'Review internet access' : `Review ${verb(plan.kind)}`) : `Planning ${pending.kind === 'restore-app' ? 'restore' : verb(pending.kind)}…`;
   const appName = plan ? (c.data.catalog.find((i) => i.id === plan.packageId)?.name ?? plan.name) : '';
   const displayName = plan ? (plan.name === plan.packageId ? appName : `${appName} (${plan.name})`) : '';
   const approveLabel = !plan ? '…' : plan.kind === 'remove' ? 'Remove (keep data)' : plan.kind === 'purge' ? 'Delete everything' : plan.kind === 'install' ? (pending.kind === 'restore-app' ? 'Restore here' : 'Install') : plan.kind === 'restore' ? 'Restore now' : plan.kind === 'update' ? 'Update now' : plan.kind === 'expose' ? 'Publish' : plan.kind === 'unexpose' ? 'Withdraw' : plan.kind === 'reconfigure' ? 'Switch' : plan.kind === 'configure' ? 'Apply' : plan.kind === 'seal' ? 'Encrypt now' : plan.kind === 'move' ? 'Move now' : capitalize(plan.kind);
@@ -705,7 +706,10 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
   };
   // Decision 148: summaries in plain words, the choices behind "Change", everything that can wait
   // (name, own passphrase, own folders, versions) behind "Advanced".
-  const [changing, setChanging] = useState<{ storage: boolean; access: boolean }>({ storage: false, access: false });
+  const [changing, setChanging] = useState<{ storage: boolean; access: boolean; internet: boolean }>({ storage: false, access: false, internet: false });
+  // decision 184: internet access; the package's default unless the operator picks another
+  const internetDefault: InternetMode = item.internet ?? 'direct';
+  const [internetPick, setInternetPick] = useState<InternetMode>(internetDefault);
   const [howOpen, setHowOpen] = useState(false);
   const sectionId = useId();
   const drives = (candidates ?? []).filter((cd) => !cd.label.startsWith('Harbor data folder'));
@@ -1074,6 +1078,33 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
                 ))}
               </fieldset>
             )}
+            <div className="choice">
+              <span className="choice-icon">
+                <GlobeIcon />
+              </span>
+              <div className="choice-text">
+                <p className="choice-main">
+                  <strong>Internet: {internetLabel(internetPick)}</strong>
+                  {internetPick === internetDefault && internetDefault !== 'direct' ? <span className="muted small"> · what {item.name} asks for</span> : null}
+                </p>
+                <p className="muted small">{internetHint(internetPick)}</p>
+              </div>
+              <button className="btn ghost small" type="button" aria-expanded={changing.internet} aria-controls={`${sectionId}-internet`} aria-label={`Change how ${item.name} reaches the internet`} onClick={() => setChanging({ ...changing, internet: !changing.internet })}>
+                {changing.internet ? 'Done' : 'Change'}
+              </button>
+            </div>
+            {changing.internet && (
+              <fieldset className="storage-choices" id={`${sectionId}-internet`}>
+                <legend>Internet access</legend>
+                <p className="muted small">People reach {item.name} the same way in every case; this only decides what it may open itself.</p>
+                {INTERNET_CHOICES.map((m) => (
+                  <label key={m.mode} className="check">
+                    <input type="radio" name="internet-access" checked={internetPick === m.mode} onChange={() => setInternetPick(m.mode)} /> {m.label}
+                    {m.mode === internetDefault && internetDefault !== 'direct' ? <span className="muted small"> (its default)</span> : null}
+                  </label>
+                ))}
+              </fieldset>
+            )}
           </section>
           {item.links.length > 0 && (
             <fieldset className="storage-choices">
@@ -1214,7 +1245,7 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
             <button
               className="btn primary"
               disabled={item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
-              onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
+              onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(internetPick !== internetDefault ? { internet: internetPick } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
               aria-label={`Install ${item.name} now`}
               title={nameError ? nameError : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
             >
@@ -1549,6 +1580,47 @@ function PassphrasePanel({ inst, defaultKey: given, onChanged }: { inst: Instanc
   );
 }
 
+// Decision 184: Direct, Through the VPN, Offline, or back to the app's own default; Review makes a configure plan.
+function InternetDialog({ inst, title, onClose, onReview }: { inst: InstanceSummary; title: string; onClose: () => void; onReview: (m: InternetMode | 'default') => void }) {
+  const current: InternetMode | 'default' = inst.internet.choice ?? 'default';
+  const [pick, setPick] = useState<InternetMode | 'default'>(current);
+  const def = inst.internet.packageDefault;
+  return (
+    <Dialog title={title} onClose={onClose}>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pick !== current) onReview(pick);
+        }}
+      >
+        <p className="muted small">People reach the app the same way in every case. A running app restarts for a few seconds, so its lookups follow too.</p>
+        <fieldset className="storage-choices">
+          <legend>Internet access</legend>
+          <label className="check">
+            <input type="radio" name="internet-pick" checked={pick === 'default'} onChange={() => setPick('default')} /> The app's default: {internetLabel(def)}
+          </label>
+          {INTERNET_CHOICES.map((m) => (
+            <label key={m.mode} className="check">
+              <input type="radio" name="internet-pick" checked={pick === m.mode} onChange={() => setPick(m.mode)} /> {m.label}
+              <span className="muted small"> · {m.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+        {inst.internet.allApps && (pick === 'direct' || (pick === 'default' && def === 'direct')) && <p className="notice small">Every app goes through the VPN right now (Settings → VPN), so this one does too.</p>}
+        <div className="row end">
+          <button type="button" className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn primary" disabled={pick === current} title={pick === current ? 'Pick another one first' : undefined}>
+            Review
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
 export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPublish, onCustomize, onChanged, instances = [], catalog = [] }: { inst: InstanceSummary; exposures: ExposureDto[]; ops?: OperationDto[]; onClose: () => void; onAction: (a: Action) => void; onPublish: () => void; onCustomize: () => void; onChanged?: (i: InstanceSummary) => void; instances?: InstanceSummary[]; catalog?: CatalogItemDto[] }) {
   const [relink, setRelink] = useState<Record<string, string>>({});
   const upd = inst.updateAvailable;
@@ -1594,6 +1666,7 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
   const canLock = lockable && inst.runtime === 'stopped';
   const [locking, setLocking] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // decision 180
+  const [internetOpen, setInternetOpen] = useState(false); // decision 184
   const canOpen = inst.installState === 'installed' && inst.runtime === 'running' && !need && !locked;
   // decision 183: a busy app (its install included) still offers what makes sense after its operations; it queues
   const gate = appActionGates(inst, ops);
@@ -1886,6 +1959,33 @@ export function AppDrawer({ inst, exposures, ops = [], onClose, onAction, onPubl
           </p>
         </>
       )}
+      {!retained && (
+        // decision 184: how the app reaches the internet; Change… picks another, then the review (a running app restarts)
+        <>
+          <h4>Internet</h4>
+          <p className="small">
+            <strong>{internetSummary(inst.internet).label}</strong> <span className="muted">· {internetSummary(inst.internet).why}</span>
+            <br />
+            <span className="muted">{internetHint(inst.internet.mode)}</span>
+          </p>
+          <div className="row">
+            <button className="btn small" disabled={inst.installState !== 'installed'} onClick={() => setInternetOpen(true)} aria-label={`Change how ${appLabel(inst, instances)} reaches the internet`}>
+              Change…
+            </button>
+          </div>
+          {internetOpen && (
+            <InternetDialog
+              inst={inst}
+              title={`Internet for ${appLabel(inst, instances)}`}
+              onClose={() => setInternetOpen(false)}
+              onReview={(internet) => {
+                setInternetOpen(false);
+                onAction({ kind: 'configure', instance: inst, internet });
+              }}
+            />
+          )}
+        </>
+      )}
       {!retained && (inst.links.length > 0 || inst.linkedBy.length > 0) && (
         <>
           <h4>Links</h4>
@@ -2086,6 +2186,7 @@ function humanSummary(plan: PlanDto, n: string): string {  switch (plan.kind) {
     case 'purge':
       return `Harbor will uninstall ${n} completely: containers, its data volumes, secrets and stored release. Folders of yours are left alone. This cannot be undone.`;
     case 'configure':
+      if (internetOnly(plan)) return `Harbor will change what ${n} may open on the internet. The firewall changes first; a running app then restarts for a few seconds so its lookups follow too. People reach ${n} as before.`;
       return `Harbor will apply the new settings to ${n} and recreate only what changed. Data, ports and addresses stay.`;
     case 'move':
       return `Harbor will move ${n} to ${plan.location?.dir ?? 'its new place'}: it stops, its data is copied sealed (never as plaintext on a disk), and it starts from there. The old copy is deleted only after that works.`;
@@ -2100,6 +2201,11 @@ function humanSummary(plan: PlanDto, n: string): string {  switch (plan.kind) {
     case 'relink':
       return `Harbor will attach the private links of ${n} again with only the names it gives them. Nothing is recreated; each link drops for a moment.`;
   }
+}
+
+// decision 184: a configure plan that only changes internet access (a host rule; nothing is recreated)
+function internetOnly(plan: PlanDto): boolean {
+  return Boolean(plan.internet) && plan.changes.every((c) => c.startsWith('Internet access'));
 }
 
 function verb(kind: PlanDto['kind']): string {

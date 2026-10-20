@@ -181,6 +181,12 @@ export class Observer {
     } catch {
       /* statfs unavailable on this platform */
     }
+    // decision 184: apps that go through the VPN have no internet while it is down (sysfs only, no root)
+    try {
+      this.ctx.egress?.observe();
+    } catch (e) {
+      this.ctx.log.warn(`VPN observation failed: ${(e as Error).message}`);
+    }
     // Harbor's own update (manual by design, decision 70): notify only.
     const su = this.ctx.selfUpdate.status();
     if (su.available && su.latest) {

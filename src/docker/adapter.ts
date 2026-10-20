@@ -42,6 +42,8 @@ export interface NetworkInfo {
   // IPAM gateways: where a published port's loopback traffic (Caddy, tailscale serve, the LAN HTTPS proxy)
   // appears to come from inside the app network — what an app's trusted-proxy list must name.
   gateways: string[];
+  // IPAM subnets (decision 184: the firewall marks what an app opens from its own network's subnet)
+  subnets: string[];
 }
 
 // One command run inside a running container (package `afterStart` hooks, decision 116).

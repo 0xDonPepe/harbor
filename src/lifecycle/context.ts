@@ -19,6 +19,7 @@ import type { ApplicationService } from './service.js';
 import type { CryptoProvider } from '../storage/crypto-provider.js';
 import type { LanHttpsServers } from '../system/lan-https.js';
 import type { BackupService } from '../backups/service.js';
+import type { EgressService } from '../egress/service.js';
 
 // HTTPS reachability check of a published address with real certificate verification.
 export type UrlVerifier = (url: string, opts?: { expectStatus?: number[]; timeoutMs?: number }) => Promise<{ ok: boolean; status: number | null; error: string | null }>;
@@ -73,6 +74,9 @@ export interface Ctx {
   // App backups (decisions 149–154): places, policy, the sequential worker. Wired in daemon.ts; the
   // runner's backup/restore operations call into it.
   backups?: BackupService | null;
+  // VPN and offline apps (decision 184): each app's internet mode and the host rules that follow. Wired in
+  // daemon.ts (fake provider in fake mode); the runner applies before a non-direct app starts.
+  egress?: EgressService | null;
   // The Fastify routing function, stashed by daemon.ts so the HTTPS console
   // listener serves the same routes (same guards, same auth).
   __routing?: (req: never, res: never) => void;

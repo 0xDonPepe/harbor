@@ -12,6 +12,7 @@ export interface Manifest {
   endpoints: Record<string, ManifestEndpoint>;
   ports?: Record<string, ManifestPort>; // decision 163
   permissions?: Record<string, ManifestPermission[]>; // decision 163
+  network?: { internet?: InternetMode }; // decision 185
   health: { endpoint: string; path: string; expectedStatus: number[]; timeoutSeconds: number; deadlineSeconds: number };
   ui: { primaryEndpoint: string };
   storage?: StorageClaim[];
@@ -65,6 +66,9 @@ export interface ManifestPort {
 }
 // Decision 179: gpu = this machine's graphics card (Harbor renders the device access from host facts)
 export type ManifestPermission = 'net-admin' | 'tun' | 'ip-forwarding' | 'gpu';
+// Decision 184: how an app reaches the internet (direct, only through Harbor's VPN tunnel, or not at all)
+export type InternetMode = 'direct' | 'vpn' | 'offline';
+
 
 // Decision 179: what the GpuObserver found on this machine; a planner input (the planner never probes the host).
 // nvidia: an NVIDIA card Docker can hand to a container (driver + NVIDIA container toolkit). dri: an Intel/AMD

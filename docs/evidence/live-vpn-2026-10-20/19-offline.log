@@ -1,0 +1,22 @@
++ /opt/harbor/bin/harbor internet comfyui-gpu offline --yes
++ grep -E 'Internet access|succeeded|failed'
++ head -3
+  - Internet access: Through the VPN → Offline (your choice). comfyui-gpu restarts so its lookups follow too (same data, ports and addresses)
+  succeeded    configure succeeded
+Operation 09c55066-03ec-4ba0-b98f-73a67fc5825c: configure succeeded (succeeded)
++ C=hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1
++ docker inspect hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 --format 'dns={{.HostConfig.Dns}}'
+dns=[127.0.53.53]
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 sh -c 'S=$(date +%s%N); curl -s -o /dev/null -m 8 https://9.9.9.10/; echo "internet by IP: curl exit $? after $(( ($(date +%s%N)-S)/1000000 )) ms"; S=$(date +%s%N); getent hosts offline-h1.example.com || echo "lookup failed after $(( ($(date +%s%N)-S)/1000000 )) ms"; curl -s -o /dev/null -w "lan router: %{http_code}" -m 5 http://<router>/ || echo " lan router: exit $?"; curl -s -o /dev/null -w "this machine (ollama port): %{http_code}" -m 5 http://<harbor-old-lan>:18082/ || echo " this machine: exit $?"; curl -s -o /dev/null -w "bridge gateway: %{http_code}" -m 5 http://172.18.0.1:18082/ || echo " bridge gateway: exit $?"'
+internet by IP: curl exit 7 after 5 ms
+lookup failed after 4 ms
+lan router: 000 lan router: exit 7
+this machine (ollama port): 000 this machine: exit 7
+bridge gateway: 200== reached from outside the app:
++ echo '== reached from outside the app:'
++ curl -s -o /dev/null -w 'loopback 18081: %{http_code}\n' -m 5 http://127.0.0.1:18081/
+loopback 18081: 200
++ /opt/harbor/bin/harbor list
++ grep comfyui
+comfyui-gpu     comfyui-gpu@2     0.40.0   -              installed  running   running  healthy    no         http://localhost:18081/  8176d66e-eed8-46b4-8eb6-aafe50ea4c4a
+from the Mac over the LAN (harbor-old.local:18081): 200

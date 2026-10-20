@@ -1,0 +1,14 @@
+Plan 3936fc21-1f52-4261-8198-86050bb7c28c (configure) for "comfyui-gpu" [comfyui-gpu rev 2] — expires 2026-10-20T07:04:28Z
+  - Internet access: Direct → Through the VPN (your choice). Nothing restarts: it applies right away
+  Endpoints: web=http://localhost:18081/
+  queued       configure accepted for instance comfyui-gpu
+  preparing    applying new settings to comfyui-gpu
+  preparing    comfyui-gpu: internet access is now through the VPN only
+  succeeded    configure succeeded
+Operation 63333605-fc75-46d1-8b2b-7b31d9535616: configure succeeded (succeeded)
+  2026-10-20T06:49:28Z queued       configure accepted for instance comfyui-gpu
+  2026-10-20T06:49:29Z preparing    applying new settings to comfyui-gpu
+  2026-10-20T06:49:29Z preparing    comfyui-gpu: internet access is now through the VPN only
+  2026-10-20T06:49:29Z succeeded    configure succeeded
+comfyui-gpu: through the VPN only (your choice)
+		ip saddr 172.18.0.0/16 ip daddr != 172.18.0.0/16 ct direction original meta mark set meta mark & 0xf1ffffff | 0x01000000 comment "8176d66e-eed8-46b4-8eb6-aafe50ea4c4a vpn"

@@ -1,0 +1,11 @@
+== offline:
+bridge gateway -> another app: 000
+bridge gateway -> another app: refused (exit 7)
+bridge gateway -> its own port: 000
+bridge gateway -> its own port: refused (exit 7)
+== through the VPN, VPN removed:
+lookup failed after 4005 ms
+bridge gateway -> another app: 200
+VPN droplet test: connected (last handshake 2026-10-20T07:13:37.000Z)
+2606:4700:10::6814:1a88 example.org
+<droplet-ip>

@@ -1,0 +1,42 @@
++ /opt/harbor/bin/harbor --version
+0.36.0
++ systemctl is-enabled harbor-egress.service harbor-vpn.service
+enabled
+enabled
++ ls -la /etc/systemd/system/docker.service.requires/
+total 8
+drwxr-xr-x  2 root root 4096 Oct 20 01:47 .
+drwxr-xr-x 32 root root 4096 Oct 20 01:47 ..
+lrwxrwxrwx  1 root root   41 Oct 20 01:47 harbor-egress.service -> /etc/systemd/system/harbor-egress.service
++ systemctl status harbor-egress.service --no-pager
++ head -5
+○ harbor-egress.service - Harbor firewall for VPN and offline apps (loaded before Docker starts)
+     Loaded: loaded (/etc/systemd/system/harbor-egress.service; enabled; preset: enabled)
+     Active: inactive (dead)
++ dpkg -l nftables wireguard-tools
++ tail -2
+ii  nftables        1.0.9-1build1         amd64        Program to control packet filtering rules by Netfilter project
+ii  wireguard-tools 1.0.20210914-1ubuntu4 amd64        fast, modern, secure kernel VPN tunnel (userland utilities)
+total 20
+drwxr-x---   2 root harbor  4096 Sep 30 18:14 .
+drwxr-xr-x 176 root root   12288 Oct 20 01:47 ..
+-rw-r-----   1 root harbor   440 Sep 30 18:14 harbor.json
+table ip filter
+table ip nat
+table ip6 filter
+table ip6 nat
+table ip raw
+0:	from all lookup local
+5210:	from all fwmark 0x80000/0xff0000 lookup main
+5230:	from all fwmark 0x80000/0xff0000 lookup default
+5250:	from all fwmark 0x80000/0xff0000 unreachable
+5270:	from all lookup 52
+32766:	from all lookup main
+32767:	from all lookup default
++ sudo -n ls -la /etc/harbor/
++ sudo -n nft list tables
++ ip rule
++ /opt/harbor/bin/harbor vpn
+VPN: not set up. Add one with: harbor vpn set <wireguard.conf>
+Every app through the VPN: off
+Every app goes direct.

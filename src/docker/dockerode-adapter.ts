@@ -140,7 +140,7 @@ export class DockerodeAdapter implements DockerAdapter {
   async inspectNetwork(idOrName: string): Promise<NetworkInfo | null> {
     try {
       const n = await this.docker.getNetwork(idOrName).inspect();
-      return { id: n.Id, name: n.Name, labels: n.Labels ?? {}, containerIds: Object.keys(n.Containers ?? {}), gateways: gatewaysOf(n) };
+      return { id: n.Id, name: n.Name, labels: n.Labels ?? {}, containerIds: Object.keys(n.Containers ?? {}), gateways: gatewaysOf(n), subnets: subnetsOf(n) };
     } catch (e) {
       if (isNotFound(e)) return null;
       throw e;
@@ -151,7 +151,7 @@ export class DockerodeAdapter implements DockerAdapter {
     const filters: Record<string, string[]> = {};
     if (labels) filters['label'] = Object.entries(labels).map(([k, v]) => `${k}=${v}`);
     const list = await this.docker.listNetworks({ filters: JSON.stringify(filters) });
-    return list.map((n) => ({ id: n.Id, name: n.Name, labels: (n.Labels ?? {}) as Record<string, string>, containerIds: Object.keys((n as { Containers?: Record<string, unknown> }).Containers ?? {}), gateways: gatewaysOf(n) }));
+    return list.map((n) => ({ id: n.Id, name: n.Name, labels: (n.Labels ?? {}) as Record<string, string>, containerIds: Object.keys((n as { Containers?: Record<string, unknown> }).Containers ?? {}), gateways: gatewaysOf(n), subnets: subnetsOf(n) }));
   }
 
   async removeNetwork(id: string): Promise<void> {
@@ -272,6 +272,11 @@ export class DockerodeAdapter implements DockerAdapter {
       volumes: (df.Volumes ?? []).map((v) => ({ name: v.Name, sizeBytes: v.UsageData?.Size && v.UsageData.Size > 0 ? v.UsageData.Size : 0 })),
     };
   }
+}
+
+function subnetsOf(n: unknown): string[] {
+  const cfg = (n as { IPAM?: { Config?: { Subnet?: string }[] } }).IPAM?.Config ?? [];
+  return cfg.map((c) => c.Subnet).filter((g): g is string => typeof g === 'string' && g.length > 0);
 }
 
 function gatewaysOf(n: unknown): string[] {

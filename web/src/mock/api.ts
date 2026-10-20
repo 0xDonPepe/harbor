@@ -24,6 +24,7 @@ import type {
   BackupPolicyDto,
   BackupsOverviewDto,
   BackupTargetDto,
+  VpnDto,
 } from '../../../src/contracts/api';
 import {
   mockAppearance,
@@ -78,6 +79,28 @@ function mockTailnetAll(): TailnetAllDto {
       return { instanceId: i.id, name: i.displayName ?? i.name, state, url: ex?.url ?? null, note: state === 'waiting' ? 'stopped; it gets its address when it runs' : state === 'pending' ? 'gets its address at the next check' : null };
     });
   return { enabled: tailnetAll.enabled, status: tailnetAll.enabled ? 'on' : 'off', reason: null, nextAction: null, except: tailnetAll.except, apps };
+}
+// decision 184: the apps' VPN. ?vpn=on shows a connected tunnel, ?vpn=down one that stopped answering.
+const vpnParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('vpn') : null;
+let vpnTunnel: VpnDto['tunnel'] = vpnParam === 'on' || vpnParam === 'down' ? { name: 'Mullvad Stockholm', endpoint: '185.65.134.82:51820', addresses: ['10.66.12.34/32'], dns: ['10.64.0.1'], dnsFallback: false, mtu: 1420, peerPublicKey: 'MOCKpublicKEYforDESIGNmodeONLYxxxxxxxxxxxA=', setAt: new Date(Date.now() - 86_400_000).toISOString() } : null;
+let vpnAllApps = false;
+function mockVpn(): VpnDto {
+  const apps = instances.filter((i) => i.internet.mode !== 'direct' || vpnAllApps).map((i) => ({ instanceId: i.id, name: i.displayName ?? i.name, mode: (i.internet.mode === 'offline' ? 'offline' : 'vpn') as 'vpn' | 'offline' }));
+  const state: VpnDto['status']['state'] = !vpnTunnel ? 'off' : vpnParam === 'down' ? 'down' : 'connected';
+  return {
+    available: true,
+    tunnelAvailable: true,
+    reason: null,
+    tunnel: vpnTunnel,
+    status: { state, latestHandshakeAt: state === 'connected' ? new Date(Date.now() - 42_000).toISOString() : null, rxBytes: 1_284_000, txBytes: 312_000, checkedAt: new Date().toISOString() },
+    allApps: vpnAllApps,
+    apps,
+    rules: { state: 'ok', message: null, appliedAt: new Date().toISOString() },
+  };
+}
+function setMockAllApps(on: boolean): void {
+  vpnAllApps = on;
+  instances = instances.map((i) => ({ ...i, internet: { ...i.internet, allApps: on, mode: i.internet.choice === 'offline' || (i.internet.choice === null && i.internet.packageDefault === 'offline') ? 'offline' : on ? 'vpn' : (i.internet.choice ?? i.internet.packageDefault) } }));
 }
 let notifications = mockNotifications();
 let channels = mockChannels();
@@ -279,6 +302,29 @@ export const mockApi = {
   },
   exposures: async (): Promise<{ items: ExposureDto[]; ui: UiExposureDto | null }> => mockExposures(),
   links: async (): Promise<LinkDto[]> => [],
+  vpn: async (): Promise<VpnDto> => mockVpn(),
+  setVpn: async (config: string, name?: string): Promise<VpnDto> => {
+    await beat(700);
+    if (!/^\s*\[Interface\]/im.test(config) || !/\[Peer\]/i.test(config)) throw new Error('the configuration has no [Peer] (the VPN server). Download the WireGuard configuration again from your VPN provider and paste it unchanged.');
+    if (/^\s*(PostUp|PreUp|PostDown|PreDown)\s*=/im.test(config)) throw new Error('PostUp is not accepted: Harbor brings the tunnel up itself and never runs commands from the file. Delete the PostUp line and try again.');
+    const endpoint = /^\s*Endpoint\s*=\s*(\S+)/im.exec(config)?.[1] ?? 'vpn.example:51820';
+    vpnTunnel = { name: name ?? null, endpoint, addresses: [/^\s*Address\s*=\s*([^,\s]+)/im.exec(config)?.[1] ?? '10.2.0.2/32'], dns: [/^\s*DNS\s*=\s*([^,\s]+)/im.exec(config)?.[1] ?? '9.9.9.9'], dnsFallback: !/^\s*DNS\s*=/im.test(config), mtu: 1420, peerPublicKey: 'MOCKpublicKEYforDESIGNmodeONLYxxxxxxxxxxxA=', setAt: new Date().toISOString() };
+    return mockVpn();
+  },
+  removeVpn: async (): Promise<VpnDto> => {
+    await beat();
+    vpnTunnel = null;
+    return mockVpn();
+  },
+  setVpnAllApps: async (enabled: boolean): Promise<VpnDto> => {
+    await beat();
+    setMockAllApps(enabled);
+    return mockVpn();
+  },
+  checkVpn: async (): Promise<VpnDto> => {
+    await beat(500);
+    return mockVpn();
+  },
   exposeUi: async (): Promise<UiExposureDto> => mockExposures().ui!,
   unexposeUi: async (): Promise<void> => {
     await beat();

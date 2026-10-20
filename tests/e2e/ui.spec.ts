@@ -1897,3 +1897,112 @@ test('decision 177: every app on Tailscale — the switch asks first, lists the 
   await page.getByRole('checkbox', { name: 'Give every app a Tailscale address', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Give every app a Tailscale address', exact: true })).not.toBeChecked();
 });
+
+test('decision 184: VPN and offline apps — add a VPN, an app that asks to be offline, change it in its drawer, every app through the VPN, remove', async ({ page }) => {
+  const { writeZip } = await import('../../src/packages/zip.js');
+  const { PROVIDER_CONF } = await import('../fixtures/wireguard.js');
+  const manifest = `apiVersion: harbor/v1alpha1
+kind: Application
+metadata:
+  id: quiet-e2e
+  name: Quiet E2E
+  description: An app that never needs the internet
+release:
+  revision: "1"
+deployment:
+  compose: compose.yaml
+  multiInstance: false
+  services:
+    web: application
+endpoints:
+  web:
+    service: web
+    containerPort: 80
+    scheme: http
+    exposure: direct
+    browserContext: ordinary
+health:
+  endpoint: web
+  path: /
+  expectedStatus: [200]
+  timeoutSeconds: 5
+  deadlineSeconds: 30
+ui:
+  primaryEndpoint: web
+network:
+  internet: offline
+`;
+  await login(page);
+  // Settings → VPN: a file that runs commands is refused, a provider's file connects; the key never comes back
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /^VPN Send your apps/ }).click();
+  const card = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'VPN', exact: true }) });
+  await card.getByRole('button', { name: 'Add VPN…', exact: true }).click();
+  const add = page.getByRole('dialog', { name: 'Add a VPN' });
+  await add.getByLabel('WireGuard configuration', { exact: true }).fill(PROVIDER_CONF.replace('DNS = 10.64.0.1', 'DNS = 10.64.0.1\nPostUp = iptables -F'));
+  await add.getByRole('button', { name: 'Add VPN', exact: true }).click();
+  await expect(add.getByRole('alert')).toContainText('PostUp is not accepted');
+  await add.getByLabel('WireGuard configuration', { exact: true }).fill(PROVIDER_CONF);
+  await add.getByLabel('VPN name', { exact: true }).fill('E2E VPN');
+  await add.getByRole('button', { name: 'Add VPN', exact: true }).click();
+  await expect(add).toBeHidden();
+  await expect(card).toContainText('E2E VPN');
+  await expect(card).toContainText('connected');
+  await expect(card).toContainText('185.65.134.82:51820');
+  await expect(card).toContainText('10.64.0.1');
+  await expect(page.locator('body')).not.toContainText('FIXTURE'); // no key on the page
+  // an app whose package asks to be offline: the install page and the review say so
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('button', { name: 'Add your own app' }).click();
+  const up = page.getByRole('dialog', { name: 'Your own app' });
+  await up.getByLabel('Package zip file').setInputFiles({ name: 'quiet-e2e.zip', mimeType: 'application/zip', buffer: writeZip({ 'manifest.yaml': manifest, 'compose.yaml': 'services:\n  web:\n    image: nginx:1.27-alpine\n' }, { folder: 'quiet-e2e' }) });
+  await expect(up).toContainText('Quiet E2E is in your App Store');
+  await up.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Your apps' }).click();
+  await page.locator('.tile.store').filter({ hasText: 'Quiet E2E' }).getByRole('button', { name: 'Install Quiet E2E', exact: true }).click();
+  const wiz = page.getByRole('dialog');
+  await expect(wiz).toContainText('Internet: Offline');
+  await expect(wiz).toContainText('what Quiet E2E asks for');
+  await wiz.getByRole('button', { name: 'Install Quiet E2E now' }).click();
+  const review = page.getByRole('dialog', { name: 'Review install' });
+  await expect(review).toContainText("Internet access: Offline (the app's default)");
+  await review.getByRole('button', { name: 'Install', exact: true }).click();
+  await trayDone(page, 'Install');
+  await dismissRecovery(page);
+  // the drawer: Internet → Change… → Through the VPN → a review that restarts nothing
+  await page.getByRole('link', { name: 'Home' }).click();
+  await page.getByRole('button', { name: 'Details of quiet-e2e', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Quiet E2E' });
+  await expect(drawer.getByRole('heading', { name: 'Internet', exact: true })).toBeVisible();
+  await expect(drawer).toContainText("Offline · the app's default");
+  await drawer.getByRole('button', { name: 'Change how Quiet E2E reaches the internet', exact: true }).click();
+  const pick = page.getByRole('dialog', { name: 'Internet for Quiet E2E' });
+  await expect(pick.getByRole('button', { name: 'Review', exact: true })).toBeDisabled();
+  await pick.getByRole('radio', { name: /^Through the VPN/ }).check();
+  await pick.getByRole('button', { name: 'Review', exact: true }).click();
+  const plan = page.getByRole('dialog', { name: 'Review internet access' });
+  await expect(plan).toContainText('Internet access: Offline → Through the VPN (your choice). quiet-e2e restarts so its lookups follow too');
+  await plan.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /settings applied$/ })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Details of quiet-e2e', exact: true }).click();
+  await expect(drawer).toContainText('Through the VPN · your choice', { timeout: 15_000 });
+  await drawer.getByRole('button', { name: 'Close', exact: true }).last().click();
+  // every app through the VPN asks first; the Apps card lists who goes through it
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /^VPN Send your apps/ }).click();
+  const apps = page.locator('section.card').filter({ has: page.getByRole('heading', { name: 'Apps', exact: true }) });
+  await expect(apps).toContainText('Through the VPN: quiet-e2e');
+  const all = apps.getByLabel('Send every app through the VPN', { exact: true });
+  await all.click(); // asks first: the box only ticks once the rules are loaded
+  const ask = page.getByRole('dialog', { name: 'Send every app through the VPN?' });
+  await ask.getByRole('button', { name: 'Send every app through it', exact: true }).click();
+  await expect(all).toBeChecked();
+  await all.click();
+  await expect(all).not.toBeChecked();
+  // remove: the dialog names the app that loses its internet
+  await card.getByRole('button', { name: 'Remove…', exact: true }).click();
+  const rm = page.getByRole('dialog', { name: 'Remove the VPN?' });
+  await expect(rm).toContainText('quiet-e2e goes through the VPN and will have no internet');
+  await rm.getByRole('button', { name: 'Remove VPN', exact: true }).click();
+  await expect(card.getByRole('button', { name: 'Add VPN…', exact: true })).toBeVisible();
+});

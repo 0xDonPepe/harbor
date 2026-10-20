@@ -67,6 +67,12 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   readonly containers = new Map<string, FakeContainer>();
   readonly volumes = new Map<string, VolumeInfo>();
   readonly networks = new Map<string, NetworkInfo>();
+  // every network gets its own /24, as Docker never hands out one subnet twice while it is in use
+  private netSeq = 0;
+  private nextSubnet(prefix: '172.29' | '172.30'): { gateway: string; subnet: string } {
+    const n = this.netSeq++ % 250;
+    return { gateway: `${prefix}.${n}.1`, subnet: `${prefix}.${n}.0/24` };
+  }
   readonly listeners = new Map<string, Server>(); // container id -> server
   behaviour: FakeBehaviour = {};
   readonly log: string[] = [];
@@ -159,11 +165,11 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   async inspectNetwork(idOrName: string): Promise<NetworkInfo | null> {
     this.assertUp();
     const n = this.networks.get(idOrName) ?? [...this.networks.values()].find((x) => x.name === idOrName);
-    return n ? { ...n, labels: { ...n.labels }, containerIds: [...n.containerIds], gateways: [...n.gateways] } : null;
+    return n ? { ...n, labels: { ...n.labels }, containerIds: [...n.containerIds], gateways: [...n.gateways], subnets: [...(n.subnets ?? [])] } : null;
   }
   async listNetworks(labels?: Record<string, string>): Promise<NetworkInfo[]> {
     this.assertUp();
-    return [...this.networks.values()].filter((n) => matches(n.labels, labels)).map((n) => ({ ...n, labels: { ...n.labels }, containerIds: [...n.containerIds], gateways: [...n.gateways] }));
+    return [...this.networks.values()].filter((n) => matches(n.labels, labels)).map((n) => ({ ...n, labels: { ...n.labels }, containerIds: [...n.containerIds], gateways: [...n.gateways], subnets: [...(n.subnets ?? [])] }));
   }
   async removeNetwork(id: string): Promise<void> {
     this.assertUp();
@@ -178,11 +184,12 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
   async createNetwork(name: string, labels: Record<string, string>, opts: { internal: boolean }): Promise<NetworkInfo> {
     this.assertUp();
     if ([...this.networks.values()].some((n) => n.name === name)) throw Object.assign(new Error(`network with name ${name} already exists`), { statusCode: 409 });
-    const net: NetworkInfo = { id: this.id('n'), name, labels: { ...labels }, containerIds: [], gateways: [] };
+    const ipam = this.nextSubnet('172.29');
+    const net: NetworkInfo = { id: this.id('n'), name, labels: { ...labels }, containerIds: [], gateways: [ipam.gateway], subnets: [ipam.subnet] };
     this.networks.set(net.id, net);
     if (opts.internal) this.internal.add(net.id);
     this.log.push(`network create ${name}${opts.internal ? ' --internal' : ''}`);
-    return { ...net, labels: { ...net.labels }, containerIds: [], gateways: [] };
+    return { ...net, labels: { ...net.labels }, containerIds: [], gateways: [...net.gateways], subnets: [...net.subnets] };
   }
   async connectNetwork(networkId: string, containerId: string, aliases: string[]): Promise<void> {
     this.assertUp();
@@ -305,7 +312,8 @@ export class FakeDocker implements DockerAdapter, ComposeRunner {
     const netName = doc.networks?.['default']?.name ?? `${inv.projectName}_default`;
     let net = [...this.networks.values()].find((n) => n.name === netName);
     if (!net) {
-      net = { id: this.id('n'), name: netName, labels: { ...(doc.networks?.['default']?.labels ?? {}), 'com.docker.compose.project': inv.projectName, 'com.docker.compose.network': 'default' }, containerIds: [], gateways: [`172.30.${this.networks.size % 250}.1`] };
+      const ipam = this.nextSubnet('172.30');
+      net = { id: this.id('n'), name: netName, labels: { ...(doc.networks?.['default']?.labels ?? {}), 'com.docker.compose.project': inv.projectName, 'com.docker.compose.network': 'default' }, containerIds: [], gateways: [ipam.gateway], subnets: [ipam.subnet] };
       this.networks.set(net.id, net);
     }
     for (const [service, def] of Object.entries(doc.services)) {

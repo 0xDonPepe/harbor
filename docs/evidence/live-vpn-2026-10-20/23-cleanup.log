@@ -1,0 +1,35 @@
++ /opt/harbor/bin/harbor internet comfyui-gpu default --yes
++ grep -E 'Internet access|succeeded|failed'
++ head -2
+  - Internet access: Through the VPN → Direct (the app's default). comfyui-gpu restarts so its lookups follow too (same data, ports and addresses)
+  succeeded    configure succeeded
++ /opt/harbor/bin/harbor vpn remove --yes
++ head -3
+VPN: not set up. Add one with: harbor vpn set <wireguard.conf>
+Every app through the VPN: off
+Every app goes direct.
++ sudo -n nft list tables
++ grep -c harbor
+0
+0
+0
+Device "hb-vpn0" does not exist.
++ ip rule
++ grep -c '^51[678]0'
++ ip route show table 4842
++ wc -l
++ ip link show hb-vpn0
++ head -1
+state.json
++ sudo -n ls /etc/harbor/egress
++ docker inspect hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 --format 'dns={{.HostConfig.Dns}}'
+dns=<no value>
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 curl -s -m 8 https://ifconfig.me
+<home-public-ip>
++ echo
++ rm -f /home/<admin>/h036/hbtest-wg.conf /home/<admin>/h036/r3.nft /home/<admin>/h036/r-none.nft /home/<admin>/h036/r-tunnel.nft /home/<admin>/h036/rules2.nft
++ /opt/harbor/bin/harbor list
++ grep -E 'ollama|webui|comfy'
+ollama-gpu      ollama-gpu@3      0.40.3   -              installed  running   running  healthy    yes        http://localhost:18082/  62906563-a20b-4029-a8e3-1bd833ae8e77
+open-webui-gpu  open-webui-gpu@3  -        -              installed  running   running  healthy    yes        http://localhost:18083/  bc68b240-4107-4de0-8f5c-43b5177db9e0
+comfyui-gpu     comfyui-gpu@2     0.40.0   -              installed  running   running  healthy    no         http://localhost:18081/  8176d66e-eed8-46b4-8eb6-aafe50ea4c4a

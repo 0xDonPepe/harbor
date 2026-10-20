@@ -49,6 +49,11 @@ pick: another disk, any S3-compatible bucket (Backblaze B2, R2, Wasabi…), an S
 Drive. Each app pauses only for its last few seconds of changes, one at a time. Your 12-word Harbor
 recovery key opens every backup on a new machine. See the [operator guide](docs/OPERATOR_GUIDE.md) §4g.
 
+**A VPN for your apps, and apps that stay offline** — paste your VPN provider's WireGuard file
+and choose, per app, *Direct*, *Through the VPN* or *Offline* (or send every app through the VPN).
+An app on the VPN never falls back to direct when the tunnel drops; an offline app opens no
+connection at all, yet you reach both exactly as before. See the [operator guide](docs/OPERATOR_GUIDE.md) §4d.
+
 **Plus your own apps** — upload a zip or point Harbor at a git repo; every push can redeploy
 automatically. Apps can ask you for a value at install (another service's token, an SMTP password)
 and talk privately to another app you pick, over a network only those two join. See

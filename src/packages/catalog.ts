@@ -134,6 +134,7 @@ export interface CatalogItem {
   operatorSecrets: { id: string; prompt: string; optional: boolean; minLength: number | null; maxLength: number | null }[];
   links: { id: string; purpose: string; optional: boolean; packages: string[] | null; endpoint: string | null }[];
   multiInstance?: boolean; // decision 170
+  internet?: 'direct' | 'vpn' | 'offline'; // decision 185
 }
 
 // Decisions 125/126: what an install asks for besides storage.
@@ -170,6 +171,7 @@ export function listCatalog(catalogDir: string, origin: PackageOrigin = 'bundled
         operatorSecrets: operatorSecretsOf(pkg.manifest),
         links: linksOf(pkg.manifest),
         multiInstance: pkg.manifest.deployment.multiInstance,
+        ...(pkg.manifest.network?.internet ? { internet: pkg.manifest.network.internet } : {}),
       });
     } catch (e) {
       // A package that needs a newer Harbor still shows its name and look when this Harbor can read them.

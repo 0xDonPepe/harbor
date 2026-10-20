@@ -12,7 +12,7 @@ import { rfc3339, systemClock } from '../util.js';
 import { dockerInstallPreview, installDocker } from './docker-install.js';
 import { assertRequiredTools, exec, execOk, aptGet } from './exec.js';
 import { assertSupportedHost, distroSupport, gatherHostFacts, RELEASE_MARKER, type HostFacts } from './host.js';
-import { harborUnit, POLKIT_RULE_PATH, polkitPowerRule, SELF_UPDATE_UNIT_FILE, selfUpdateUnit, TAILSCALE_OPERATOR_UNIT, tailscaleOperatorUnit, TOOLS_INSTALL_UNIT, toolsInstallUnit, DEVICE_MOUNT_UNIT, deviceMountUnit, APP_CRYPTO_UNIT_FILE, appCryptoUnit, BACKUP_UNIT_FILE, backupUnit } from './systemd.js';
+import { harborUnit, POLKIT_RULE_PATH, polkitPowerRule, SELF_UPDATE_UNIT_FILE, selfUpdateUnit, TAILSCALE_OPERATOR_UNIT, tailscaleOperatorUnit, TOOLS_INSTALL_UNIT, toolsInstallUnit, DEVICE_MOUNT_UNIT, deviceMountUnit, APP_CRYPTO_UNIT_FILE, appCryptoUnit, BACKUP_UNIT_FILE, backupUnit, EGRESS_UNIT_FILE, egressStepUnit, EGRESS_BOOT_UNIT, egressBootUnit, VPN_UNIT, vpnUnit } from './systemd.js';
 import { prepareDataFolderForSealing } from './app-crypto-apply.js';
 import { installBackupTools } from './backup-tools.js';
 import { configureAvahiForLan, restartAvahi, unpinAvahiHostName } from './mdns.js';
@@ -279,6 +279,23 @@ async function bootstrapAfterStop(opts: BootstrapOptions, s: { facts: Awaited<Re
   }
   // restic + rclone for app backups (decision 149): pinned, checksum-verified, never fatal.
   await installBackupTools(log);
+  // nftables + wireguard-tools for VPN and offline apps (decision 184; Ubuntu main, small). Never fatal: without
+  // them the VPN page says what is missing and non-direct apps refuse to start.
+  {
+    const missing: string[] = [];
+    for (const pkg of ['nftables', 'wireguard-tools']) {
+      const q = await exec('/usr/bin/dpkg-query', ['-W', '-f=${Status}', pkg], { timeoutMs: 10_000 });
+      if (!q.stdout.includes('install ok installed')) missing.push(pkg);
+    }
+    if (missing.length) {
+      log(`installing ${missing.join(' and ')} (VPN and offline apps)`);
+      try {
+        await aptGet(log, ['install', '-y', '-q', '--no-install-recommends', ...missing], { timeoutMs: 10 * 60_000 });
+      } catch (e) {
+        log(`${missing.join(' and ')} could not be installed (${e instanceof Error ? e.message : String(e)}); VPN and offline apps will refuse until they are`);
+      }
+    }
+  }
 
   // 8. State (explicit initialization, never on accidental absence)
   let installationId: string;
@@ -396,7 +413,12 @@ async function bootstrapAfterStop(opts: BootstrapOptions, s: { facts: Awaited<Re
   writeFileSync(`/etc/systemd/system/${DEVICE_MOUNT_UNIT.replace('.service', '@.service')}`, deviceMountUnit(), { mode: 0o644 });
   writeFileSync(`/etc/systemd/system/${APP_CRYPTO_UNIT_FILE}`, appCryptoUnit(), { mode: 0o644 });
   writeFileSync(`/etc/systemd/system/${BACKUP_UNIT_FILE}`, backupUnit(), { mode: 0o644 });
+  writeFileSync(`/etc/systemd/system/${EGRESS_UNIT_FILE}`, egressStepUnit(), { mode: 0o644 });
+  writeFileSync(`/etc/systemd/system/${EGRESS_BOOT_UNIT}`, egressBootUnit(), { mode: 0o644 });
+  writeFileSync(`/etc/systemd/system/${VPN_UNIT}`, vpnUnit(), { mode: 0o644 });
   await execOk('/usr/bin/systemctl', ['daemon-reload'], { timeoutMs: 60_000 });
+  // decision 184: Docker waits for Harbor's firewall at boot (skipped while there are no rules); the tunnel follows the network
+  await execOk('/usr/bin/systemctl', ['enable', EGRESS_BOOT_UNIT, VPN_UNIT], { timeoutMs: 60_000 });
   await execOk('/usr/bin/systemctl', ['enable', PRODUCT.paths.systemdUnit], { timeoutMs: 60_000 });
   await execOk('/usr/bin/systemctl', ['restart', PRODUCT.paths.systemdUnit], { timeoutMs: 120_000 });
   const managementUrl = `http://localhost:${config.listen.port}`;

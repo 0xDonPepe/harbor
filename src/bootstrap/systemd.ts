@@ -2,7 +2,9 @@ import { PRODUCT } from '../naming.js';
 import { UNIT_MARKER } from './host.js';
 import { APP_CRYPTO_UNIT_PREFIX } from '../storage/fscrypt.js';
 import { BACKUP_UNIT_PREFIX } from '../backups/step.js';
+import { EGRESS_UNIT_PREFIX } from '../egress/provider.js';
 export { BACKUP_UNIT_FILE } from '../backups/step.js';
+export { EGRESS_BOOT_UNIT, EGRESS_UNIT_FILE, VPN_UNIT } from '../egress/provider.js';
 export { APP_CRYPTO_UNIT_FILE } from '../storage/fscrypt.js';
 
 // The unit restarts the daemon, runs it as the dedicated user with Docker group access, and kills
@@ -104,6 +106,12 @@ polkit.addRule(function (action, subject) {
   // App backups (restic): start harbor-backup@<requestId>.service
   if (action.id === "org.freedesktop.systemd1.manage-units" &&
       String(action.lookup("unit")).indexOf("${BACKUP_UNIT_PREFIX}") === 0 &&
+      action.lookup("verb") === "start") {
+    return polkit.Result.YES;
+  }
+  // VPN and offline apps (decision 184): start harbor-egress@<apply|tunnel-set|tunnel-remove|status>.service
+  if (action.id === "org.freedesktop.systemd1.manage-units" &&
+      String(action.lookup("unit")).indexOf("${EGRESS_UNIT_PREFIX}") === 0 &&
       action.lookup("verb") === "start") {
     return polkit.Result.YES;
   }
@@ -227,5 +235,66 @@ Type=oneshot
 ExecStart=${PRODUCT.paths.opt}/bin/harbor backup-step %i
 TimeoutStartSec=0
 Nice=5
+`;
+}
+
+// VPN and offline apps (decision 184, docs/design/VPN.md). The daemon starts `harbor-egress@<action>` and BLOCKS on
+// it; the root step re-validates the request under <stateDir>/egress/, reads the WireGuard file from a FIFO there,
+// loads the firewall/routing/tunnel and writes its verdict to status.json.
+export function egressStepUnit(): string {
+  return `${UNIT_MARKER}
+[Unit]
+Description=Harbor VPN and offline apps step (%i: apply, tunnel-set, tunnel-remove or status)
+
+[Service]
+Type=oneshot
+ExecStart=${PRODUCT.paths.opt}/bin/harbor egress-step %i
+TimeoutStartSec=120
+`;
+}
+
+// Boot, before Docker starts any container: the last ruleset that loaded, with nft alone (no Harbor code, no
+// parsing), then Harbor's routing rules. Docker requires this unit, so no app runs without its rules; a machine
+// that never used VPN or offline apps has no rules file and the unit is skipped (a skipped condition is no failure).
+export function egressBootUnit(): string {
+  return `${UNIT_MARKER}
+[Unit]
+Description=Harbor firewall for VPN and offline apps (loaded before Docker starts)
+Before=docker.service
+ConditionPathExists=${PRODUCT.paths.etc}/egress/rules.nft
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f ${PRODUCT.paths.etc}/egress/rules.nft
+# routing only: the firewall above already refuses what a VPN app sends outside the tunnel
+ExecStart=-${PRODUCT.paths.opt}/bin/harbor egress-boot
+
+[Install]
+RequiredBy=docker.service
+WantedBy=multi-user.target
+`;
+}
+
+// The tunnel needs the network (its server may be a name to resolve): retried until it comes up. Until then the
+// firewall keeps VPN apps without internet.
+export function vpnUnit(): string {
+  return `${UNIT_MARKER}
+[Unit]
+Description=Harbor VPN tunnel for apps
+After=network-online.target harbor-egress.service
+Wants=network-online.target
+ConditionPathExists=${PRODUCT.paths.etc}/egress/tunnel.conf
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=${PRODUCT.paths.opt}/bin/harbor egress-tunnel-up
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
 `;
 }

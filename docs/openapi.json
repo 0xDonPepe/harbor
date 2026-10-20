@@ -2541,7 +2541,7 @@
     },
     "/v1/plans": {
       "post": {
-        "description": "Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?}. Configure: {kind, instanceId, secrets?, links?, settings?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.",
+        "description": "Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?, internet?}. Configure: {kind, instanceId, secrets?, links?, settings?, internet?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2670,6 +2670,13 @@
                               }
                             }
                           }
+                        ]
+                      },
+                      "internet": {
+                        "enum": [
+                          "direct",
+                          "vpn",
+                          "offline"
                         ]
                       }
                     }
@@ -2869,6 +2876,14 @@
                             }
                           ]
                         }
+                      },
+                      "internet": {
+                        "enum": [
+                          "direct",
+                          "vpn",
+                          "offline",
+                          "default"
+                        ]
                       }
                     }
                   },
@@ -3874,6 +3889,97 @@
             "required": true
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/vpn": {
+      "get": {
+        "description": "The apps' VPN: whether this machine can run one, the tunnel (server, addresses, DNS; never a key), whether it is connected (last handshake), the every-app switch, the apps that do not go direct and the state of the host rules.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "put": {
+        "description": "Set (or replace) the VPN from a WireGuard configuration file (wg-quick format, one [Peer], AllowedIPs covering 0.0.0.0/0; PostUp/PreUp/PostDown/PreDown/Table/FwMark/SaveConfig refused). Brings the tunnel up and reloads the rules.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "config"
+                ],
+                "properties": {
+                  "config": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "pattern": "^[^\\u0000-\\u001F\\u007F]*$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      },
+      "delete": {
+        "description": "Remove the VPN. Apps that go through it keep no internet (kill switch) until one is set again or they are switched to Direct.",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/vpn/all-apps": {
+      "put": {
+        "description": "Send every app through the VPN (apps set to Direct go through it; offline apps stay offline).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "enabled"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/v1/vpn/check": {
+      "post": {
+        "description": "Ask the tunnel now (last handshake, bytes) instead of the cached answer.",
         "responses": {
           "200": {
             "description": "Default Response"

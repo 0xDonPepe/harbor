@@ -1,0 +1,40 @@
+== comfyui-gpu (through the VPN)
+public ip : <droplet-ip>
+dns lookup: Address: 104.20.26.136
+lan router: 200
+host app  : 200
+== ollama-gpu (direct)
+public ip : <home-public-ip>
+dns lookup: Address: 104.20.26.136
+lan router: 200
+host app  : 200
+== DNS seen on harbor-old (any interface) during the probes:
+01:49:43.355029 wlp5s0 Out IP <harbor-old-lan>.50944 > <router>.53: 24071+ [1au] A? ifconfig.me. (40)
+01:49:43.355143 wlp5s0 Out IP <harbor-old-lan>.44040 > <router>.53: 33253+ [1au] AAAA? ifconfig.me. (40)
+01:49:43.591950 wlp5s0 Out IP <harbor-old-lan>.47478 > <router>.53: 34791+ [1au] AAAA? example.org. (40)
+01:49:43.592049 wlp5s0 Out IP <harbor-old-lan>.40180 > <router>.53: 52247+ [1au] A? example.org. (40)
+01:49:54.809606 wlp5s0 Out IP <harbor-old-lan>.48855 > <router>.53: 1239+ [1au] PTR? <ptr>.in-addr.arpa. (54)
+01:49:54.821270 wlp5s0 Out IP <harbor-old-lan>.33142 > <router>.53: 47026+ [1au] PTR? <ptr>.in-addr.arpa. (55)
+01:49:54.832009 wlp5s0 Out IP <harbor-old-lan>.58543 > <router>.53: 28096+ [1au] PTR? 1.0.17.172.in-addr.arpa. (52)
+01:49:54.845089 wlp5s0 Out IP <harbor-old-lan>.44866 > <router>.53: 20510+ [1au] PTR? 1.0.19.172.in-addr.arpa. (52)
+01:49:54.857021 wlp5s0 Out IP <harbor-old-lan>.51999 > <router>.53: 45291+ [1au] PTR? 1.0.20.172.in-addr.arpa. (52)
+01:49:54.869752 wlp5s0 Out IP <harbor-old-lan>.37856 > <router>.53: 34927+ [1au] PTR? 1.0.21.172.in-addr.arpa. (52)
+01:49:54.881522 wlp5s0 Out IP <harbor-old-lan>.60670 > <router>.53: 33262+ [1au] PTR? 1.0.18.172.in-addr.arpa. (52)
+01:49:54.894236 wlp5s0 Out IP <harbor-old-lan>.50384 > <router>.53: 65003+ [1au] PTR? 1.0.22.172.in-addr.arpa. (52)
+01:49:54.906590 wlp5s0 Out IP <harbor-old-lan>.44519 > <router>.53: 3739+ [1au] PTR? 2.0.99.10.in-addr.arpa. (51)
+01:49:54.919213 wlp5s0 Out IP <harbor-old-lan>.34477 > <router>.53: 10980+ [1au] PTR? 6.9.b.9.d.0.d.a.f.6.3.1.8.a.6.3.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.932902 wlp5s0 Out IP <harbor-old-lan>.50885 > <router>.53: 47275+ [1au] PTR? f.c.1.0.a.3.9.6.1.5.0.3.e.4.9.a.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.944804 wlp5s0 Out IP <harbor-old-lan>.55198 > <router>.53: 59948+ [1au] PTR? 1.0.f.1.4.5.2.d.1.0.2.c.f.b.d.0.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.958645 wlp5s0 Out IP <harbor-old-lan>.38321 > <router>.53: 19851+ [1au] PTR? f.d.e.d.5.1.3.a.4.c.4.f.7.a.7.5.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.971156 wlp5s0 Out IP <harbor-old-lan>.40045 > <router>.53: 28780+ [1au] PTR? b.c.6.7.8.c.3.9.7.4.5.8.e.6.e.7.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.982848 wlp5s0 Out IP <harbor-old-lan>.54395 > <router>.53: 24766+ [1au] PTR? d.e.4.1.c.8.2.d.3.c.5.1.f.1.8.d.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:54.995349 wlp5s0 Out IP <harbor-old-lan>.43578 > <router>.53: 60813+ [1au] PTR? 1.5.8.3.8.a.b.0.0.e.b.3.f.f.1.f.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.007905 wlp5s0 Out IP <harbor-old-lan>.38033 > <router>.53: 49224+ [1au] PTR? 9.c.b.5.5.1.2.4.c.f.a.d.3.b.a.2.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.020750 wlp5s0 Out IP <harbor-old-lan>.53573 > <router>.53: 28242+ [1au] PTR? 2.b.a.b.1.d.3.a.8.7.5.c.e.4.0.9.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.035306 wlp5s0 Out IP <harbor-old-lan>.57658 > <router>.53: 54349+ [1au] PTR? 4.5.6.b.d.2.f.3.6.b.1.7.a.c.e.5.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.047709 wlp5s0 Out IP <harbor-old-lan>.49877 > <router>.53: 3105+ [1au] PTR? 5.d.3.f.4.2.0.c.2.3.8.1.c.1.a.e.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.060854 wlp5s0 Out IP <harbor-old-lan>.36903 > <router>.53: 50259+ [1au] PTR? c.0.1.2.1.1.c.5.6.4.c.a.b.b.a.b.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.072326 wlp5s0 Out IP <harbor-old-lan>.60053 > <router>.53: 26126+ [1au] PTR? a.8.a.4.1.5.5.9.0.8.6.8.c.b.2.c.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.084338 wlp5s0 Out IP <harbor-old-lan>.47887 > <router>.53: 5109+ [1au] PTR? c.5.0.c.7.7.5.6.3.9.e.3.3.7.3.f.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.097857 wlp5s0 Out IP <harbor-old-lan>.59168 > <router>.53: 4580+ [1au] PTR? a.3.b.0.5.f.a.3.e.a.d.b.9.5.b.d.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f.ip6.arpa. (101)
+01:49:55.110165 wlp5s0 Out IP <harbor-old-lan>.52341 > <router>.53: 35671+ [1au] PTR? c.5.c.5.d.2.d.1.0.2.9.8.6.a.f.f.6.7.9.e.2.a.0.9.c.0.0.9.4.3.d.f

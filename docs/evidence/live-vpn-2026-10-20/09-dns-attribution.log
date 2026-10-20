@@ -1,0 +1,13 @@
+Non-authoritative answer:
+
+Non-authoritative answer:
+
+===
+[wlp5s0] 01:51:17.373184 IP <harbor-old-lan>.46225 > <router>.53: 8277+ [1au] A? vpnapp-probe-a3.example.com. (56)
+[wlp5s0] 01:51:17.373302 IP <harbor-old-lan>.39833 > <router>.53: 9415+ [1au] AAAA? vpnapp-probe-a3.example.com. (56)
+[enp6s0] 01:51:17.373141 IP <harbor-old-lan-2>.57396 > 1.1.1.1.53: 42847+ [1au] A? vpnapp-probe-a3.example.com. (56)
+[enp6s0] 01:51:17.373271 IP <harbor-old-lan-2>.55082 > 1.1.1.1.53: 27863+ [1au] AAAA? vpnapp-probe-a3.example.com. (56)
+[enp6s0] 01:51:23.784983 IP <harbor-old-lan-2>.45218 > 1.1.1.1.53: 5456+ [1au] A? directapp-probe-b4.example.com. (59)
+[enp6s0] 01:51:23.785129 IP <harbor-old-lan-2>.43144 > 1.1.1.1.53: 14435+ [1au] AAAA? directapp-probe-b4.example.com. (59)
+[wlp5s0] 01:51:23.785027 IP <harbor-old-lan>.36141 > <router>.53: 48658+ [1au] A? directapp-probe-b4.example.com. (59)
+[wlp5s0] 01:51:23.785160 IP <harbor-old-lan>.53794 > <router>.53: 12058+ [1au] AAAA? directapp-probe-b4.example.com. (59)

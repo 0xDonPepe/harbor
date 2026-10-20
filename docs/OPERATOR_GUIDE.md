@@ -931,6 +931,48 @@ Some apps have settings you can change without editing any file (decision 180), 
   made with `harbor plan`. On/off settings take `on`/`off` (or `true`/`false`). A value that is not allowed is
   refused with `SETTING_INVALID` and what the setting accepts.
 
+### VPN and offline apps (since 0.36.0)
+
+Every app has an **Internet access** choice (decision 184):
+
+| Choice | What the app may open | Reached by people |
+|---|---|---|
+| **Direct** (the default) | anything, straight from this machine | as usual |
+| **Through the VPN** | only through the VPN in Settings → VPN; nothing while it is down | as usual |
+| **Offline** | nothing: not the internet, not your network, not this machine, not other apps | as usual |
+
+- **Settings → VPN → Add VPN…**: paste (or choose) the WireGuard configuration file your VPN provider gives you
+  (Mullvad, Proton VPN, IVPN, AirVPN and most others; pick one server and "all traffic"). Harbor shows whether it
+  is connected (last handshake), its server, tunnel address and DNS. *Replace…* swaps the file, *Remove…* drops it.
+  The private key stays on this machine, readable by root only (`/etc/harbor/egress/tunnel.conf`); Harbor never
+  shows it again. A file with `PostUp`/`PreUp`/`PostDown`/`PreDown`, `Table`, `FwMark` or `SaveConfig` lines is
+  refused (Harbor never runs commands from it): delete those lines.
+- **One app**: its page → **Internet** → **Change…** → pick → **Review** → **Apply**. A running app restarts for
+  a few seconds (its DNS setting is part of its containers); a stopped one changes when it next starts. *The app's default* follows what the package asks for again. At install, the install page's
+  **Internet** row has the same choice (*Change*).
+- **Send every app through the VPN** (Settings → VPN → Apps): every app set to Direct goes through the VPN too;
+  offline apps stay offline. There are no exceptions while it is on.
+- **Kill switch**: an app that goes through the VPN never falls back to direct. While the VPN is not connected (or
+  none is set up) it has no internet, and the bell says so after 5 minutes. Its DNS lookups go to the VPN's DNS
+  server, through the tunnel, whatever resolver the app uses. Your own network (a NAS, a printer, the router) stays
+  reachable from a VPN app; tailnet addresses do not (they would go into the tunnel).
+- **What stays direct**: Harbor itself (updates, the catalog, Tailscale, Let's Encrypt) and image downloads for
+  updates (Docker pulls them on the host), so offline and VPN apps still update.
+- **Packages** may ask for a default (`network.internet`, e.g. *offline* for an app that never needs the internet);
+  the install page shows "what X asks for". Your choice wins and is kept across updates; an update that changes the
+  package's default moves only apps that follow it, and its review says so.
+- The choice lives next to the app's settings: kept by remove/reinstall, carried by backups and restores, deleted by
+  *Uninstall completely*.
+- **CLI**: `harbor vpn` (status; `harbor vpn status --check` asks the tunnel now), `harbor vpn set provider.conf
+  --name "Mullvad Stockholm"` (`-` reads stdin), `harbor vpn every-app on|off`, `harbor vpn remove`;
+  `harbor internet <app>` shows an app's choice, `harbor internet <app> offline|vpn|direct|default` changes it;
+  `harbor install <app> --internet offline`; `harbor configure <app> --internet vpn`.
+- **How it is enforced** (docs/design/VPN.md): an nftables table of Harbor's own (`inet harbor_egress`) marks what
+  each app opens from its network, routes VPN apps into the WireGuard interface `hb-vpn0`, rewrites their DNS into the
+  tunnel and refuses anything else. At boot Docker waits for that table (`harbor-egress.service`); the tunnel follows
+  once the network is up (`harbor-vpn.service`). To look: `sudo nft list table inet harbor_egress`,
+  `sudo wg show hb-vpn0`, `ip rule` (5160–5180).
+
 ## 4e. Updating Harbor itself
 
 Settings → Overview shows the installed version and, when GitHub has a newer release, an **Update to

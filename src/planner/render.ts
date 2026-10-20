@@ -8,6 +8,7 @@ import { defaultNetworkName, instanceLabels, ownedVolumeName, type InstanceIdent
 import { linkValue } from './links.js';
 import { driDevice, NVIDIA_DEVICE_REQUEST } from './gpu.js';
 import { effectiveSettings, settingBindingValue } from './settings.js';
+import { renderedDns } from '../egress/rules.js';
 
 // Decision 126: an active link where this instance is the consumer: its bound services get the provider's
 // address. Decision 171: link networks never appear in a Compose file (Compose would add every service
@@ -19,6 +20,8 @@ export interface ConsumerLink {
 }
 
 export interface RenderInput {
+  // decision 184: the app's internet access; vpn/offline get a resolver Harbor controls (see renderedDns)
+  internet?: 'direct' | 'vpn' | 'offline';
   // LAN mode publishes app ports on every interface (0.0.0.0); default loopback only
   bindHost?: string;
   // Decision 167: HTTPS-only — ports stay on loopback and the LAN HTTPS relay is the app's only way onto the
@@ -173,6 +176,8 @@ export function renderCompose(input: RenderInput): RenderedCompose {
       networks: ['default'],
     };
     if (src.command) def['command'] = src.command.map(escapeCompose);
+    const dns = renderedDns(input.internet ?? 'direct');
+    if (dns) def['dns'] = dns;
     // decision 163: the only privileges a package can ask for, rendered from Harbor's fixed table
     const perms = manifest.permissions?.[service] ?? [];
     if (perms.includes('net-admin')) def['cap_add'] = ['NET_ADMIN'];

@@ -5,6 +5,7 @@ import type { Ctx } from './context.js';
 import { HarborError, needsReview, type ErrorCode } from '../errors.js';
 import { ComposeError, type ContainerInfo } from '../docker/adapter.js';
 import { LABELS } from '../naming.js';
+import { renderedDns } from '../egress/rules.js';
 import { defaultNetworkName, identityFor, ownedVolumeName, volumeLabels, type InstanceIdentity } from '../planner/identity.js';
 import { renderCompose, type ConsumerLink } from '../planner/render.js';
 import { gpuChanges, gpuFromRendered, gpuServicesOf } from '../planner/gpu.js';
@@ -19,7 +20,7 @@ import { protectorFor } from '../storage/crypto-provider.js';
 import { zeroMachineKey } from '../auth/machine-key.js';
 import type { HostGpu, LoadedPackage, Manifest } from '../contracts/types.js';
 import type { InstanceRow, OperationRow, PlanRow, ResourceRow } from '../state/repo.js';
-import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapshot, readOperatorSecret, readSecret, readSettingOverrides, readSettingsBytes, removeSecret, secretExists, SETTINGS_FILE, writeOperatorSecret, writeReleaseSnapshot, writeRuntimeCompose, writeSettingOverrides, writeSettingsBytes, readRuntimeModel } from './instance-dir.js';
+import { ensureInstanceDirs, generateSecretOnce, instanceDir, loadReleaseSnapshot, readOperatorSecret, readSecret, readSettingOverrides, readSettingsBytes, removeSecret, secretExists, SETTINGS_FILE, writeOperatorSecret, writeReleaseSnapshot, writeRuntimeCompose, writeSettingOverrides, writeSettingsBytes, readRuntimeModel, readInternetChoice, writeInternetChoice } from './instance-dir.js';
 import { applySettingValues, formatSettingValue, settingsOf } from '../planner/settings.js';
 import type { SettingValue } from '../contracts/types.js';
 import { waitReady } from './readiness.js';
@@ -224,8 +225,8 @@ export class OperationRunner {
         case 'start': await this.start(op, plan, inst); break;
         case 'stop': await this.stop(op, inst, plan.actor); break;
         case 'restart': await this.restart(op, inst, secretValues); break;
-        case 'remove': await this.remove(op, inst, secretValues); break;
-        case 'purge': await this.purge(op, inst, secretValues); break;
+        case 'remove': await this.remove(op, inst, secretValues); await this.dropEgress(op, inst); break;
+        case 'purge': await this.purge(op, inst, secretValues); await this.dropEgress(op, inst); break;
         case 'update': await this.update(op, plan, inst, secretValues); break;
         case 'expose': await this.expose(op, plan, inst, secretValues); break;
         case 'unexpose': await this.unexpose(op, plan, inst, secretValues); break;
@@ -605,7 +606,7 @@ export class OperationRunner {
     const gpu = gpuServices.length ? (keepGpu ?? (await this.ctx.gpu.detect())) : undefined;
     // decision 180: the operator's setting overrides, read from the instance directory on every render
     const settingOverrides = settingsOf(pkg.manifest).length ? readSettingOverrides(this.ctx.config.stateDir, inst.id) : {};
-    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: bind.bindHost, lanRelay: bind.lanRelay, provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, ...(gpu ? { gpu } : {}), settingOverrides });
+    const rendered = renderCompose({ manifest: pkg.manifest, compose: pkg.compose, identity, endpoints: inst.endpoints, secretValues, volumeNames, endpointUrls: this.endpointUrlsFor(inst, primary), externalStorage, bindHost: bind.bindHost, lanRelay: bind.lanRelay, provisioned: provisioned ?? this.provisionedFor(pkg, inst), builtImages, consumerLinks, ...(gpu ? { gpu } : {}), settingOverrides, internet: this.ctx.egress?.modeOf(inst, pkg.manifest) ?? 'direct' });
     if (gpu && !keepGpu) this.event(op, 'preparing', gpuChanges(pkg.manifest, gpu).join('; '));
     const file = writeRuntimeCompose(runtimeDir, rendered.yaml);
     try {
@@ -1171,15 +1172,39 @@ export class OperationRunner {
     repo.updateInstance(inst.id, { secrets: refs.filter((r) => !this.supplied.clear.includes(r.id)) });
     // decision 180: the setting values the plan lists (a value equal to the default removes the override)
     if (plan.proposal.settingValues && Object.keys(plan.proposal.settingValues).length) this.storeSettings(op, pkg.manifest, plan.proposal.settingValues);
-    await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
-    const identity = identityFor(this.ctx.installationId, inst.id);
-    const fresh = repo.instance(inst.id) ?? inst;
-    const file = await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink));
-    this.phase(op, 'applying', 'starting', 'recreating the containers whose configuration changed (same volumes and ports)');
-    repo.updateInstance(inst.id, { runtime: 'starting', desired: 'running' });
-    const containers = await this.upAndRecord(op, { projectDir: dirs.runtime, projectName: identity.project, file }, identity, fresh);
-    await this.checkReadiness(op, pkg, fresh, containers);
-    repo.updateInstance(inst.id, { runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
+    // decision 184: internet access. The containers carry the resolver of their mode, so a running app is re-created
+    // (rules first: upAndRecord applies them between create and start); a stopped one only gets its rules and is
+    // re-created at its next start. The choice is put back when any of that fails, so the app shows what it runs.
+    let revert: (() => void) | null = null;
+    if (plan.proposal.internet) {
+      const before = readInternetChoice(this.ctx.config.stateDir, inst.id);
+      writeInternetChoice(this.ctx.config.stateDir, inst.id, plan.proposal.internet.choice);
+      revert = () => writeInternetChoice(this.ctx.config.stateDir, inst.id, before);
+      const to = plan.proposal.internet.to;
+      this.event(op, 'preparing', `${inst.name}: internet access is now ${to === 'direct' ? 'direct' : to === 'vpn' ? 'through the VPN only' : 'off (offline)'}`);
+    }
+    try {
+      if (plan.proposal.internetOnly && inst.desired !== 'running') {
+        await this.ctx.egress?.sync();
+        this.event(op, 'preparing', `${inst.name} is stopped: its containers follow when it next starts`);
+        return;
+      }
+      await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
+      const identity = identityFor(this.ctx.installationId, inst.id);
+      const fresh = repo.instance(inst.id) ?? inst;
+      const file = await this.renderAndValidate(op, pkg, identity, fresh, dirs.runtime, this.readSecrets(pkg, dirs.secrets, sink));
+      this.phase(op, 'applying', 'starting', 'recreating the containers whose configuration changed (same volumes and ports)');
+      repo.updateInstance(inst.id, { runtime: 'starting', desired: 'running' });
+      const containers = await this.upAndRecord(op, { projectDir: dirs.runtime, projectName: identity.project, file }, identity, fresh);
+      await this.checkReadiness(op, pkg, fresh, containers);
+      repo.updateInstance(inst.id, { runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
+    } catch (e) {
+      if (revert) {
+        revert();
+        await this.ctx.egress?.sync().catch(() => undefined);
+      }
+      throw e;
+    }
   }
 
   // ---------- operations
@@ -1210,6 +1235,8 @@ export class OperationRunner {
     this.generateSecrets(op, pkg, inst, dirs.secrets, { restored: Boolean(plan.proposal.restore) });
     // decision 180: the values chosen in the review (a restore brought back the ones it had instead)
     if (!plan.proposal.restore && Object.keys(this.chosenSettings).length) this.storeSettings(op, pkg.manifest, this.chosenSettings);
+    // decision 184: the internet access chosen in the review (a restore brought back the one it had instead)
+    if (!plan.proposal.restore && plan.proposal.internet?.choice) writeInternetChoice(this.ctx.config.stateDir, inst.id, plan.proposal.internet.choice);
     await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
     const values = this.readSecrets(pkg, dirs.secrets, sink);
     const provisioned = this.readProvisioned(pkg, dirs.secrets, sink);
@@ -1548,15 +1575,56 @@ export class OperationRunner {
     }
   }
 
+  // Decision 184: the host rules for this app's internet mode are loaded before any of its containers runs
+  // (fail closed: a failed apply fails the operation and nothing starts).
+  private needsEgress(inst: InstanceRow): boolean {
+    return this.ctx.egress?.needsSync(inst) ?? false;
+  }
+  private async applyEgress(op: OperationRow, inst: InstanceRow): Promise<void> {
+    const egress = this.ctx.egress;
+    if (!egress) return;
+    const mode = egress.modeOf(inst);
+    await egress.sync();
+    if (mode === 'vpn') this.event(op, 'starting', `${inst.name} reaches the internet only through the VPN (no VPN connected: no internet)`);
+    else if (mode === 'offline') this.event(op, 'starting', `${inst.name} is offline: it can be reached, but it opens no connection to the internet, your network or other apps`);
+  }
+
+  // decision 184: does the runtime file's resolver still match the app's internet access?
+  private renderedInternetStale(runtimeDir: string, inst: InstanceRow, pkg: LoadedPackage): boolean {
+    if (!this.ctx.egress) return false;
+    const want = JSON.stringify(renderedDns(this.ctx.egress.modeOf(inst, pkg.manifest)) ?? null);
+    try {
+      const model = readRuntimeModel(runtimeDir) as { services?: Record<string, { dns?: unknown }> } | null;
+      return Object.values(model?.services ?? {}).some((svc) => JSON.stringify(svc.dns ?? null) !== want);
+    } catch {
+      return false;
+    }
+  }
+
+  // After remove/purge the app's network is gone: its rules go too. Best effort: a rule left behind only
+  // restricts a subnet nothing uses (the next apply, at the latest the next start, removes it).
+  private async dropEgress(op: OperationRow, inst: InstanceRow): Promise<void> {
+    if (!this.ctx.egress?.needsSync(inst)) return;
+    try {
+      await this.ctx.egress.sync();
+    } catch (e) {
+      this.event(op, 'removing', `could not drop ${inst.name}'s internet rules yet (${(e as Error).message}); they cover nothing now`);
+    }
+  }
+
   private async upAndRecord(op: OperationRow, inv: { projectDir: string; projectName: string; file: string }, identity: InstanceIdentity, inst: InstanceRow, opts: { forceRecreate?: boolean } = {}): Promise<ContainerInfo[]> {
     try {
-      if (this.hasActiveLinks(inst)) {
+      const links = this.hasActiveLinks(inst);
+      const egress = this.needsEgress(inst);
+      if (links || egress) {
         // Decision 171: create (or recreate), put this app's link members on their networks, then start,
         // so a linked service can reach (and be reached) from its first second; `up --wait` would
-        // otherwise wait on a health check that needs the link.
+        // otherwise wait on a health check that needs the link. Decision 184: the network exists now, so
+        // its subnet is known and the app's rules go in before it starts.
         await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs, { ...opts, noStart: true });
         await this.recordProjectResources(op, identity, inst);
-        await this.syncLinkMembers(op, inst, 'own');
+        if (links) await this.syncLinkMembers(op, inst, 'own');
+        if (egress) await this.applyEgress(op, inst);
         await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs);
       } else {
         await this.ctx.compose.up(inv, this.ctx.config.startTimeoutMs, opts);
@@ -1657,9 +1725,20 @@ export class OperationRunner {
     repo.updateInstance(inst.id, { desired: 'running' });
     this.phase(op, 'applying', 'starting', 'starting existing containers');
     repo.updateInstance(inst.id, { runtime: 'starting' });
+    // decision 184: the containers carry the resolver of the internet access they were created with; when that changed
+    // while the app was stopped (every app through the VPN, an update of its default), start re-creates them
+    if (this.renderedInternetStale(dirs.runtime, inst, pkg)) {
+      this.event(op, 'starting', `${inst.name}'s internet access changed while it was stopped: re-creating its containers (same data and addresses)`);
+      const fresh = await this.renderAndValidate(op, pkg, identity, inst, dirs.runtime, this.readSecrets(pkg, dirs.secrets, []));
+      const created = await this.upAndRecord(op, { projectDir: dirs.runtime, projectName: identity.project, file: fresh }, identity, inst);
+      await this.checkReadiness(op, pkg, inst, created);
+      repo.updateInstance(inst.id, { installState: 'installed', runtime: 'running', readiness: 'healthy', observedAt: repo.now() });
+      return;
+    }
     const file = path.join(dirs.runtime, 'compose.yaml');
     await this.ensureLinkNetworks(op, inst);
     await this.syncLinkMembers(op, inst, 'own');
+    if (this.needsEgress(inst)) await this.applyEgress(op, inst);
     await this.ctx.compose.start({ projectDir: dirs.runtime, projectName: identity.project, file }, config.startTimeoutMs);
     const containers = await this.recordProjectResources(op, identity, inst);
     await this.syncLinkMembers(op, inst, 'all');
@@ -2124,6 +2203,7 @@ export class OperationRunner {
     repo.updateInstance(inst.id, { runtime: 'starting' });
     await this.ensureLinkNetworks(op, inst);
     await this.syncLinkMembers(op, inst, 'own');
+    if (this.needsEgress(inst)) await this.applyEgress(op, inst);
     await this.ctx.compose.start({ projectDir: dirs.runtime, projectName: identity.project, file: path.join(dirs.runtime, 'compose.yaml') }, config.startTimeoutMs);
     const containers = await this.recordProjectResources(op, identity, inst);
     await this.syncLinkMembers(op, inst, 'all');

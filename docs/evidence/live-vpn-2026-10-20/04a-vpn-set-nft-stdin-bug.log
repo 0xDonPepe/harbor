@@ -1,0 +1,44 @@
++ /opt/harbor/bin/harbor vpn set /home/<admin>/h036/hbtest-wg.conf --name 'droplet test'
+error OPERATION_FAILED: /usr/sbin/nft -f - failed (exit 1): internal:0:0-0: Error: Not a regular file: "/dev/stdin"
+next: Inspect the operation events and the instance.
++ sleep 3
++ /opt/harbor/bin/harbor vpn status --check
+VPN: not set up. Add one with: harbor vpn set <wireguard.conf>
+Every app through the VPN: off
+Every app goes direct.
++ sudo -n ls -la /etc/harbor/egress
+total 16
+drwx------ 2 root root   4096 Oct 20 01:47 .
+drwxr-x--- 3 root harbor 4096 Oct 20 01:47 ..
+-rw------- 1 root root    216 Oct 20 01:47 tunnel.conf
+-rw------- 1 root root    258 Oct 20 01:47 tunnel.json
+interface: hb-vpn0
+  public key: <wg-public-key>
+  listening port: 43718
+
+peer: <wg-public-key>
+  endpoint: <droplet-ip>:51840
+  allowed ips: 0.0.0.0/0
+  latest handshake: 3 seconds ago
+  transfer: 92 B received, 180 B sent
+  persistent keepalive: every 25 seconds
+default dev hb-vpn0 scope link 
++ sudo -n wg show hb-vpn0
++ grep -v 'private key'
++ ip rule
++ grep -E '^51[6-8]0'
++ ip route show table 4842
++ sudo -n nft list table inet harbor_egress
++ head -40
+Error: No such file or directory
+list table inet harbor_egress
+                ^^^^^^^^^^^^^
++ systemctl list-units 'harbor-egress@*' --all --no-pager
++ head -5
+  UNIT                             LOAD   ACTIVE SUB    DESCRIPTION
+● harbor-egress@tunnel-set.service loaded failed failed Harbor VPN and offline apps step (tunnel-set: apply, tunnel-set, tunnel-remove or status)
+
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
++ ls -la /var/lib/harbor
++ head -2

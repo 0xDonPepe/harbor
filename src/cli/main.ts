@@ -20,7 +20,7 @@ import { gpuFact, planSummary } from './plan-summary.js';
 import { busyQuestion, canQueueAction, queueStatusLine, queueText } from './queue-view.js';
 import { gpuStatusLine } from '../planner/gpu.js';
 import { formatSettingValue, parseSettingInput } from '../planner/settings.js';
-import type { SettingDto, SettingValue } from '../contracts/api.js';
+import type { InternetDto, SettingDto, SettingValue, VpnDto } from '../contracts/api.js';
 
 interface Globals {
   url: string;
@@ -342,6 +342,7 @@ program
         ...d.endpoints.map((e) => `  endpoint ${e.id} (container port ${e.containerPort}, primary ${e.primary}): loopback ${e.urls.loopback}${e.urls.tailnet ? `, tailnet ${e.urls.tailnet}` : ''}${e.urls.public ? `, public ${e.urls.public}` : ''}`),
         ...(d.ports ?? []).map((x) => `  port ${x.id}: ${x.protocol.toUpperCase()} ${x.hostPort} on every network -> ${x.service}:${x.containerPort} (${x.purpose}); forward it on your router to reach it from outside`),
         ...(d.gpu ? [`  graphics card: ${gpuStatusLine(d.gpu)}`] : []),
+        `  internet: ${internetText(d.internet)}`,
         ...(d.setup ? [`  setup: ${d.setup.instructions} -> ${d.setup.browserUrl}`] : []),
         ...(d.lastError ? [`  last error ${d.lastError.code}: ${d.lastError.message}`, `  next: ${d.lastError.nextAction}`] : []),
         '  resources:',
@@ -526,10 +527,11 @@ program
   .option('--secret <id=@file|id=->', 'a value the app asks for (operator-provided secret), from a file or stdin; prompted on a terminal otherwise (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--link <id=app[/endpoint]>', 'which installed app satisfies a link of this app (repeatable; the only candidate is picked by itself)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--set <id=value>', 'choose a setting of the app instead of its default, e.g. --set context-length=16384 (repeatable; `harbor settings <app>` lists them once installed)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .option('--internet <direct|vpn|offline>', 'internet access instead of the app\'s default: straight out, only through the VPN (harbor vpn), or none at all (decision 184)')
   .option('--credentials-file <path>', 'write one-time values (admin login, shown-once secrets) to this new file (0600) instead of the terminal')
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return the operation ID instead of waiting')
-  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; set: string[]; credentialsFile?: string; yes: boolean; wait: boolean }) => {
+  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; set: string[]; internet?: string; credentialsFile?: string; yes: boolean; wait: boolean }) => {
     const api = client();
     const storage: Record<string, { hostPath: string }> = {};
     for (const s of opts.storage) {
@@ -548,6 +550,7 @@ program
     const links = await readLinkFlags(api, opts.link);
     if (Object.keys(links).length) extra['links'] = links;
     const settings = readSetFlags(opts.set);
+    if (opts.internet !== undefined) extra['internet'] = internetFlag(opts.internet, false);
     const plan = await createPlan(api, 'install', pkg, opts.name, extra);
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, passphrase, secrets, settings, ...(opts.credentialsFile ? { credentialsFile: opts.credentialsFile } : {}) });
   });
@@ -587,15 +590,16 @@ program
   .option('--link <id=app[/endpoint]>', 'point a link at another installed app (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--unlink <id>', 'remove an optional link (repeatable)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--set <id=value>', 'a new value for a setting, e.g. --set context-length=16384; the default value removes your override (repeatable; harbor settings <app> lists them)', (v: string, acc: string[]) => [...acc, v], [] as string[])
+  .option('--internet <direct|vpn|offline|default>', 'internet access (decision 184): straight out, only through the VPN, none at all, or the app\'s own default again; a running app restarts')
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return after submission')
-  .action(async (ref: string, opts: { secret: string[]; link: string[]; unlink: string[]; set: string[]; yes: boolean; wait: boolean }) => {
+  .action(async (ref: string, opts: { secret: string[]; link: string[]; unlink: string[]; set: string[]; internet?: string; yes: boolean; wait: boolean }) => {
     const api = client();
     const inst = await resolveInstance(api, ref);
     const secrets = await readSecretFlags(opts.secret);
     const links: Record<string, LinkChoice | null> = { ...(await readLinkFlags(api, opts.link)), ...Object.fromEntries(opts.unlink.map((id) => [id, null])) };
     const settings = typedSettings(inst.settings ?? [], readSetFlags(opts.set), inst.name);
-    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}), ...(Object.keys(settings).length ? { settings } : {}) });
+    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, ...(Object.keys(secrets).length ? { secrets: Object.keys(secrets) } : {}), ...(Object.keys(links).length ? { links } : {}), ...(Object.keys(settings).length ? { settings } : {}), ...(opts.internet !== undefined ? { internet: internetFlag(opts.internet, true) } : {}) });
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, secrets });
   });
 
@@ -615,6 +619,100 @@ function allowedCell(x: SettingDto): string {
   const kind = x.type === 'integer' ? 'whole number' : 'number';
   return x.min !== null && x.max !== null ? `${kind} ${x.min}..${x.max}` : x.min !== null ? `${kind} >= ${x.min}` : x.max !== null ? `${kind} <= ${x.max}` : kind;
 }
+
+// --- decision 184: internet access per app, and the apps' VPN
+function internetFlag(v: string, allowDefault: boolean): string {
+  const allowed = allowDefault ? ['direct', 'vpn', 'offline', 'default'] : ['direct', 'vpn', 'offline'];
+  if (!allowed.includes(v)) throw new HarborError('INVALID_REQUEST', `--internet expects ${allowed.join(', ')}, got ${v}`);
+  return v;
+}
+function internetText(i: InternetDto): string {
+  const label = i.mode === 'direct' ? 'direct' : i.mode === 'vpn' ? 'through the VPN only' : 'offline (opens no connections)';
+  const why = i.allApps && i.mode === 'vpn' && i.choice !== 'vpn' ? 'every app goes through the VPN' : i.choice === null ? "the app's default" : 'your choice';
+  return `${label} (${why})`;
+}
+
+program
+  .command('internet <instance> [mode]')
+  .description('show or change how an app reaches the internet: direct, vpn (only through the VPN; none while it is down), offline (no connections at all), or default (the app\'s own); a running app restarts for a few seconds')
+  .option('--yes', 'approve the shown plan non-interactively', false)
+  .option('--no-wait', 'return after submission')
+  .action(async (ref: string, mode: string | undefined, opts: { yes: boolean; wait: boolean }) => {
+    const api = client();
+    const inst = await resolveInstance(api, ref);
+    if (mode === undefined) {
+      out(inst.internet, () => `${inst.name}: ${internetText(inst.internet)}`);
+      return;
+    }
+    const plan = await planWhenFree(api, { kind: 'configure', instanceId: inst.id, internet: internetFlag(mode, true) });
+    await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait });
+  });
+
+function vpnText(v: VpnDto): string {
+  if (!v.available) return `VPN: not available here. ${v.reason ?? ''}`.trim();
+  const lines: string[] = [];
+  if (!v.tunnel) lines.push('VPN: not set up. Add one with: harbor vpn set <wireguard.conf>');
+  else {
+    const state = v.status.state === 'connected' ? `connected${v.status.latestHandshakeAt ? ` (last handshake ${v.status.latestHandshakeAt})` : ''}` : v.status.state === 'connecting' ? 'connecting' : 'NOT connected: apps that go through it have no internet';
+    lines.push(`VPN${v.tunnel.name ? ` ${v.tunnel.name}` : ''}: ${state}`);
+    lines.push(`  server ${v.tunnel.endpoint}  address ${v.tunnel.addresses.join(', ')}  DNS ${v.tunnel.dns.join(', ')}${v.tunnel.dnsFallback ? ' (the file named none: Quad9, through the tunnel)' : ''}`);
+  }
+  lines.push(`Every app through the VPN: ${v.allApps ? 'ON' : 'off'}`);
+  if (v.rules.state === 'failed') lines.push(`Rules: FAILED to load: ${v.rules.message ?? ''}`);
+  lines.push(v.apps.length ? table([['APP', 'INTERNET'], ...v.apps.map((a) => [a.name, a.mode === 'vpn' ? 'through the VPN' : 'offline'])]) : 'Every app goes direct.');
+  return lines.join('\n');
+}
+const vpnCmd = program.command('vpn').description('the apps\' VPN (WireGuard): status, set it from your provider\'s file, every app through it, remove it');
+vpnCmd.action(async () => {
+  const v = await client().get<VpnDto>('/v1/vpn');
+  out(v, () => vpnText(v));
+});
+vpnCmd
+  .command('status')
+  .description('whether the VPN is connected, its server, and which apps go through it or are offline')
+  .option('--check', 'ask the tunnel now instead of the answer from the last few seconds', false)
+  .action(async (opts: { check: boolean }) => {
+    const api = client();
+    const v = opts.check ? await api.post<VpnDto>('/v1/vpn/check', {}) : await api.get<VpnDto>('/v1/vpn');
+    out(v, () => vpnText(v));
+  });
+vpnCmd
+  .command('set <file>')
+  .description('set (or replace) the VPN from a WireGuard configuration file (- reads stdin); the private key stays on this machine, readable by root only')
+  .option('--name <name>', 'a name to show, e.g. "Mullvad Stockholm"')
+  .action(async (file: string, opts: { name?: string }) => {
+    const config = file === '-' ? await readStdinAll() : readFileSync(file, 'utf8');
+    const v = await client().post<VpnDto>('/v1/vpn', { config, ...(opts.name ? { name: opts.name } : {}) }, {}, 'PUT');
+    out(v, () => vpnText(v));
+  });
+vpnCmd
+  .command('every-app [on|off]')
+  .description('send every app through the VPN (apps set to direct go through it; offline apps stay offline)')
+  .action(async (state: string | undefined) => {
+    const api = client();
+    if (state === undefined) {
+      const v = await api.get<VpnDto>('/v1/vpn');
+      out(v, () => `Every app through the VPN: ${v.allApps ? 'ON' : 'off'}`);
+      return;
+    }
+    if (state !== 'on' && state !== 'off') throw new HarborError('INVALID_REQUEST', 'expected "on" or "off"');
+    const v = await api.post<VpnDto>('/v1/vpn/all-apps', { enabled: state === 'on' }, {}, 'PUT');
+    out(v, () => (state === 'on' && !v.tunnel ? 'Every app goes through the VPN, but none is set up: they have no internet until you add one (harbor vpn set <file>).\n' : '') + vpnText(v));
+  });
+vpnCmd
+  .command('remove')
+  .description('remove the VPN; apps that go through it have no internet until one is set again or they are switched to direct')
+  .option('--yes', 'remove without the question', false)
+  .action(async (opts: { yes: boolean }) => {
+    const api = client();
+    const before = await api.get<VpnDto>('/v1/vpn');
+    const users = before.apps.filter((a) => a.mode === 'vpn').map((a) => a.name);
+    if (users.length && !globals().json) process.stderr.write(`These apps go through the VPN and will have no internet: ${users.join(', ')}\n`);
+    if (!opts.yes && !(await confirm('Remove the VPN?'))) throw new HarborError('INVALID_REQUEST', 'not removed', { nextAction: 'Re-run with --yes to remove it non-interactively.' });
+    await api.delete('/v1/vpn');
+    const v = await api.get<VpnDto>('/v1/vpn');
+    out(v, () => vpnText(v));
+  });
 
 program
   .command('links')
@@ -1889,6 +1987,30 @@ program
   .action(async (spec: string) => {
     const { applyAppCrypto } = await import('../bootstrap/app-crypto-apply.js');
     await applyAppCrypto(spec, (msg) => process.stderr.write(`[app-crypto] ${msg}\n`));
+  });
+
+program
+  .command('egress-step <action>')
+  .description('ROOT, run by harbor-egress@<action>.service: VPN and offline apps (firewall, routing, WireGuard tunnel; request + configuration handed over by the daemon)')
+  .action(async (action: string) => {
+    const { applyEgressStep } = await import('../bootstrap/egress-apply.js');
+    await applyEgressStep(action, (msg) => process.stderr.write(`[egress-step] ${msg}\n`));
+  });
+
+program
+  .command('egress-boot')
+  .description('ROOT, run by harbor-egress.service at boot (after nft loaded the firewall): routing rules for VPN apps')
+  .action(async () => {
+    const { egressBoot } = await import('../bootstrap/egress-apply.js');
+    await egressBoot((msg) => process.stderr.write(`[egress-boot] ${msg}\n`));
+  });
+
+program
+  .command('egress-tunnel-up')
+  .description('ROOT, run by harbor-vpn.service once the network is online: bring the apps\' VPN tunnel up')
+  .action(async () => {
+    const { egressTunnelUp } = await import('../bootstrap/egress-apply.js');
+    await egressTunnelUp((msg) => process.stderr.write(`[egress-tunnel-up] ${msg}\n`));
   });
 
 program

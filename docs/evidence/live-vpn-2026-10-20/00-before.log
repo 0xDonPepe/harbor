@@ -1,0 +1,25 @@
++ /opt/harbor/bin/harbor --version
+0.35.0
+table ip filter
+table ip nat
+table ip6 filter
+table ip6 nat
+table ip raw
+0:	from all lookup local
+5210:	from all fwmark 0x80000/0xff0000 lookup main
+5230:	from all fwmark 0x80000/0xff0000 lookup default
+5250:	from all fwmark 0x80000/0xff0000 unreachable
+5270:	from all lookup 52
+32766:	from all lookup main
+32767:	from all lookup default
++ sudo -n nft list tables
++ ip rule
++ ls /etc/harbor
+ls: cannot open directory '/etc/harbor': Permission denied
++ /opt/harbor/bin/harbor list
++ head -20
+NAME            PACKAGE           VERSION  UPDATE         INSTALL    DESIRED   RUNTIME  READINESS  ENCRYPTED  URL                      ID
+nextcloud       nextcloud@3       34.0.4   -> 5 (34.0.4)  retained   retained  stopped  unknown    yes        http://localhost:18080/  5fc56284-8fa8-4e86-b985-d96db204bfe3
+ollama-gpu      ollama-gpu@3      0.40.3   -              installed  running   running  healthy    yes        http://localhost:18082/  62906563-a20b-4029-a8e3-1bd833ae8e77
+open-webui-gpu  open-webui-gpu@3  -        -              installed  running   running  healthy    yes        http://localhost:18083/  bc68b240-4107-4de0-8f5c-43b5177db9e0
+comfyui-gpu     comfyui-gpu@2     0.40.0   -              installed  running   running  healthy    no         http://localhost:18081/  8176d66e-eed8-46b4-8eb6-aafe50ea4c4a

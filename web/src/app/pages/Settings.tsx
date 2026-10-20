@@ -6,6 +6,7 @@ import type { AppearanceDto, DomainsDto, FoundAppDto, HostStorageDto, InstanceLo
 import { ApiError, api } from '../../api';
 import { Copy, Dialog, FolderPicker, InstanceIcon, Pill, RecoveryCard, appLabel } from '../components';
 import { Network } from './Network';
+import { Vpn } from './Vpn';
 import { BackupsSettings } from './Backups';
 import { Mark, PencilIcon } from '../icons';
 import { fmtBytes, fmtUptime } from '../format';
@@ -13,7 +14,7 @@ import { gpuMachineText } from '../gpu-text';
 import type { Console } from '../store';
 import { DEFAULT_SURFACES_OPACITY, WALLPAPERS, applySurfacesOpacity, applyTheme, applyWallpaper, hasExplicitWallpaper, readSurfacesOpacity, readTheme, readWallpaper, syncWallpaperPicture, type Theme, type Wallpaper } from '../theme';
 
-type Section = 'overview' | 'account' | 'network' | 'links' | 'remote' | 'public' | 'storage' | 'backups' | 'appearance' | 'notifications' | 'access' | 'troubleshoot' | 'about';
+type Section = 'overview' | 'account' | 'network' | 'vpn' | 'links' | 'remote' | 'public' | 'storage' | 'backups' | 'appearance' | 'notifications' | 'access' | 'troubleshoot' | 'about';
 // One 16px stroke set for the settings rail: same weight, same box, no emoji.
 const SECTION_ICON: Record<Section, ReactNode> = {
   overview: (
@@ -26,6 +27,12 @@ const SECTION_ICON: Record<Section, ReactNode> = {
     <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" aria-hidden="true">
       <circle cx="8" cy="5.5" r="2.8" />
       <path d="M2.8 13.5c.8-2.6 2.8-3.8 5.2-3.8s4.4 1.2 5.2 3.8" />
+    </svg>
+  ),
+  vpn: (
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 2.2 3.2 4v3.6c0 3 2 5.2 4.8 6.2 2.8-1 4.8-3.2 4.8-6.2V4L8 2.2Z" />
+      <path d="M6 8h4M8.6 6.4 10 8l-1.4 1.6" />
     </svg>
   ),
   links: (
@@ -107,6 +114,7 @@ const SECTIONS: { id: Section; label: string; blurb: string }[] = [
   { id: 'overview', label: 'Overview', blurb: 'This machine at a glance' },
   { id: 'account', label: 'Account', blurb: 'Password, recovery key and sessions' },
   { id: 'network', label: 'Network', blurb: 'Secure addresses on your home network' },
+  { id: 'vpn', label: 'VPN', blurb: 'Send your apps\' internet traffic through a VPN' },
   { id: 'links', label: 'Internal networks', blurb: 'Which apps talk to each other privately' },
   { id: 'remote', label: 'Remote access', blurb: 'Reach Harbor from your other devices' },
   { id: 'public', label: 'Public addresses', blurb: 'Publishing apps on the internet' },
@@ -185,6 +193,7 @@ export function Settings({ c, initialSection, onSection }: { c: Console; initial
           {section === 'overview' && <Overview c={c} go={setSection} />}
           {section === 'account' && <Account />}
           {section === 'network' && <Network c={c} />}
+          {section === 'vpn' && <Vpn c={c} />}
           {section === 'links' && <InternalNetworks />}
           {section === 'remote' && <RemoteAccess c={c} />}
           {section === 'public' && <PublicAddresses c={c} />}

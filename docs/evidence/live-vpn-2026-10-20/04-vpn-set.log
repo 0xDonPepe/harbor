@@ -1,0 +1,71 @@
++ /opt/harbor/bin/harbor vpn set /home/<admin>/h036/hbtest-wg.conf --name 'droplet test'
+VPN droplet test: connected (last handshake 2026-10-20T06:49:16.000Z)
+  server <droplet-ip>:51840  address 10.99.0.2/32  DNS 1.1.1.1
+Every app through the VPN: off
+Every app goes direct.
++ sleep 4
++ /opt/harbor/bin/harbor vpn status --check
+VPN droplet test: connected (last handshake 2026-10-20T06:49:16.000Z)
+  server <droplet-ip>:51840  address 10.99.0.2/32  DNS 1.1.1.1
+Every app through the VPN: off
+Every app goes direct.
++ sudo -n ls -la /etc/harbor/egress
+total 24
+drwx------ 2 root root   4096 Oct 20 01:49 .
+drwxr-x--- 3 root harbor 4096 Oct 20 01:47 ..
+-rw------- 1 root root   1456 Oct 20 01:49 rules.nft
+-rw------- 1 root root     23 Oct 20 01:49 state.json
+-rw------- 1 root root    216 Oct 20 01:49 tunnel.conf
+-rw------- 1 root root    258 Oct 20 01:49 tunnel.json
++ sudo -n wg show hb-vpn0
++ grep -v 'private key'
+interface: hb-vpn0
+  public key: <wg-public-key>
+  listening port: 35321
+
+peer: <wg-public-key>
+  endpoint: <droplet-ip>:51840
+  allowed ips: 0.0.0.0/0
+  latest handshake: 5 seconds ago
+  transfer: 92 B received, 180 B sent
+  persistent keepalive: every 25 seconds
++ ip rule
++ grep -E '^51[6-8]0'
+5160:	from all to 1.1.1.1 fwmark 0x1000000/0xf000000 lookup 4842
+5170:	from all fwmark 0x1000000/0xf000000 lookup main suppress_prefixlength 0
+5180:	from all fwmark 0x1000000/0xf000000 lookup 4842
++ ip route show table 4842
+default dev hb-vpn0 scope link 
+blackhole default metric 4294967295 
+table inet harbor_egress {
+	chain egress_mark {
+		type filter hook prerouting priority mangle; policy accept;
+	}
+
+	chain egress_dns {
+		type nat hook prerouting priority dstnat - 5; policy accept;
+		meta mark & 0x0f000000 == 0x01000000 udp dport 53 dnat ip to 1.1.1.1
+		meta mark & 0x0f000000 == 0x01000000 tcp dport 53 dnat ip to 1.1.1.1
+	}
+
+	chain egress_forward {
+		type filter hook forward priority filter - 5; policy accept;
+		meta mark & 0x0f000000 == 0x02000000 reject with icmpx admin-prohibited comment "offline"
+		meta mark & 0x0f000000 == 0x01000000 oifname "hb-vpn0" tcp flags syn tcp option maxseg size set rt mtu
+		meta mark & 0x0f000000 == 0x01000000 oifname "hb-vpn0" accept
+		meta mark & 0x0f000000 == 0x01000000 th dport 53 reject with icmpx admin-prohibited comment "dns outside the tunnel"
+		meta mark & 0x0f000000 == 0x01000000 ip daddr { 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } accept comment "this network"
+		meta mark & 0x0f000000 == 0x01000000 reject with icmpx admin-prohibited comment "kill switch"
+	}
+
+	chain egress_input {
+		type filter hook input priority filter - 5; policy accept;
+		meta mark & 0x0f000000 == 0x02000000 reject with icmpx admin-prohibited comment "offline"
+	}
+
+	chain egress_nat {
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "hb-vpn0" masquerade
+	}
+}
++ sudo -n nft list table inet harbor_egress

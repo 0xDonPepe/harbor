@@ -43,6 +43,7 @@ import { FakeGit, GitCli, type GitFetcher } from './packages/git.js';
 import { MachineKeyHolder } from './auth/machine-holder.js';
 import type { CryptoProvider } from './storage/crypto-provider.js';
 import type { BackupEngine } from './backups/engine.js';
+import type { EgressProvider } from './egress/provider.js';
 
 export function productVersion(): string {
   try {
@@ -78,6 +79,8 @@ export interface DaemonOverrides {
   notifyTransport?: NotifyTransport;
   git?: GitFetcher;
   crypto?: CryptoProvider;
+  // decision 184: VPN and offline apps (tests: the fake, to inspect what root would load)
+  egress?: EgressProvider;
   backupEngine?: BackupEngine;
   backupTickMs?: number;
   // decision 168: the keys a downloaded catalog.json.sig must verify with (tests: throwaway keys)
@@ -207,6 +210,11 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
     // root helpers on a live host (same unit starter as mount/format).
     const { FakeCryptoProvider, RootCryptoProvider } = await import('./storage/crypto-provider.js');
     ctx.crypto = overrides.crypto ?? (fakeMode ? new FakeCryptoProvider() : new RootCryptoProvider(config.stateDir));
+    // VPN and offline apps (decision 184): firewall, routing and the WireGuard tunnel through the root step on a
+    // live host; the fake keeps what the kernel would hold in fake mode.
+    const { EgressService } = await import('./egress/service.js');
+    const { FakeEgressProvider, RootEgressProvider } = await import('./egress/provider.js');
+    ctx.egress = new EgressService(ctx, overrides.egress ?? (fakeMode ? new FakeEgressProvider() : new RootEgressProvider(config.stateDir)));
     // App backups (decisions 149–154): restic through the root step on a live host, in-memory places in fake mode.
     const { BackupService } = await import('./backups/service.js');
     const { FakeBackupEngine, RootBackupEngine } = await import('./backups/engine.js');
@@ -245,7 +253,7 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
         return { installed: false, loggedIn: false };
       }
     };
-    const app = await buildApi({ config, service, sessions, tools, devices, appearance, power, terminals, setup, tailscaleFacts, log, version: ctx.version, backups: ctx.backups });
+    const app = await buildApi({ config, service, sessions, tools, devices, appearance, power, terminals, setup, tailscaleFacts, log, version: ctx.version, backups: ctx.backups, egress: ctx.egress });
     await app.listen({ host: config.listen.host, port: config.listen.port });
     // The HTTPS console listener serves these same routes (same Host/Origin
     // guards, same bearer auth) — stashed before the LAN listeners start.
@@ -293,6 +301,8 @@ export async function startDaemon(config: DaemonConfig, overrides: DaemonOverrid
       }
       if (lanServer) log.info('LAN listener up', { port: config.lan.port });
     }
+    // decision 184: the boot unit loaded the last rules before Docker; this catches what changed while we were down
+    await ctx.egress.sync({ force: true }).catch((e: Error) => log.error(`VPN and offline app rules could not be applied at startup: ${e.message}`));
     observer.start();
     ctx.backups.start(overrides.backupTickMs ?? 30_000);
     appearance.start();

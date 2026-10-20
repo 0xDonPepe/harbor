@@ -1,0 +1,73 @@
+07:15:56
++ date -u +%T
++ sudo -n systemctl stop harbor-egress.service harbor-vpn.service
+Job for harbor-egress.service canceled.
++ systemctl is-active docker
+inactive
++ sudo -n nft delete table inet harbor_egress
++ for p in 5160 5170 5180
++ sudo -n ip rule del priority 5160
+0
++ for p in 5160 5170 5180
++ sudo -n ip rule del priority 5170
++ for p in 5160 5170 5180
++ sudo -n ip rule del priority 5180
++ sudo -n ip route flush table 4842
++ sudo -n ip link del hb-vpn0
++ sudo -n nft list tables
++ grep -c harbor
++ ip rule
++ grep -c '^51[678]0'
+0
+Device "hb-vpn0" does not exist.
++ ip link show hb-vpn0
++ head -1
++ sudo -n systemctl start docker.service
++ systemctl is-active harbor-egress.service docker.service
+active
+active
++ sudo -n nft list tables
++ grep harbor
++ ip rule
++ grep '^51[678]0'
+5160:	from all to 1.1.1.1 fwmark 0x1000000/0xf000000 lookup 4842
+5170:	from all fwmark 0x1000000/0xf000000 lookup main suppress_prefixlength 0
+5180:	from all fwmark 0x1000000/0xf000000 lookup 4842
++ ip route show table 4842
+unreachable default metric 4294967295 
++ ip link show hb-vpn0
++ head -1
+Device "hb-vpn0" does not exist.
+++ seq 1 30
++ for i in $(seq 1 30)
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 true
+== comfyui-gpu (VPN) before the tunnel unit ran:
++ break
++ echo '== comfyui-gpu (VPN) before the tunnel unit ran:'
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 sh -c 'curl -s -o /dev/null -m 8 https://9.9.9.10/; echo curl exit $?'
+curl exit 0
++ sudo -n systemctl start harbor-vpn.service
+active
+0
+== after:
++ systemctl is-active harbor-vpn.service
++ sudo -n wg show hb-vpn0 latest-handshakes
++ cut -f2
++ echo '== after:'
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 sh -c 'curl -s -m 10 https://ifconfig.me; echo'
+
+== order (journal):
++ echo '== order (journal):'
++ sudo -n journalctl --since -4min --no-pager -o short-precise -u harbor-egress.service -u docker.service -u harbor-vpn.service
++ grep -E 'Starting|Started|Finished|egress-boot|egress-tunnel-up'
++ head -20
+Oct 20 02:16:07.481512 harbor-old systemd[1]: Starting harbor-egress.service - Harbor firewall for VPN and offline apps (loaded before Docker starts)...
+Oct 20 02:16:07.818935 harbor-old harbor[1028760]: [egress-boot] routing: VPN apps use table 4842 (no tunnel: unreachable)
+Oct 20 02:16:07.827561 harbor-old systemd[1]: Finished harbor-egress.service - Harbor firewall for VPN and offline apps (loaded before Docker starts).
+Oct 20 02:16:07.842319 harbor-old systemd[1]: Starting docker.service - Docker Application Container Engine...
+Oct 20 02:16:07.872916 harbor-old dockerd[1028798]: time="2026-10-20T02:16:07.872878040-05:00" level=info msg="Starting up"
+Oct 20 02:16:07.915406 harbor-old dockerd[1028798]: time="2026-10-20T02:16:07.915402605-05:00" level=info msg="Starting daemon with containerd snapshotter integration enabled"
+Oct 20 02:16:09.067809 harbor-old systemd[1]: Started docker.service - Docker Application Container Engine.
+Oct 20 02:16:09.270278 harbor-old systemd[1]: Starting harbor-vpn.service - Harbor VPN tunnel for apps...
+Oct 20 02:16:09.594865 harbor-old harbor[1029598]: [egress-tunnel-up] tunnel hb-vpn0 up (server <droplet-ip>:51840)
+Oct 20 02:16:09.603978 harbor-old systemd[1]: Finished harbor-vpn.service - Harbor VPN tunnel for apps.

@@ -19,6 +19,7 @@ import { watchSession } from '../auth/session-watch.js';
 import type { SetupRequest, SetupStatusDto, TerminalClientMessage } from '../contracts/api.js';
 import type { SetupService } from '../auth/setup.js';
 import type { BackupService } from '../backups/service.js';
+import type { EgressService } from '../egress/service.js';
 import type { BackupAppPolicyDto, BackupPolicyDto } from '../contracts/api.js';
 import { CATALOG_STATUS_SCHEMA, QUEUEABLE_KINDS, type QueueableKind } from '../contracts/api.js';
 import { isLanPeer, lanHostAllowed } from '../system/lan.js';
@@ -52,6 +53,8 @@ export interface ApiDeps {
   log: Logger;
   version: string;
   backups?: BackupService | null;
+  // decision 184: VPN and offline apps
+  egress?: EgressService | null;
 }
 
 declare module 'fastify' {
@@ -929,7 +932,7 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     {
       preHandler: requireAuth,
       schema: {
-        description: 'Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?}. Configure: {kind, instanceId, secrets?, links?, settings?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.',
+        description: 'Create an immutable plan. Install: {kind, packageId, name?, storage?, location?, main?, links?, internet?}. Configure: {kind, instanceId, secrets?, links?, settings?, internet?}. Others: {kind, instanceId}. Operator-provided secret values never go into a plan: they travel with POST /v1/operations.',
         body: {
           oneOf: [
             {
@@ -957,6 +960,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
                     { type: 'object', additionalProperties: false, required: ['via', 'hostname'], properties: { via: { const: 'public' }, hostname: { type: 'string', minLength: 1, maxLength: 253 } } },
                   ],
                 },
+                // decision 184: internet access for the new app (omitted = the package's default)
+                internet: { enum: ['direct', 'vpn', 'offline'] },
               },
             },
             { type: 'object', additionalProperties: false, required: ['kind', 'instanceId'], properties: { kind: { enum: ['start', 'stop', 'restart', 'remove', 'reinstall', 'purge'] }, instanceId: { type: 'string', pattern: UUID_PATTERN } } },
@@ -988,6 +993,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
                 links: { type: 'object', maxProperties: 8, propertyNames: { pattern: LINK_ID_PATTERN }, additionalProperties: { oneOf: [{ type: 'null' }, LINK_CHOICE] } },
                 // decision 180: new setting values (not secret: the plan lists them as changes)
                 settings: SETTING_VALUES,
+                // decision 184: internet access, or default to follow the package's own again
+                internet: { enum: ['direct', 'vpn', 'offline', 'default'] },
               },
             },
             {
@@ -1215,6 +1222,35 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
     { preHandler: requireAuth, schema: { description: 'Delete the copy of the app kept aside by its last restore (root deletes it; the app is not touched).', params: ID_PARAM } },
     async (req) => service.deletePreviousCopy((req.params as { id: string }).id),
   );
+
+  // --- VPN and offline apps (decision 184): the WireGuard file holds a private key; it is never logged, stored by
+  // the daemon or returned (root keeps it, 0600); the DTO shows the server, addresses and DNS only
+  const egress = (): EgressService => {
+    if (!deps.egress) throw new HarborError('UNSUPPORTED_CAPABILITY', 'VPN and offline apps are not available on this machine');
+    return deps.egress;
+  };
+  app.get('/v1/vpn', { preHandler: requireAuth, schema: { description: 'The apps\' VPN: whether this machine can run one, the tunnel (server, addresses, DNS; never a key), whether it is connected (last handshake), the every-app switch, the apps that do not go direct and the state of the host rules.' } }, async () => egress().vpn());
+  app.put(
+    '/v1/vpn',
+    {
+      preHandler: requireAuth,
+      schema: {
+        description: 'Set (or replace) the VPN from a WireGuard configuration file (wg-quick format, one [Peer], AllowedIPs covering 0.0.0.0/0; PostUp/PreUp/PostDown/PreDown/Table/FwMark/SaveConfig refused). Brings the tunnel up and reloads the rules.',
+        body: { type: 'object', additionalProperties: false, required: ['config'], properties: { config: { type: 'string', minLength: 1, maxLength: 16384 }, name: { type: 'string', maxLength: 64, pattern: '^[^\\u0000-\\u001F\\u007F]*$' } } },
+      },
+    },
+    async (req) => {
+      const body = req.body as { config: string; name?: string };
+      return egress().setTunnel(body.config, body.name ?? null);
+    },
+  );
+  app.delete('/v1/vpn', { preHandler: requireAuth, schema: { description: 'Remove the VPN. Apps that go through it keep no internet (kill switch) until one is set again or they are switched to Direct.' } }, async () => egress().removeTunnel());
+  app.put(
+    '/v1/vpn/all-apps',
+    { preHandler: requireAuth, schema: { description: 'Send every app through the VPN (apps set to Direct go through it; offline apps stay offline).', body: { type: 'object', additionalProperties: false, required: ['enabled'], properties: { enabled: { type: 'boolean' } } } } },
+    async (req) => egress().setAllApps((req.body as { enabled: boolean }).enabled),
+  );
+  app.post('/v1/vpn/check', { preHandler: requireAuth, schema: { description: 'Ask the tunnel now (last handshake, bytes) instead of the cached answer.' } }, async () => egress().check());
 
   // --- static UI
   if (config.uiDir && existsSync(path.join(config.uiDir, 'index.html'))) {

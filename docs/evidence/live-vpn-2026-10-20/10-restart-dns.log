@@ -1,0 +1,15 @@
+  2026-10-20T06:58:47Z checking     readiness passed after 6 attempt(s) with status 200
+  2026-10-20T06:58:47Z succeeded    restart succeeded
+/hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 dns=[198.51.100.53]
+table inet harbor_egress {
+	chain egress_route {
+		type route hook output priority mangle; policy accept;
+		ip daddr 198.51.100.53 th dport 53 meta mark set meta mark & 0xf1ffffff | 0x01000000 comment "vpn apps' dns"
+	}
+}
+table inet harbor_egress {
+	chain egress_dns_out {
+		type nat hook output priority dstnat - 5; policy accept;
+		ip daddr 198.51.100.53 th dport 53 dnat ip to 1.1.1.1
+	}
+}

@@ -1,0 +1,10 @@
++ /opt/harbor/bin/harbor vpn remove --yes
+unreachable default metric 4294967295 
++ ip route show table 4842
++ C=hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1
++ docker exec hb_8176d66eeed846b48eb6aafe50ea4c4a-comfyui-1 sh -c 'S=$(date +%s%N); curl -s -o /dev/null -m 8 https://9.9.9.10/; echo "curl exit $? after $(( ($(date +%s%N)-S)/1000000 )) ms"; S=$(date +%s%N); getent hosts removed-f8.example.com || echo "lookup failed after $(( ($(date +%s%N)-S)/1000000 )) ms"'
+curl exit 7 after 5 ms
+lookup failed after 32010 ms
++ /opt/harbor/bin/harbor vpn set /home/<admin>/h036/hbtest-wg.conf --name 'droplet test'
++ head -1
+VPN droplet test: connected (last handshake 2026-10-20T07:08:13.000Z)

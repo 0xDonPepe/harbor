@@ -1,5 +1,5 @@
 import type { AppBackupsDto, BackupAppPolicyDto, BackupPolicyDto, BackupsOverviewDto, BackupTargetDto, FoundBackupAppDto, SettingValue } from '../../src/contracts/api';
-import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, OperationQueueDto, QueueableKind, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailnetAllDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto } from '../../src/contracts/api';
+import type { AddressOptionsDto, ApiErrorBody, AppearanceDto, FoundAppDto, InstanceAppearancePatch, InstanceLogsDto, LogsDto, NetworkHttpsDto, PackageImportResultDto, RotationPatch, SecurityDto, SelfUpdateStatusDto, SessionInfoDto, RecoveryKeyRotationDto, SetupRequest, SetupResultDto, SetupStatusDto, SystemHostDto, TotpSetupDto, CatalogItemDto, DomainDto, DomainsDto, ExposureDto, FolderListingDto, HostStorageDto, NotificationChannelDto, NotificationsDto, StorageUsageDto, AddSourceResult, PackageSourceDto, InstanceDetail, InstanceSummary, OperationDto, OperationQueueDto, QueueableKind, PlanDto, PlanRequest, PlatformToolDto, SessionDto, SystemDto, SystemMetricsDto, TailnetAllDto, TailscaleLoginDto, UiExposureDto, WidgetDto, LinkDto, CatalogStatusDto, VpnDto } from '../../src/contracts/api';
 import { isMockUi, mockApi } from './mock/api';
 
 export class ApiError extends Error {
@@ -141,6 +141,12 @@ const realApi = {
   submit: (planId: string, idempotencyKey: string, passphrase?: string, secrets?: Record<string, string>, acceptPermissions = false, settings?: Record<string, SettingValue>) =>
     call<{ operationId: string; created: boolean; operation: OperationDto }>('POST', '/v1/operations', { planId, ...(passphrase ? { passphrase } : {}), ...(secrets && Object.keys(secrets).length ? { secrets } : {}), ...(settings && Object.keys(settings).length ? { settings } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }, { 'idempotency-key': idempotencyKey }),
   links: () => call<{ items: LinkDto[] }>('GET', '/v1/links').then((r) => r.items),
+  // decision 184: the apps' VPN (the WireGuard file goes up once; nothing secret comes back)
+  vpn: () => call<VpnDto>('GET', '/v1/vpn'),
+  setVpn: (config: string, name?: string) => call<VpnDto>('PUT', '/v1/vpn', { config, ...(name ? { name } : {}) }),
+  removeVpn: () => call<VpnDto>('DELETE', '/v1/vpn'),
+  setVpnAllApps: (enabled: boolean) => call<VpnDto>('PUT', '/v1/vpn/all-apps', { enabled }),
+  checkVpn: () => call<VpnDto>('POST', '/v1/vpn/check', {}),
   foundApps: () => call<{ items: FoundAppDto[] }>('GET', '/v1/found-apps').then((r) => r.items),
   adoptFoundApp: (home: string, passphrase: string, name?: string, acceptPermissions?: boolean) => call<InstanceSummary>('POST', '/v1/found-apps/adopt', { home, passphrase, ...(name ? { name } : {}), ...(acceptPermissions ? { acceptPermissions: true } : {}) }),
   unlockApp: (id: string, passphrase: string) => call<InstanceSummary>('POST', `/v1/instances/${id}/unlock`, { passphrase }),

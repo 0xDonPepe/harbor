@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cockpitSocketDropIn, deviceMountUnit, harborUnit, polkitPowerRule } from '../../src/bootstrap/systemd.js';
+import { cockpitSocketDropIn, deviceMountUnit, egressBootUnit, egressStepUnit, harborUnit, polkitPowerRule, vpnUnit } from '../../src/bootstrap/systemd.js';
+import { egressUnit, parseEgressAction } from '../../src/egress/provider.js';
 
 describe('systemd unit text', () => {
   it('runs as the harbor user with docker group, control-group kill, and does not stop when Docker stops', () => {
@@ -23,5 +24,31 @@ describe('systemd unit text', () => {
     // would unmount the drive the moment the oneshot exits (live finding).
     expect(deviceMountUnit()).toContain('KillMode=none');
     expect(polkitPowerRule()).toContain('harbor-device-mount@');
+  });
+  // decision 184: VPN and offline apps
+  it('loads the firewall before Docker with nft alone, and Docker requires it; never used = skipped', () => {
+    const unit = egressBootUnit();
+    expect(unit).toContain('Before=docker.service');
+    expect(unit).toContain('RequiredBy=docker.service');
+    expect(unit).toContain('ConditionPathExists=/etc/harbor/egress/rules.nft');
+    // the kill switch needs only the OS's nft; Harbor's routing step after it may fail without a leak
+    expect(unit).toContain('ExecStart=/usr/sbin/nft -f /etc/harbor/egress/rules.nft');
+    expect(unit).toContain('ExecStart=-/opt/harbor/bin/harbor egress-boot');
+    expect(unit.indexOf('ExecStart=/usr/sbin/nft')).toBeLessThan(unit.indexOf('egress-boot'));
+    expect(unit).toContain('RemainAfterExit=yes');
+  });
+  it('brings the tunnel up after the network, retried forever', () => {
+    const unit = vpnUnit();
+    expect(unit).toContain('After=network-online.target harbor-egress.service');
+    expect(unit).toContain('ConditionPathExists=/etc/harbor/egress/tunnel.conf');
+    expect(unit).toContain('Restart=on-failure');
+    expect(unit).toContain('StartLimitIntervalSec=0');
+    expect(unit).toContain('harbor egress-tunnel-up');
+  });
+  it('runs one egress step per action, and the harbor user may start only that template', () => {
+    expect(egressStepUnit()).toContain('ExecStart=/opt/harbor/bin/harbor egress-step %i');
+    expect(egressUnit('tunnel-set')).toBe('harbor-egress@tunnel-set.service');
+    expect(() => parseEgressAction('apply;reboot')).toThrow();
+    expect(polkitPowerRule()).toContain('indexOf("harbor-egress@") === 0');
   });
 });

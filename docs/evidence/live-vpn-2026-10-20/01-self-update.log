@@ -1,0 +1,5 @@
+[self-update] signature verified (SHA256SUMS.sig, key harbor-2026-10)
+[self-update] checksum verified (e2aa3550bd7dda80…)
+[self-update] snapshotted the running release to /root/harbor-updates/previous
+[self-update] running /root/harbor-updates/harbor-0.36.0-linux-x64/bin/harbor bootstrap --yes
+[self-update] done: Harbor 0.36.0

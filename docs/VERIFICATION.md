@@ -1125,6 +1125,29 @@ queued at once ran in order. The box's own apps stayed healthy throughout.
 `upgrade-jump.test.ts` jumps v0.35.0, v0.22.1 and v0.19.1 to the current code (30 tests). The fixture driver now uses
 `tests/fixtures/catalog` for releases that no longer ship `catalog/` (0.28.0 and later).
 
+## 3t. VPN and offline apps (2026-10-20, Harbor 0.36.0, decisions 184–185)
+
+| Gate (macOS dev loop) | Result |
+|---|---|
+| `pnpm lint`, `pnpm typecheck` | clean |
+| `pnpm test` (unit) | 630 passed, 2 skipped (+26: `egress.test.ts` — wg-quick parser and refusals, ruleset, routes, state validation, plans, rendered resolver, `network.internet`; systemd units; actor list) |
+| `pnpm test:integration` | 375 passed, 3 live-Docker skipped (`vpn.test.ts`, 14: no root step on an untouched machine, package default, rules between create and start, re-render on a mode change and on a stale start, VPN routes never return or store the key, every-app restarts as `vpn-policy`, `vpn-down` and its resolution, fail closed (install and configure), restart re-apply, update moving the default, remove/purge) |
+| `pnpm build && pnpm test:e2e` | 43 passed (`decision 184`: VPN page with a refused and an accepted file, an offline package on the install page and review, the drawer's change, every app through the VPN, remove) |
+| `catalog:verify` / `catalog:hash --check` (fixtures), `openapi -- --check` | ok / ok / current (3 routes added) |
+
+**Live, harbor-old with a WireGuard server on the droplet, evidence `docs/evidence/live-vpn-2026-10-20/`** (its README
+maps each log): a VPN app leaves with the droplet's address while a direct app keeps the home one; from inside the VPN
+app its lookups appear only on `hb-vpn0` and inside the droplet's tunnel; with the server down, or the VPN removed, it
+has no internet (no packet on the physical interfaces; fails in 5 ms) while its LAN stays reachable; `vpn-down` rings
+after 5 minutes and clears by itself; offline refuses the internet, the LAN, this machine and other apps (also through
+its bridge gateway) in milliseconds while the app answers on loopback and over the LAN and stays healthy; every app
+through the VPN restarts the moved apps and puts them back; with Harbor's kernel state wiped, starting Docker loads the
+firewall and routing first and a VPN app has no internet until the tunnel unit runs. **The live run found four defects
+the fake engine could not:** nft refusing `-f -` from a pipe, Docker's resolver forwarding host-inherited servers from
+the host namespace (a DNS leak; fixed with a rendered resolver per mode), silent `blackhole` timeouts, and an offline
+app reaching other apps through its bridge gateway. All four were fixed and re-checked live on the same box.
+Not covered live: a real reboot (harbor-old's root is LUKS; the boot test replays the same unit ordering).
+
 ## 4. Qualified versions
 
 | Component | Version | Source |

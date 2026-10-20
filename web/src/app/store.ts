@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { LinkChoice, SettingValue } from '../../../src/contracts/api';
+import type { InternetMode, LinkChoice, SettingValue } from '../../../src/contracts/api';
 import type { AppearanceDto, CatalogItemDto, InstallMainAddress, ExposureDto, InstanceSummary, NotificationsDto, OperationDto, OperationQueueDto, PlanDto, PlanRequest, PlatformToolDto, QueueableKind, SystemDto, SystemMetricsDto, UiExposureDto } from '../../../src/contracts/api';
 import { ApiError, api, newIdempotencyKey } from '../api';
 import { REFRESH_MS, alreadyQueued, clearFinished as withoutPlainFinished, isFinal, isQueueable, keepFinished, queuePollMs, reviewHasValues } from './queue';
@@ -17,10 +17,11 @@ export interface Data {
 }
 
 export type Action =
-  | { kind: 'install'; packageId: string; name: string; storage?: Record<string, { hostPath: string }>; location?: { dir: string; passphrase?: string }; main?: InstallMainAddress; links?: Record<string, LinkChoice> }
+  | { kind: 'install'; packageId: string; name: string; storage?: Record<string, { hostPath: string }>; location?: { dir: string; passphrase?: string }; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode }
   // decisions 125/126/180: replace typed-in secrets (values asked in the review dialog), change link providers
   // and/or settings (the new values, from the app page's Settings → Change…)
-  | { kind: 'configure'; instance: InstanceSummary; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue> }
+  // decision 184: internet access (a mode, or 'default' to follow the package again)
+  | { kind: 'configure'; instance: InstanceSummary; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue>; internet?: InternetMode | 'default' }
   | { kind: 'start' | 'stop' | 'restart' | 'remove' | 'reinstall' | 'purge' | 'update' | 'seal'; instance: InstanceSummary }
   | { kind: 'expose'; instance: InstanceSummary; via: 'tailnet' | 'public' | 'proxy'; hostname: string; protection: 'none' | 'basic'; makePrimary: boolean; proxyFrom?: string }
   // decision 127: hostname names one of several public names (withdraw it / make it the main address)
@@ -39,9 +40,9 @@ export function planRequestFor(a: Action): PlanRequest {
       // The passphrase is validated at plan time but never stored in the plan:
       // planRequestFor strips it for the plan call; the approve step sends it
       // with the submission (see submitPassphraseFor).
-      return { kind: 'install', packageId: a.packageId, ...(a.name ? { name: a.name } : {}), ...(a.storage && Object.keys(a.storage).length ? { storage: a.storage } : {}), ...(a.location ? { location: a.location } : {}), ...(a.main ? { main: a.main } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}) };
+      return { kind: 'install', packageId: a.packageId, ...(a.name ? { name: a.name } : {}), ...(a.storage && Object.keys(a.storage).length ? { storage: a.storage } : {}), ...(a.location ? { location: a.location } : {}), ...(a.main ? { main: a.main } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.internet ? { internet: a.internet } : {}) };
     case 'configure':
-      return { kind: 'configure', instanceId: a.instance.id, ...(a.secrets?.length ? { secrets: a.secrets } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.settings && Object.keys(a.settings).length ? { settings: a.settings } : {}) };
+      return { kind: 'configure', instanceId: a.instance.id, ...(a.secrets?.length ? { secrets: a.secrets } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.settings && Object.keys(a.settings).length ? { settings: a.settings } : {}), ...(a.internet ? { internet: a.internet } : {}) };
     case 'expose':
       return { kind: 'expose', instanceId: a.instance.id, via: a.via, ...(a.via === 'public' ? { hostname: a.hostname, protection: a.protection } : {}), ...(a.via === 'proxy' ? { hostname: a.hostname, proxyFrom: a.proxyFrom ?? '' } : {}), makePrimary: a.makePrimary };
     case 'unexpose':

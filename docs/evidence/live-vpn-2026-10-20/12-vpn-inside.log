@@ -1,0 +1,17 @@
+== inside comfyui-gpu (through the VPN):
+lookup: none
+2606:4700:10::6814:1a88 example.org
+2606:4700:10::ac42:9ded example.org
+public ip: <droplet-ip>
+lan router: 200
+== DNS on harbor-old interfaces:
+[hb-vpn0] 01:59:07.000158 IP 10.99.0.2.33310 > 1.1.1.1.53: 43190+ [1au] AAAA? vpnapp-inside-c5.example.com. (57)
+[hb-vpn0] 01:59:07.066327 IP 10.99.0.2.51812 > 1.1.1.1.53: 20928+ [1au] AAAA? vpnapp-inside-c5.example.com.lan. (61)
+[hb-vpn0] 01:59:07.119333 IP 10.99.0.2.33588 > 1.1.1.1.53: 49442+ [1au] A? vpnapp-inside-c5.example.com. (57)
+[hb-vpn0] 01:59:07.176141 IP 10.99.0.2.38479 > 1.1.1.1.53: 40316+ [1au] A? vpnapp-inside-c5.example.com.lan. (61)
+[hb-vpn0] 01:59:07.230772 IP 10.99.0.2.43658 > 1.1.1.1.53: 11976+ [1au] AAAA? example.org. (40)
+06:59:07.023109 IP 10.99.0.2.33310 > 1.1.1.1.53: 43190+ [1au] AAAA? vpnapp-inside-c5.example.com. (57)
+06:59:07.088357 IP 10.99.0.2.51812 > 1.1.1.1.53: 20928+ [1au] AAAA? vpnapp-inside-c5.example.com.lan. (61)
+06:59:07.141152 IP 10.99.0.2.33588 > 1.1.1.1.53: 49442+ [1au] A? vpnapp-inside-c5.example.com. (57)
+06:59:07.198253 IP 10.99.0.2.38479 > 1.1.1.1.53: 40316+ [1au] A? vpnapp-inside-c5.example.com.lan. (61)
+06:59:07.252647 IP 10.99.0.2.43658 > 1.1.1.1.53: 11976+ [1au] AAAA? example.org. (40)

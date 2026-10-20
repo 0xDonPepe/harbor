@@ -92,3 +92,13 @@ export function PeopleIcon(): ReactNode {
     </svg>
   );
 }
+
+// decision 184: internet access (install page, app drawer)
+export function GlobeIcon(): ReactNode {
+  return (
+    <svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M2.5 8h11M8 2.5c-1.7 1.6-2.5 3.4-2.5 5.5s.8 3.9 2.5 5.5c1.7-1.6 2.5-3.4 2.5-5.5S9.7 4.1 8 2.5Z" />
+    </svg>
+  );
+}

@@ -1,6 +1,6 @@
 import { chmodSync, closeSync, cpSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import path from 'node:path';
-import type { LoadedPackage, SettingValue } from '../contracts/types.js';
+import type { InternetMode, LoadedPackage, SettingValue } from '../contracts/types.js';
 import { UUID_RE } from '../contracts/patterns.js';
 import { HarborError } from '../errors.js';
 import { loadPackageDir } from '../packages/catalog.js';
@@ -153,36 +153,56 @@ export function settingsFile(stateDir: string, instanceId: string): string {
   return path.join(instanceDir(stateDir, instanceId), SETTINGS_FILE);
 }
 
-// The stored overrides; a missing or unreadable file means none (every setting at its default).
-export function readSettingOverrides(stateDir: string, instanceId: string): Record<string, SettingValue> {
+function readSettingsDoc(stateDir: string, instanceId: string): { values?: unknown; internet?: unknown } | null {
   let raw: string;
   try {
     raw = readFileSync(settingsFile(stateDir, instanceId), 'utf8');
   } catch {
-    return {};
+    return null;
   }
   try {
-    const doc = JSON.parse(raw) as { values?: unknown };
-    const values = doc && typeof doc === 'object' && doc.values && typeof doc.values === 'object' ? (doc.values as Record<string, unknown>) : {};
-    const out: Record<string, SettingValue> = {};
-    for (const [k, v] of Object.entries(values)) if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = v;
-    return out;
+    const doc = JSON.parse(raw) as { values?: unknown; internet?: unknown };
+    return doc && typeof doc === 'object' ? doc : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
-// Written atomically (temp file + rename); no overrides = no file.
-export function writeSettingOverrides(stateDir: string, instanceId: string, values: Record<string, SettingValue>): void {
+// The stored overrides; a missing or unreadable file means none (every setting at its default).
+export function readSettingOverrides(stateDir: string, instanceId: string): Record<string, SettingValue> {
+  const doc = readSettingsDoc(stateDir, instanceId);
+  const values = doc?.values && typeof doc.values === 'object' ? (doc.values as Record<string, unknown>) : {};
+  const out: Record<string, SettingValue> = {};
+  for (const [k, v] of Object.entries(values)) if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = v;
+  return out;
+}
+
+// Decision 184: the operator's internet choice for this app lives in the same file (`internet`), so backups,
+// restores and update rollbacks carry it with the setting values. null = follow the package's default.
+export function readInternetChoice(stateDir: string, instanceId: string): InternetMode | null {
+  const v = readSettingsDoc(stateDir, instanceId)?.internet;
+  return v === 'direct' || v === 'vpn' || v === 'offline' ? v : null;
+}
+
+function writeSettingsDoc(stateDir: string, instanceId: string, values: Record<string, SettingValue>, internet: InternetMode | null): void {
   const file = settingsFile(stateDir, instanceId);
-  if (!Object.keys(values).length) {
+  if (!Object.keys(values).length && internet === null) {
     rmSync(file, { force: true });
     return;
   }
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const sorted = Object.fromEntries(Object.entries(values).sort(([a], [b]) => a.localeCompare(b)));
-  writeDurable(file, JSON.stringify({ format: 1, values: sorted }, null, 2) + '\n', 0o644, false);
+  writeDurable(file, JSON.stringify({ format: 1, values: sorted, ...(internet ? { internet } : {}) }, null, 2) + '\n', 0o644, false);
   chmodSync(file, 0o644); // UMask=0077 masks the open() mode
+}
+
+// Written atomically (temp file + rename); no overrides (and no internet choice) = no file.
+export function writeSettingOverrides(stateDir: string, instanceId: string, values: Record<string, SettingValue>): void {
+  writeSettingsDoc(stateDir, instanceId, values, readInternetChoice(stateDir, instanceId));
+}
+
+export function writeInternetChoice(stateDir: string, instanceId: string, choice: InternetMode | null): void {
+  writeSettingsDoc(stateDir, instanceId, readSettingOverrides(stateDir, instanceId), choice);
 }
 
 // The raw bytes (backups carry the file as it is; null = no overrides).

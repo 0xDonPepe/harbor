@@ -1,6 +1,6 @@
 import type { Db } from './db.js';
 import { rfc3339, type Clock } from '../util.js';
-import type { GpuDto, PlanSettingDto, SettingValue } from '../contracts/api.js';
+import type { GpuDto, PlanInternetDto, PlanSettingDto, SettingValue } from '../contracts/api.js';
 
 // Thin typed data access. JSON columns hold small immutable nested records.
 
@@ -208,6 +208,10 @@ export interface PlanProposal {
   // configure plan, the values it applies (a value equal to the default removes the override)
   settings?: PlanSettingDto[];
   settingValues?: Record<string, SettingValue>;
+  // decision 184: install/configure: the choice the runner stores (null = follow the package); update: shown only
+  internet?: PlanInternetDto;
+  // configure: the internet choice is the only change (nothing is re-rendered or restarted)
+  internetOnly?: boolean;
   changes: string[];
   warnings: string[];
   notes?: string[]; // decision 157: informational lines (absent on plans made before 0.27.1)

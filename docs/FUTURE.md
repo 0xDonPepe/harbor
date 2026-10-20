@@ -154,3 +154,15 @@ refused while an app uses the drive). What remains future: **partition, LUKS, SM
   services whose environment changed.
 - **Settings that are secrets** (a typed password shown as a setting): those stay operator-provided secrets
   (decision 125).
+
+## VPN and offline apps: later (recorded 2026-10-20, after decisions 184–185)
+
+- **OpenVPN, several tunnels, a tunnel per app.** One WireGuard tunnel covers what providers offer; several would need
+  a table and mark per tunnel and a picker per app.
+- **Exceptions under "every app through the VPN".** Carlos asked for "everything"; an exception list is a later switch.
+- **The host itself through the VPN.** It would cut Tailscale, Let's Encrypt and Harbor's own updates.
+- **VPN apps reaching tailnet peers** (tailnet addresses route into the tunnel today) and **port forwarding** through
+  the VPN provider.
+- **Hosts an offline app may still reach** (`network.allow` next to `network.internet`), e.g. one update server.
+- **IPv6 inside app networks.** Harbor's app networks are IPv4 only; a non-direct app on one with an IPv6 subnet is
+  refused.

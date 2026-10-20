@@ -1,0 +1,6 @@
+07:05:11
+VPN droplet test: NOT connected: apps that go through it have no internet
+vpn-down | The VPN is not connected | comfyui-gpu goes through the VPN and has no internet until it is back. Check Settings → VPN. | 2026-10-20T07:04:52Z
+07:05:42
+VPN droplet test: connected (last handshake 2026-10-20T07:05:25.000Z)
+<droplet-ip>

@@ -10,7 +10,7 @@ export function eventDto(e: EventRow): EventDto {
   return { cursor: String(e.cursor), at: e.at, phase: e.phase, message: e.message };
 }
 
-export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; settings?: InstanceSummary['settings']; hiddenFromHome?: boolean; apiOnly?: boolean; ports?: InstanceSummary['ports']; version?: string | null } = { icon: null, category: 'other' }): InstanceSummary {
+export function instanceSummary(i: InstanceRow, packageName: string, primaryEndpoint: string, exposures: ExposureRow[] = [], look: { icon: string | null; category: string; updateAvailable?: InstanceSummary['updateAvailable']; lanHost?: string | null; lanSecureHost?: string | null; usage?: InstanceSummary['usage']; needsDrive?: InstanceSummary['needsDrive']; home?: InstanceSummary['home']; links?: InstanceSummary['links']; linkedBy?: InstanceSummary['linkedBy']; operatorSecrets?: InstanceSummary['operatorSecrets']; settings?: InstanceSummary['settings']; hiddenFromHome?: boolean; apiOnly?: boolean; ports?: InstanceSummary['ports']; version?: string | null; internet?: InstanceSummary['internet'] } = { icon: null, category: 'other' }): InstanceSummary {
   return {
     id: i.id,
     name: i.name,
@@ -43,6 +43,7 @@ export function instanceSummary(i: InstanceRow, packageName: string, primaryEndp
     ...(look.settings?.length ? { settings: look.settings } : {}),
     hiddenFromHome: look.hiddenFromHome ?? false,
     apiOnly: look.apiOnly ?? false,
+    internet: look.internet ?? { mode: 'direct', choice: null, packageDefault: 'direct', allApps: false },
   };
 }
 
@@ -68,6 +69,7 @@ export function planDto(p: PlanRow, storageStates: Record<string, 'new' | 'exist
     secrets: p.proposal.secrets.map((s) => ({ id: s.id, state: secretStates[s.id] ?? 'new', source: s.source === 'operator' ? ('operator' as const) : ('generated' as const), prompt: s.prompt ?? null, optional: s.optional ?? false, minLength: s.minLength ?? null, maxLength: s.maxLength ?? null, ask: s.ask ?? null })),
     links: (p.proposal.links ?? []).map((l) => ({ id: l.id, purpose: l.purpose, optional: l.optional, provider: l.provider ? { instanceId: l.provider.instanceId, name: l.provider.name, endpointId: l.provider.endpointId, url: linkValue(l.alias, l.provider.containerPort) } : null, alias: l.alias, network: l.network, change: l.change ?? 'set' })),
     ...(p.proposal.settings?.length ? { settings: p.proposal.settings } : {}),
+    ...(p.proposal.internet ? { internet: p.proposal.internet } : {}),
     warnings: p.proposal.warnings,
     notes: p.proposal.notes ?? [],
     ...(p.proposal.update ? { update: p.proposal.update } : {}),

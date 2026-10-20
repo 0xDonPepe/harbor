@@ -164,6 +164,10 @@ settings:                        # optional (0.34.0, decision 180; set release.m
     maxLength: 16                # optional (string only, 1–1024, default 256)
     bindings:
       - {service: web, environment: OLLAMA_KEEP_ALIVE, template: "{{value}}"}   # optional template, one {{value}}, no `$`
+network:                         # optional, Harbor ≥ 0.36.0 (declare release.minHarbor: "0.36.0")
+  internet: offline              # direct (default) | vpn | offline: what the app starts with; the operator may
+                                 # choose another (decision 185). offline = opens no connection at all; vpn =
+                                 # only through Harbor's VPN (no internet while it is down)
 configuration:                   # optional: hand the app its main address (links it sends out)
   - service: web
     environment: PUBLIC_URL
@@ -444,6 +448,24 @@ keep-alive, parallel requests. Declare them as `settings` (decision 180) instead
   `install`/`apply`/`update`/`configure` and `harbor settings <app>`.
 - Write labels the way the operator thinks ("Context length (tokens)", not `OLLAMA_CONTEXT_LENGTH`) and put
   the effect in `help`.
+
+### Internet access (`network.internet`, Harbor 0.36.0)
+
+Harbor can run any app **Direct**, **Through the VPN** or **Offline** (decision 184; the operator chooses per app
+in its drawer, and Settings → VPN can send every app through the VPN). A package may say which one it should start
+with (decision 185), and declares `release.minHarbor: "0.36.0"`:
+
+- `offline` for an app that never needs the internet (a notes app, a local-only tool). It stays reachable the usual
+  ways; it opens no connection to the internet, the home network, this machine or other apps. A Harbor link to
+  another app (`links:`) still works. Its health check and `afterStart` hook run inside the container, so they are
+  fine; anything that calls the app's own public address from inside (some apps check themselves that way) fails.
+- `vpn` for an app whose traffic should never leave in the clear (a download client). With no VPN set up, the install
+  review warns that it will have no internet until there is one.
+- Leave it out (direct) for everything else, including apps that download models, plugins or feeds at runtime.
+
+It is a default, not a permission: the operator's choice wins and is kept across your updates; an update that
+changes it moves only apps that follow the default (the update review says so). Images are pulled by Docker on the
+host, so offline and VPN apps update as usual.
 
 ## 9. Backup place packages (`kind: BackupTarget`)
 

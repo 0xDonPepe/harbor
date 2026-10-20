@@ -1,0 +1,16 @@
+== server end of the tunnel is down; inside comfyui-gpu (through the VPN):
+lookup: failed
+to 9.9.9.10:443 by IP: 000 failed (28)
+lan router: 200
+== ollama-gpu (direct) at the same time:
+no-curl
+
+VPN droplet test: connected (last handshake 2026-10-20T06:59:43.000Z)
+  server <droplet-ip>:51840  address 10.99.0.2/32  DNS 1.1.1.1
+== packets for the marker address / app lookups on the physical interfaces:
+[wlp5s0] 
+[enp6s0] 
+(end)
+== ollama-gpu network (direct), tunnel server still down:
+public ip : <home-public-ip>
+dns lookup: Address: 172.66.157.237

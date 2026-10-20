@@ -18,7 +18,8 @@ export type QueueableKind = (typeof QUEUEABLE_KINDS)[number];
 // is the login name, so a person must never be able to log in under one of these (decision 183: a guard's item is
 // not cancellable and an auto-update's refusal rings the bell, both decided by the actor name). A person's queued
 // action never merges into an item of one of these actors (decision 183 dedupe); the console reads the same list.
-export const INTERNAL_ACTORS = ['drive-guard', 'link-guard', 'lock-guard', 'scheduler', 'auto-update', 'git-source', 'tailnet-policy'] as const;
+// vpn-policy (decision 184): the restarts that move running apps' DNS when every-app VPN is switched
+export const INTERNAL_ACTORS = ['drive-guard', 'link-guard', 'lock-guard', 'scheduler', 'auto-update', 'git-source', 'tailnet-policy', 'vpn-policy'] as const;
 export type InternalActor = (typeof INTERNAL_ACTORS)[number];
 // 'proxy' = published through the operator's own reverse proxy (decision 118); Harbor runs nothing for it.
 export type ExposureVia = 'tailnet' | 'public' | 'proxy';
@@ -76,6 +77,42 @@ export interface GpuDto {
 // value = the effective value (the operator's override, else the current release's default); overridden = an
 // override is stored. min/max: integer/number; maxLength: string; choices: choice.
 export type SettingValue = string | number | boolean;
+
+// ---- VPN and offline apps (decision 184)
+export type InternetMode = 'direct' | 'vpn' | 'offline';
+export interface InternetDto {
+  // what the app runs with now ("every app through the VPN" applied)
+  mode: InternetMode;
+  // the operator's choice; null = follows the package's default
+  choice: InternetMode | null;
+  // the package's network.internet (direct when it says nothing)
+  packageDefault: InternetMode;
+  // every app goes through the VPN (turns direct into vpn)
+  allApps: boolean;
+}
+export interface VpnDto {
+  // this machine can load the firewall (nftables); tunnelAvailable: and bring up WireGuard
+  available: boolean;
+  tunnelAvailable: boolean;
+  reason: string | null;
+  // never a private or preshared key
+  tunnel: { name: string | null; endpoint: string; addresses: string[]; dns: string[]; dnsFallback: boolean; mtu: number; peerPublicKey: string; setAt: string } | null;
+  status: { state: 'off' | 'connecting' | 'connected' | 'down'; latestHandshakeAt: string | null; rxBytes: number; txBytes: number; checkedAt: string | null };
+  allApps: boolean;
+  // apps that do not go direct (by effective mode)
+  apps: { instanceId: string; name: string; mode: 'vpn' | 'offline' }[];
+  // the host rules: ok = loaded this daemon run, failed = the last apply failed (message), none = nothing applied yet
+  rules: { state: 'ok' | 'failed' | 'none'; message: string | null; appliedAt: string | null };
+}
+// In a plan: install (to = what it starts with), configure (from → to), update (the package default moved)
+export interface PlanInternetDto {
+  from: InternetMode | null;
+  to: InternetMode;
+  choice: InternetMode | null;
+  packageDefault: InternetMode;
+  // a VPN is set up (when to is vpn and there is none, the app has no internet until there is)
+  vpnReady: boolean;
+}
 export interface SettingDto {
   id: string;
   label: string;
@@ -160,6 +197,8 @@ export interface InstanceSummary {
   settings?: SettingDto[];
   // decision 131: not shown on Home (the operator's choice, else the package's presentation.hideFromHome)
   hiddenFromHome: boolean;
+  // decision 184: how the app reaches the internet
+  internet: InternetDto;
   // decision 141: the main endpoint is machine-facing (kind api): addresses to copy, no Open button
   apiOnly: boolean;
 }
@@ -381,6 +420,8 @@ export interface PlanDto {
   links: { id: string; purpose: string; optional: boolean; provider: { instanceId: string; name: string; endpointId: string; url: string } | null; alias: string; network: string; change: 'set' | 'keep' | 'clear' }[];
   // decision 180: settings this plan sets or asks about (absent when there are none)
   settings?: PlanSettingDto[];
+  // decision 184: internet access this plan sets (install, configure) or moves (update of a following app)
+  internet?: PlanInternetDto;
   warnings: string[];
   // decision 157: plain facts worth reading before approving (how it opens, what happens next) — not warnings
   notes: string[];
@@ -446,6 +487,8 @@ export interface CatalogItemDto {
   multiInstance?: boolean;
   // decision 170: the name the next install gets by default (the planner's rule: the package id, else -2, -3…)
   proposedName?: string;
+  // decision 185: the package's network.internet (absent = direct, or a package Harbor cannot read)
+  internet?: InternetMode;
 }
 
 export interface SystemMetricsDto {
@@ -526,13 +569,15 @@ export interface InstallLocationRequest {
   passphrase?: string;
 }
 export type PlanRequest =
-  | { kind: 'install'; packageId: string; name?: string; storage?: Record<string, { hostPath: string }>; location?: InstallLocationRequest; main?: InstallMainAddress; links?: Record<string, LinkChoice> }
+  // internet (decision 184): the operator's choice for the new app (absent = the package's default)
+  | { kind: 'install'; packageId: string; name?: string; storage?: Record<string, { hostPath: string }>; location?: InstallLocationRequest; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode }
   | { kind: 'start' | 'stop' | 'restart' | 'remove' | 'reinstall' | 'purge'; instanceId: string }
   | { kind: 'update'; instanceId: string; storage?: Record<string, { hostPath: string }>; links?: Record<string, LinkChoice> }
   // decisions 125/126: secrets listed in `secrets` are replaced by the values the submission carries;
   // links: a provider per link id, or null to unlink an optional one
   // decision 180: settings: new values by setting id (a value equal to the default removes the override)
-  | { kind: 'configure'; instanceId: string; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue> }
+  // internet (decision 184): a mode, or 'default' to follow the package again
+  | { kind: 'configure'; instanceId: string; secrets?: string[]; links?: Record<string, LinkChoice | null>; settings?: Record<string, SettingValue>; internet?: InternetMode | 'default' }
   | { kind: 'expose'; instanceId: string; endpointId?: string; via: ExposureVia; hostname?: string; protection?: 'none' | 'basic'; makePrimary?: boolean; proxyFrom?: string }
   // decision 127: hostname picks one of several public names (required when there are several)
   | { kind: 'unexpose'; instanceId: string; endpointId?: string; via: ExposureVia; hostname?: string }

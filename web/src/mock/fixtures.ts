@@ -222,6 +222,7 @@ export function mockInstances(): InstanceSummary[] {
     hiddenFromHome: false,
     apiOnly: false,
     ports: [],
+    internet: { mode: 'direct' as const, choice: null, packageDefault: 'direct' as const, allApps: false },
   };
   return [
     {

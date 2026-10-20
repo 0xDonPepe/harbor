@@ -9,7 +9,7 @@ Docker (root-equivalent) authority. It is not a hardened multi-user management s
 
 | Item | Requirement |
 |---|---|
-| Host | Ubuntu 24.04 LTS or Debian 12/13, x86-64, systemd. Debian/Ubuntu derivatives (Linux Mint, Pop!_OS, Raspberry Pi OS, …) usually work but are not tested: bootstrap refuses them unless you pass `--force` (one-line installer: `HARBOR_FORCE=1`). |
+| Host | Ubuntu 24.04 or 26.04 LTS, or Debian 12/13, x86-64, systemd. Debian/Ubuntu derivatives (Linux Mint, Pop!_OS, Raspberry Pi OS, …) usually work but are not tested: bootstrap refuses them unless you pass `--force` (one-line installer: `HARBOR_FORCE=1`). |
 | Memory | 4 GiB RAM minimum (8 GiB recommended — see the heavy apps below) |
 | Disk | 20 GiB free minimum (apps + images + one recovery bundle); 50+ GiB if you run Immich or Nextcloud |
 | Docker | Docker Engine + Compose plugin. Absent: bootstrap can install them from Docker's apt repository when you pass `--install-docker`. Present: validated, never modified. |
@@ -30,7 +30,7 @@ Engine and Compose versions installed by `--install-docker` on the date of quali
 
 ### 2a. The one-line installer (recommended)
 
-On a machine (or VM) running Ubuntu 24.04 or Debian 12/13 x86-64, from a terminal on it (SSH or keyboard):
+On a machine (or VM) running Ubuntu 24.04/26.04 or Debian 12/13 x86-64, from a terminal on it (SSH or keyboard):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/carlosalaniz/harbor/main/install.sh | sudo bash
@@ -131,7 +131,7 @@ sudo ./harbor-<version>-linux-x64/bin/harbor bootstrap [--install-docker] [--wit
 
 Bootstrap previews every step and asks for approval (or `--yes`). It:
 
-1. verifies the distro (Ubuntu 24.04 / Debian 12/13, or a derivative with `--force`) / x86-64 / systemd / root, checks that every system tool it will call is present, and detects existing Harbor, Docker, Cockpit, Portainer;
+1. verifies the distro (Ubuntu 24.04/26.04 / Debian 12/13, or a derivative with `--force`) / x86-64 / systemd / root, checks that every system tool it will call is present, and detects existing Harbor, Docker, Cockpit, Portainer;
 2. validates Docker, or installs it only with `--install-docker` (separately approved; never touches an existing setup);
 3. copies the release to `/opt/harbor`, creates the `harbor` system user (in the `docker` group), `/etc/harbor` and `/var/lib/harbor`;
 4. initializes state explicitly and prompts for the administrator password without echo (`--password-stdin` for automation);

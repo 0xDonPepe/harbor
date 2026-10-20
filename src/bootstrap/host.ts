@@ -122,11 +122,15 @@ export async function gatherHostFacts(): Promise<HostFacts> {
 // Distros bootstrap knows how to service without --force (decision 113). Compatibility needs
 // more than a shared package manager: the apt recipes (Docker's per-distro repository, Caddy's
 // cloudsmith list, the universe/archive package names) must actually exist for the release.
+// Ubuntu 26.04 (resolute) joined after Docker and Tailscale published resolute suites (decision 187).
 export type DistroSupport = 'supported' | 'derived' | 'unknown';
+
+export const SUPPORTED_HOSTS = 'Ubuntu 24.04 or 26.04 LTS and Debian 12/13';
+const UBUNTU_RELEASES = ['24.04', '26.04'];
 
 export function distroSupport(osId: string, versionId: string, osIdLike: string): DistroSupport {
   const id = osId.toLowerCase();
-  if (id === 'ubuntu') return versionId.startsWith('24.04') ? 'supported' : 'unknown';
+  if (id === 'ubuntu') return UBUNTU_RELEASES.some((r) => versionId === r || versionId.startsWith(`${r}.`)) ? 'supported' : 'unknown';
   if (id === 'debian') return ['12', '13'].includes(versionId.split('.')[0] ?? '') ? 'supported' : 'unknown';
   // Downstream derivatives (Linux Mint, Pop!_OS, Raspberry Pi OS, Proxmox, ...) declare their
   // family in ID_LIKE; they work when they track a supported base, but Harbor never ran there.
@@ -139,17 +143,22 @@ export function assertSupportedHost(f: HostFacts, opts: { force?: boolean } = {}
   if (!f.root) hard.push('bootstrap must run as root (sudo)');
   if (f.arch !== 'x64') hard.push(`unsupported architecture ${f.arch}; x86-64 is required`);
   if (!f.systemd) hard.push('systemd is required');
-  if (hard.length) throw new HarborError('UNSUPPORTED_CAPABILITY', hard.join('; '), { nextAction: 'Use a supported host (Ubuntu 24.04 or Debian 12/13, x86-64 with systemd) and run as root.' });
+  if (hard.length) throw new HarborError('UNSUPPORTED_CAPABILITY', hard.join('; '), { nextAction: `Use a supported host (${SUPPORTED_HOSTS}, x86-64 with systemd) and run as root.` });
   const support = distroSupport(f.osId, f.versionId, f.osIdLike);
   if (support === 'supported') return;
   if (support === 'derived' && opts.force) return;
   if (support === 'derived') {
-    throw new HarborError('UNSUPPORTED_CAPABILITY', `unsupported OS ${f.prettyName}; supported hosts are Ubuntu 24.04 LTS and Debian 12/13`, {
+    throw new HarborError('UNSUPPORTED_CAPABILITY', `unsupported OS ${f.prettyName}; supported hosts are ${SUPPORTED_HOSTS}`, {
       nextAction: 'This distro is Debian/Ubuntu-based, so it will probably work; re-run with --force to install anyway (not a tested configuration — you keep the pieces).',
     });
   }
-  throw new HarborError('UNSUPPORTED_CAPABILITY', `unsupported OS ${f.prettyName}; supported hosts are Ubuntu 24.04 LTS and Debian 12/13`, {
-    nextAction: 'Use a supported host. If this machine is really Debian/Ubuntu-based, re-run with --force (not a tested configuration — you keep the pieces).',
+  // An Ubuntu/Debian release outside the window is not a derivative: --force does not cover it, so never suggest it
+  // (0.35.0 told an Ubuntu 26.04 operator to re-run with --force, which refused again).
+  const outOfWindow = ['ubuntu', 'debian'].includes(f.osId.toLowerCase());
+  throw new HarborError('UNSUPPORTED_CAPABILITY', `unsupported OS ${f.prettyName}; supported hosts are ${SUPPORTED_HOSTS}`, {
+    nextAction: outOfWindow
+      ? `Install a supported release (${SUPPORTED_HOSTS}); --force only covers Debian/Ubuntu derivatives, not other Ubuntu or Debian releases.`
+      : 'Use a supported host. If this machine is really Debian/Ubuntu-based, re-run with --force (not a tested configuration — you keep the pieces).',
   });
 }
 

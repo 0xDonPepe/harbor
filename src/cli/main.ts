@@ -1749,7 +1749,7 @@ program
 
 program
   .command('bootstrap')
-  .description('install or update Harbor on this host (Ubuntu 24.04 or Debian 12/13, x86-64, systemd; run as root from the extracted release)')
+  .description('install or update Harbor on this host (Ubuntu 24.04/26.04 or Debian 12/13, x86-64, systemd; run as root from the extracted release)')
   .option('--yes', 'approve all previewed steps non-interactively', false)
   .option('--force', 'install on a Debian/Ubuntu derivative that is not a tested configuration (never overrides root/x86-64/systemd or an unknown distro)', false)
   .option('--with-tools', 'also set up Cockpit and Portainer (each separately approved)', false)

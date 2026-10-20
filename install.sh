@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Harbor one-line installer for Ubuntu 24.04 / Debian 12+ on x86-64.
+# Harbor one-line installer for Ubuntu 24.04/26.04 / Debian 12+ on x86-64.
 #
 #   curl -fsSL https://raw.githubusercontent.com/carlosalaniz/harbor/main/install.sh | sudo bash
 #
@@ -111,16 +111,21 @@ say "Checking this machine"
 FORCE="${HARBOR_FORCE:-0}"
 SUPPORTED=0
 case "${ID:-}" in
-  ubuntu) [[ "${VERSION_ID:-}" == 24.04* ]] && SUPPORTED=1 ;;
+  ubuntu) [[ "${VERSION_ID:-}" == 24.04* || "${VERSION_ID:-}" == 26.04* ]] && SUPPORTED=1 ;;
   debian) [[ "${VERSION_ID:-}" == 12* || "${VERSION_ID:-}" == 13* ]] && SUPPORTED=1 ;;
 esac
 if [ "$SUPPORTED" != "1" ]; then
+  # Another Ubuntu/Debian RELEASE is not a derivative: bootstrap refuses it even with --force (src/bootstrap/host.ts),
+  # so HARBOR_FORCE must not be offered for it.
+  case "${ID:-}" in
+    ubuntu|debian) die "Harbor supports Ubuntu 24.04/26.04 LTS and Debian 12/13 (this is ${PRETTY_NAME:-unknown}). Install a supported release; HARBOR_FORCE=1 only covers Debian/Ubuntu derivatives." ;;
+  esac
   case " ${ID_LIKE:-} " in
     *debian*|*ubuntu*)
-      [ "$FORCE" = "1" ] || die "Harbor supports Ubuntu 24.04 LTS and Debian 12/13 (this is ${PRETTY_NAME:-unknown}). This distro is Debian/Ubuntu-based and will probably work: re-run with HARBOR_FORCE=1 (not a tested configuration; you keep the pieces)."
+      [ "$FORCE" = "1" ] || die "Harbor supports Ubuntu 24.04/26.04 LTS and Debian 12/13 (this is ${PRETTY_NAME:-unknown}). This distro is Debian/Ubuntu-based and will probably work: re-run with HARBOR_FORCE=1 (not a tested configuration; you keep the pieces)."
       warn "HARBOR_FORCE=1: ${PRETTY_NAME:-unknown} is not a tested configuration; proceeding anyway"
       ;;
-    *) die "Harbor supports Ubuntu 24.04 LTS and Debian 12/13 (this is ${PRETTY_NAME:-unknown})" ;;
+    *) die "Harbor supports Ubuntu 24.04/26.04 LTS and Debian 12/13 (this is ${PRETTY_NAME:-unknown})" ;;
   esac
 fi
 [ "$(uname -m)" = "x86_64" ] || die "Harbor supports x86-64 machines (this is $(uname -m))"

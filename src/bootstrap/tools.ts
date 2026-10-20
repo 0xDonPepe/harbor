@@ -177,22 +177,30 @@ export { PRODUCT };
 const TS_KEYRING = '/usr/share/keyrings/tailscale-archive-keyring.gpg';
 const TS_LIST = '/etc/apt/sources.list.d/tailscale.list';
 
-export function tailscalePreview(existing: { installed: boolean; backendState: string | null }, authKey: boolean): string[] {
+// pkgs.tailscale.com publishes one suite per distro family + release codename, like Docker's repository,
+// so it follows the same resolution (dockerAptRepo: base codename for derivatives) instead of always noble.
+export function tailscaleAptRepo(repo: { family: string; codename: string }): { suite: string; keyUrl: string; listUrl: string } {
+  const base = `https://pkgs.tailscale.com/stable/${repo.family}/${repo.codename}`;
+  return { suite: `${repo.family} ${repo.codename}`, keyUrl: `${base}.noarmor.gpg`, listUrl: `${base}.tailscale-keyring.list` };
+}
+
+export function tailscalePreview(existing: { installed: boolean; backendState: string | null }, authKey: boolean, aptRepo: { family: string; codename: string }): string[] {
   return [
-    existing.installed ? 'Tailscale already installed: keep it' : `Install tailscale from pkgs.tailscale.com (signed apt repository, noble): keyring ${TS_KEYRING}, list ${TS_LIST}`,
+    existing.installed ? 'Tailscale already installed: keep it' : `Install tailscale from pkgs.tailscale.com (signed apt repository, ${tailscaleAptRepo(aptRepo).suite}): keyring ${TS_KEYRING}, list ${TS_LIST}`,
     existing.backendState === 'Running' ? 'Node already logged in: keep its identity' : authKey ? 'Log the node in with the provided auth key (tailscale up --auth-key from stdin; never on the command line)' : 'Run `tailscale up` and print its login URL for you to approve in a browser',
     `Allow the ${PRODUCT.serviceUser} service account to manage serve entries: tailscale set --operator=${PRODUCT.serviceUser}`,
     'Record the node name; Harbor only publishes apps you explicitly expose (tailscale serve, HTTPS with tailnet certificates)',
   ];
 }
 
-export async function setupTailscale(log: (m: string) => void, existing: { installed: boolean; backendState: string | null }, authKey: string | null, now: string): Promise<ToolRecord> {
+export async function setupTailscale(log: (m: string) => void, existing: { installed: boolean; backendState: string | null }, authKey: string | null, now: string, aptRepo: { family: string; codename: string }): Promise<ToolRecord> {
   if (!existing.installed) {
-    log('installing tailscale from pkgs.tailscale.com');
-    const key = await fetch('https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg');
+    const repo = tailscaleAptRepo(aptRepo);
+    log(`installing tailscale from pkgs.tailscale.com (${repo.suite})`);
+    const key = await fetch(repo.keyUrl);
     if (!key.ok) throw new HarborError('OPERATION_FAILED', `cannot download tailscale keyring: HTTP ${key.status}`);
     writeFileSync(TS_KEYRING, Buffer.from(await key.arrayBuffer()), { mode: 0o644 });
-    const list = await fetch('https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list');
+    const list = await fetch(repo.listUrl);
     if (!list.ok) throw new HarborError('OPERATION_FAILED', `cannot download tailscale apt list: HTTP ${list.status}`);
     const listText = await list.text();
     if (!listText.includes('pkgs.tailscale.com') || !listText.includes(TS_KEYRING)) throw new HarborError('OPERATION_FAILED', 'unexpected tailscale apt list content');

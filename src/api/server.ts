@@ -962,6 +962,8 @@ export async function buildApi(deps: ApiDeps): Promise<FastifyInstance> {
                 },
                 // decision 184: internet access for the new app (omitted = the package's default)
                 internet: { enum: ['direct', 'vpn', 'offline'] },
+                // decision 186: Also on Tailscale (omitted = what Every app on Tailscale says)
+                tailnet: { type: 'boolean' },
               },
             },
             { type: 'object', additionalProperties: false, required: ['kind', 'instanceId'], properties: { kind: { enum: ['start', 'stop', 'restart', 'remove', 'reinstall', 'purge'] }, instanceId: { type: 'string', pattern: UUID_PATTERN } } },

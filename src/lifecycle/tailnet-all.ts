@@ -17,11 +17,21 @@ export const TAILNET_ALL_NOTIFICATION = 'tailnet-all-failed';
 export interface TailnetAllSetting {
   enabled: boolean;
   except: string[]; // instance ids the operator keeps off the tailnet
+  // decision 186: apps whose install asked for an address (Also on Tailscale) while the policy is off; the policy
+  // publishes them like any app, and drops them from here once they have one
+  asked: string[];
 }
+
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
 export function readTailnetAll(repo: Repo): TailnetAllSetting {
   const raw = repo.setting<Partial<TailnetAllSetting>>(TAILNET_ALL_SETTING);
-  return { enabled: raw?.enabled === true, except: Array.isArray(raw?.except) ? raw.except.filter((x): x is string => typeof x === 'string') : [] };
+  return { enabled: raw?.enabled === true, except: ids(raw?.except), asked: ids(raw?.asked) };
+}
+
+// Which apps the policy plans for: every app while it is on, else only the ones their install asked for.
+export function policyCovers(s: Pick<TailnetAllSetting, 'enabled' | 'asked'>, instanceId: string): boolean {
+  return s.enabled || s.asked.includes(instanceId);
 }
 
 // What the policy needs to know about one app (read from the repo by the caller; nothing here does I/O).
@@ -115,7 +125,7 @@ export class TailnetAllPolicy {
   setting(): TailnetAllSetting {
     const s = readTailnetAll(this.ctx.repo);
     const known = new Set(this.ctx.repo.listInstances().map((i) => i.id));
-    return { ...s, except: [...new Set(s.except.filter((id) => known.has(id)))] };
+    return { ...s, except: [...new Set(s.except.filter((id) => known.has(id)))], asked: [...new Set(s.asked.filter((id) => known.has(id)))] };
   }
 
   // Read-modify-write on the freshest stored value (nothing awaits in between), so a change made meanwhile by the
@@ -156,7 +166,7 @@ export class TailnetAllPolicy {
     const r = await tailnetReadiness(this.ctx.tailscale);
     const mem = this.memory(s.except);
     const apps: TailnetAllAppDto[] = this.candidates().map(({ row, app }) => ({ instanceId: row.id, name: row.displayName ?? row.name, url: app.tailnetUrl, ...tailnetAllState(app, mem) }));
-    return { enabled: s.enabled, status: !s.enabled ? 'off' : r.ready ? 'on' : 'waiting', reason: r.ready ? null : r.reason, nextAction: r.ready ? null : r.nextAction, except: s.except, apps };
+    return { enabled: s.enabled, status: !s.enabled ? 'off' : r.ready ? 'on' : 'waiting', reason: r.ready ? null : r.reason, nextAction: r.ready ? null : r.nextAction, except: s.except, asked: s.asked, apps };
   }
 
   // Turning it on is refused while Tailscale cannot publish anything; turning it off never withdraws an address.
@@ -181,7 +191,7 @@ export class TailnetAllPolicy {
   // failed attempt, so the policy publishes it at its next check.
   async setIncluded(idOrName: string, included: boolean): Promise<TailnetAllDto> {
     const inst = this.host.instanceRow(idOrName);
-    this.update((s) => ({ ...s, except: included ? s.except.filter((x) => x !== inst.id) : [...new Set([...s.except, inst.id])] }));
+    this.update((s) => ({ ...s, except: included ? s.except.filter((x) => x !== inst.id) : [...new Set([...s.except, inst.id])], asked: included ? s.asked : s.asked.filter((x) => x !== inst.id) }));
     if (included) {
       this.attempted.delete(inst.id);
       this.failed.delete(inst.id);
@@ -194,16 +204,36 @@ export class TailnetAllPolicy {
   // The operator withdrew an app's tailnet address (policy on or off): keep it off from now on, so turning the
   // policy on later does not undo a deliberate withdrawal.
   operatorWithdrew(instanceId: string): void {
-    if (this.setting().except.includes(instanceId)) return;
-    this.update((s) => ({ ...s, except: [...new Set([...s.except, instanceId])] }));
+    const now = this.setting();
+    if (now.except.includes(instanceId) && !now.asked.includes(instanceId)) return;
+    this.update((s) => ({ ...s, except: [...new Set([...s.except, instanceId])], asked: s.asked.filter((x) => x !== instanceId) }));
     this.ctx.repo.addEvent({ instanceId, phase: 'policy', message: 'its Tailscale address was withdrawn by hand: the "every app gets a Tailscale address" policy leaves it off the tailnet from now on' });
   }
 
-  // A line for the install plan (decision 177): the new app gets its address after it starts.
-  async installNote(): Promise<string | null> {
-    if (!readTailnetAll(this.ctx.repo).enabled) return null;
+  // A line for the install plan (decision 177): the new app gets its address after it starts. `want` is the install's
+  // Also on Tailscale choice (decision 186; absent = what the policy says). publishes: whether it will get one.
+  async installNote(want?: boolean): Promise<{ note: string | null; publishes: boolean }> {
+    const on = readTailnetAll(this.ctx.repo).enabled;
+    if (want === false) return { note: on ? 'It stays off your tailnet (Every app on Tailscale leaves it out).' : null, publishes: false };
+    if (!on && want !== true) return { note: null, publishes: false };
     const r = await tailnetReadiness(this.ctx.tailscale);
-    return r.ready ? 'It also gets an address on your tailnet once it runs (every app gets a Tailscale address).' : `It also gets an address on your tailnet once it runs and Tailscale is ready (${r.reason}).`;
+    const why = on ? ' (every app gets a Tailscale address)' : '';
+    return { note: r.ready ? `It also gets an address on your tailnet once it runs${why}.` : `It also gets an address on your tailnet once it runs and Tailscale is ready (${r.reason}).`, publishes: true };
+  }
+
+  // Decision 186: the install's Also on Tailscale choice, recorded once the app exists (the install operation).
+  // Yes: the policy publishes it once it runs, policy on or off. No: kept off while the policy is on.
+  installChoice(instanceId: string, want: boolean): void {
+    const s = this.update((x) => ({
+      ...x,
+      except: want ? x.except.filter((id) => id !== instanceId) : x.enabled ? [...new Set([...x.except, instanceId])] : x.except,
+      asked: want && !x.enabled ? [...new Set([...x.asked, instanceId])] : x.asked.filter((id) => id !== instanceId),
+    }));
+    if (want) {
+      this.attempted.delete(instanceId);
+      this.failed.delete(instanceId);
+    }
+    if (want || s.enabled) this.ctx.repo.addEvent({ instanceId, phase: 'policy', message: want ? 'gets an address on your tailnet once it runs (Also on Tailscale, chosen at install)' : 'kept off the tailnet (chosen at install)' });
   }
 
   private resolveAll(): void {
@@ -244,21 +274,24 @@ export class TailnetAllPolicy {
   // a tailnet port is picked at plan time, so two plans made together could pick the same one.
   async reconcile(): Promise<void> {
     // the stored exceptions lose purged apps here (a read never writes)
-    if (readTailnetAll(this.ctx.repo).except.length !== this.setting().except.length) this.update((x) => x);
-    const s = this.setting();
+    const stored = readTailnetAll(this.ctx.repo);
+    if (stored.except.length !== this.setting().except.length || stored.asked.length !== this.setting().asked.length) this.update((x) => x);
     this.collect();
     const all = this.candidates();
-    // an app that has its address now is no failure, whoever published it
+    // an app that has its address now is no failure, whoever published it, and no longer waits for one (decision 186)
     for (const c of all) if (c.app.tailnetUrl) this.failed.delete(c.row.id);
+    const got = new Set(all.filter((c) => c.app.tailnetUrl).map((c) => c.row.id));
+    if (this.setting().asked.some((id) => got.has(id))) this.update((x) => ({ ...x, asked: x.asked.filter((id) => !got.has(id)) }));
+    const s = this.setting();
     // a failure notification goes when its condition does (policy off, app kept off, published or retried later)
     for (const n of this.ctx.repo.notifications({ limit: 500 })) {
       if (n.kind !== TAILNET_ALL_NOTIFICATION || !n.instanceId) continue;
-      if (!s.enabled || !this.failed.has(n.instanceId) || s.except.includes(n.instanceId)) this.ctx.notifier.resolve(n.dedupeKey);
+      if (!policyCovers(s, n.instanceId) || !this.failed.has(n.instanceId) || s.except.includes(n.instanceId)) this.ctx.notifier.resolve(n.dedupeKey);
     }
-    if (!s.enabled || this.inFlight.size) return;
+    if ((!s.enabled && !s.asked.length) || this.inFlight.size) return;
     if (this.ctx.repo.listInstances().some((i) => i.activeOperationId)) return;
     const next = tailnetAllCandidates(
-      all.map((c) => c.app),
+      all.filter((c) => policyCovers(s, c.row.id)).map((c) => c.app),
       this.memory(s.except),
     )[0];
     if (!next) return;
@@ -270,7 +303,7 @@ export class TailnetAllPolicy {
       // planning awaited tailscale and Docker: the operator may have turned the policy off or kept this app off
       // meanwhile. Then the plan is simply never submitted (it expires).
       const now = this.setting();
-      if (!now.enabled || now.except.includes(row.id)) {
+      if (!policyCovers(now, row.id) || now.except.includes(row.id)) {
         this.attempted.delete(row.id);
         return;
       }

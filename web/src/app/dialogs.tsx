@@ -300,10 +300,8 @@ export function PlanDialog({ c }: { c: Console }) {
               <li>
                 <span className="fact-k">Address</span>
                 <span>
-                  <a href={plan.exposure.url} target="_blank" rel="noopener noreferrer">
-                    {plan.exposure.url}
-                  </a>{' '}
-                  via {plan.exposure.via === 'tailnet' ? 'your tailnet' : plan.exposure.via === 'proxy' ? 'your own proxy' : 'the public internet'}
+                  {/* not a link: nothing answers there until this plan is approved and has run */}
+                  <span className="url">{plan.exposure.url}</span> <span className="muted small">(once you approve)</span> via {plan.exposure.via === 'tailnet' ? 'your tailnet' : plan.exposure.via === 'proxy' ? 'your own proxy' : 'the public internet'}
                   {plan.exposure.protection === 'basic' ? ', behind a generated password' : ''}
                   {plan.exposure.makePrimary ? '; becomes the address the app uses for itself' : ''}
                 </span>
@@ -504,8 +502,16 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
   // Main address (decision 116): only choices that exist right now; apps that need HTTPS cannot pick plain http.
   const [addr, setAddr] = useState<AddressOptionsDto | null>(null);
   const [mainPick, setMainPick] = useState<string | null>(null); // 'local' | 'tailnet' | 'public:<host>'
+  // Decision 186: Also on Tailscale. Ticked by default while Every app on Tailscale is on; the request carries the
+  // choice only when it differs from that (absent = the policy decides).
+  const [tailnetPolicyOn, setTailnetPolicyOn] = useState(false);
+  const [tailnetPick, setTailnetPick] = useState<boolean | null>(null);
   useEffect(() => {
     api.addressOptions().then(setAddr, () => setAddr({ local: { kind: 'loopback', host: 'localhost' }, tailnet: null, domains: [] }));
+    api.tailnetAll().then(
+      (p) => setTailnetPolicyOn(p.enabled),
+      () => setTailnetPolicyOn(false),
+    );
   }, []);
   const localOk = !item.requiresHttps || (addr?.local.kind ?? 'loopback') !== 'http';
   const mainChoices: { id: string; label: string; ok: boolean }[] = addr
@@ -518,6 +524,9 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
   const mainSel = mainPick ?? mainChoices.find((m) => m.ok)?.id ?? null;
   const mainBlocked = addr !== null && !mainChoices.some((m) => m.ok);
   const main = mainSel === 'tailnet' ? { via: 'tailnet' as const } : mainSel?.startsWith('public:') ? { via: 'public' as const, hostname: mainSel.slice('public:'.length) } : undefined;
+  const offerTailnet = Boolean(addr?.tailnet) && mainSel !== 'tailnet';
+  const alsoTailnet = tailnetPick ?? tailnetPolicyOn;
+  const tailnetReq = offerTailnet && tailnetPick !== null && tailnetPick !== tailnetPolicyOn ? { tailnet: tailnetPick } : {};
   const external = item.claims.filter((c) => c.external);
   const missingRequired = external.some((c) => c.external!.required && !(folders[c.id] ?? '').trim());
   const storage = Object.fromEntries(Object.entries(folders).filter(([, v]) => v.trim()).map(([k, v]) => [k, { hostPath: v.trim() }]));
@@ -1078,6 +1087,12 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
                 ))}
               </fieldset>
             )}
+            {offerTailnet && addr?.tailnet && (
+              <label className="check small">
+                <input type="checkbox" checked={alsoTailnet} onChange={(e) => setTailnetPick(e.target.checked)} aria-label="Also on Tailscale" /> Also on Tailscale — your tailnet devices get their own address at https://{addr.tailnet.hostname}
+                {tailnetPolicyOn && !alsoTailnet ? <span className="muted"> · kept off although every app gets one</span> : null}
+              </label>
+            )}
             <div className="choice">
               <span className="choice-icon">
                 <GlobeIcon />
@@ -1245,7 +1260,7 @@ export function InstallWizard({ item, instances = [], installed = 0, mode: start
             <button
               className="btn primary"
               disabled={item.availability !== 'available' || nameBlocked || mainBlocked || missingRequired || missingLink || locationMissingPass || locationBlocked || (place === 'local' && !locationDir) || (place === 'external' && !locationDir && !formattedDrive)}
-              onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...(Object.keys(links).length ? { links } : {}), ...(internetPick !== internetDefault ? { internet: internetPick } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
+              onClick={() => onStart({ kind: 'install', packageId: item.id, name: nameTrim, storage, ...(main ? { main } : {}), ...tailnetReq, ...(Object.keys(links).length ? { links } : {}), ...(internetPick !== internetDefault ? { internet: internetPick } : {}), ...(locationDir ? (customPass ? { location: { dir: locationDir, passphrase } } : { location: { dir: locationDir } }) : formattedDrive && driveDir ? (customPass ? { location: { dir: `${driveDir}/${item.id}`, passphrase } } : { location: { dir: `${driveDir}/${item.id}` } }) : {}) })}
               aria-label={`Install ${item.name} now`}
               title={nameError ? nameError : locationBlocked ? (locationNeedsFormat ? 'This drive needs formatting as ext4 first' : 'Mount the drive before installing') : locationMissingPass ? 'The encryption passphrase needs 8+ characters' : undefined}
             >

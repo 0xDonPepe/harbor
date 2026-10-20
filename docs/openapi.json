@@ -2678,6 +2678,9 @@
                           "vpn",
                           "offline"
                         ]
+                      },
+                      "tailnet": {
+                        "type": "boolean"
                       }
                     }
                   },

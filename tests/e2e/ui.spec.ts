@@ -45,6 +45,14 @@ function trackOperations(page: Page) {
 // Decision 183: finished items stay in the tray until dismissed (values shown once stay even after Clear finished), so
 // the wait is for the result of the operation it follows: the last one accepted since the previous wait, by its id
 // (FinishedItem's data-op). No older result, shown-once leftovers included, can satisfy it. Then plain ones are cleared.
+async function clearTray(page: Page) {
+  const clear = page.locator('aside.tray').getByRole('button', { name: 'Clear finished', exact: true });
+  await expect.poll(async () => (await page.locator('aside.tray section.tray-item:not(.done)').count()) === 0, { timeout: 60_000 }).toBe(true);
+  if (await clear.count()) await clear.click();
+  // every operation accepted so far has finished: trayDone waits for the next one only
+  const t = acceptedOps.get(page);
+  if (t) t.waited = t.ids.length;
+}
 async function trayDone(page: Page, kind: string) {
   const t = acceptedOps.get(page);
   if (!t) throw new Error('trayDone needs login(page) first (it tracks the accepted operations)');
@@ -342,6 +350,9 @@ test('publish wizard: tailnet address on the tile; public exposure shows one-tim
   const dlg = page.getByRole('dialog');
   await expect(dlg).toContainText('keeps listening on 127.0.0.1');
   await dlg.getByRole('button', { name: 'Publish', exact: true }).click(); // tailnet is the default path
+  // the review shows the address as text, not a link: nothing answers there until it is approved (decision 186)
+  await expect(page.getByRole('dialog')).toContainText('(once you approve)');
+  await expect(page.getByRole('dialog').getByRole('link', { name: /tail1234\.ts\.net/ })).toHaveCount(0);
   await approve(page, 'Publish');
   await trayDone(page, 'Expose');
   const published = page.getByRole('region', { name: 'Published addresses' });
@@ -2005,4 +2016,52 @@ network:
   await expect(rm).toContainText('quiet-e2e goes through the VPN and will have no internet');
   await rm.getByRole('button', { name: 'Remove VPN', exact: true }).click();
   await expect(card.getByRole('button', { name: 'Add VPN…', exact: true })).toBeVisible();
+});
+
+// After decision 177's test (which turns the policy off again): the bulk list works on whatever apps exist.
+test('decision 186: Apps on Tailscale — select all, review, apply; select none withdraws; Also on Tailscale at install', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Remote access/ }).click();
+  await expect(page.getByRole('heading', { name: 'Apps on Tailscale', exact: true })).toBeVisible();
+  const list = page.getByRole('list', { name: 'Apps on Tailscale', exact: true });
+  const boxes = list.getByRole('checkbox');
+  const links = () => list.getByRole('link').count();
+  const before = await links();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  const n = await boxes.count();
+  for (let i = 0; i < n; i++) await expect(boxes.nth(i)).toBeChecked();
+  await page.getByRole('button', { name: /^Review \d+ changes?$/ }).click();
+  const dlg = page.getByRole('dialog', { name: 'Change Tailscale addresses?' });
+  const getting = dlg.getByRole('list', { name: 'Apps that get a Tailscale address' });
+  // the addresses are shown, as text: nothing answers there before Apply
+  await expect(getting).toContainText('https://harbor-test.tail1234.ts.net:');
+  await expect(dlg.getByRole('link')).toHaveCount(0);
+  const k = await getting.getByRole('listitem').count();
+  await dlg.getByRole('button', { name: /^Apply \d+ changes?$/ }).click();
+  await expect.poll(links, { timeout: 90_000 }).toBe(before + k);
+  await expect(page.getByRole('button', { name: 'No changes', exact: true })).toBeVisible();
+  await clearTray(page); // the finished items sit over the page's lower right corner
+  // select none: every address is withdrawn
+  await page.getByRole('button', { name: 'Select none', exact: true }).click();
+  await page.getByRole('button', { name: /^Review \d+ changes?$/ }).click();
+  await expect(dlg.getByRole('list', { name: 'Apps that lose their Tailscale address' }).getByRole('listitem')).toHaveCount(before + k);
+  await dlg.getByRole('button', { name: /^Apply \d+ changes?$/ }).click();
+  await expect.poll(links, { timeout: 90_000 }).toBe(0);
+  await clearTray(page);
+  // Also on Tailscale at install: unticked while the policy is off; ticked, the review says so and the app gets one
+  await page.getByRole('link', { name: 'App Store' }).click();
+  await page.getByRole('button', { name: 'Install Excalidraw', exact: true }).or(page.getByRole('button', { name: 'Add another copy of Excalidraw', exact: true })).click();
+  const wiz = page.getByRole('dialog');
+  const also = wiz.getByRole('checkbox', { name: 'Also on Tailscale', exact: true });
+  await expect(also).not.toBeChecked();
+  await also.check();
+  await wiz.getByRole('button', { name: 'Install Excalidraw now' }).click();
+  await expect(page.getByRole('dialog')).toContainText('It also gets an address on your tailnet once it runs.');
+  await approve(page, 'Install');
+  await expect(page.locator('aside.tray').getByRole('heading', { name: /^Excalidraw \(excalidraw-\d+\) is ready$/ }).first()).toBeVisible({ timeout: 30_000 });
+  await dismissRecovery(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: /Remote access/ }).click();
+  await expect.poll(links, { timeout: 60_000 }).toBe(1);
 });

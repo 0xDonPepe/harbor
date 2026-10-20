@@ -313,3 +313,58 @@ describe('every app gets a Tailscale address (decision 177)', () => {
     expect((await policy()).except).not.toContain(ids['alpha']);
   });
 });
+
+describe('Also on Tailscale at install (decision 186)', () => {
+  const installWith = async (name: string, tailnet?: boolean, packageId = 'demo') => {
+    const r = await h.api.run({ kind: 'install', packageId, name, ...(tailnet === undefined ? {} : { tailnet }) });
+    expect(r.op.state, JSON.stringify(r.op.error)).toBe('succeeded');
+    ids[name] = r.op.instanceId;
+    return r.plan;
+  };
+
+  it('with the policy off, the app whose install asked gets exactly one address; one that did not ask gets none', async () => {
+    await setPolicy(false);
+    const asked = await h.api.plan({ kind: 'install', packageId: 'demo', name: 'sigma-probe', tailnet: true });
+    expect(asked.notes.join(' ')).toMatch(/It also gets an address on your tailnet once it runs\./);
+    const setup = await h.api.plan({ kind: 'install', packageId: 'demo-setup', name: 'sigma-setup', tailnet: true });
+    expect(setup.warnings.join(' ')).toMatch(/Also on Tailscale: Demo Setup's first-run page \(the first visitor creates the account\) is reachable from every device on your tailnet/);
+    expect((await h.api.plan({ kind: 'install', packageId: 'demo', name: 'sigma-probe' })).notes.join(' ')).not.toMatch(/tailnet/);
+    await installWith('sigma', true);
+    await installWith('tau');
+    await onTailnet('sigma');
+    await sleep(1_500);
+    expect(policyOps(ids['sigma']).map((o) => [o.kind, o.state])).toEqual([['expose', 'succeeded']]);
+    expect(policyOps(ids['tau'])).toEqual([]);
+    expect((await tailnetOf()).some((e) => e.instanceId === ids['tau'])).toBe(false);
+    const p = await policy();
+    expect(p.enabled).toBe(false);
+    expect(p.asked).toEqual([]); // dropped once it has its address
+    expect(appState(p, 'sigma')?.state).toBe('published');
+    // not the main address
+    expect((await h.api.instances()).find((i) => i.id === ids['sigma'])!.endpoints[0]!.primary).toBe('loopback');
+  });
+
+  it('a tailnet main address already is one: the install records no extra choice', async () => {
+    const plan = await h.api.plan({ kind: 'install', packageId: 'demo', name: 'phi-probe', main: { via: 'tailnet' }, tailnet: true });
+    expect(plan.exposure).toMatchObject({ via: 'tailnet', makePrimary: true });
+    expect(plan.notes.join(' ')).not.toMatch(/also gets an address/);
+  });
+
+  it('with the policy on, an install that says no stays off: it joins the exceptions', async () => {
+    await setPolicy(true);
+    await onTailnet('tau'); // the policy covers the app that did not ask
+    const plan = await h.api.plan({ kind: 'install', packageId: 'demo', name: 'upsilon-probe', tailnet: false });
+    expect(plan.notes.join(' ')).toMatch(/stays off your tailnet/);
+    expect(plan.warnings.join(' ')).not.toMatch(/tailnet/);
+    await installWith('upsilon', false);
+    await sleep(1_500);
+    expect(policyOps(ids['upsilon'])).toEqual([]);
+    const p = await policy();
+    expect(p.except).toContain(ids['upsilon']);
+    expect(appState(p, 'upsilon')?.state).toBe('excluded');
+  });
+
+  it('the request schema takes only a boolean', async () => {
+    expect((await h.api.expectError(422, 'INVALID_REQUEST', 'POST', '/v1/plans', { kind: 'install', packageId: 'demo', name: 'chi', tailnet: 'yes' })).error.message).toMatch(/tailnet: must be boolean/);
+  });
+});

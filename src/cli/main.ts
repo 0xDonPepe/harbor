@@ -528,10 +528,12 @@ program
   .option('--link <id=app[/endpoint]>', 'which installed app satisfies a link of this app (repeatable; the only candidate is picked by itself)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--set <id=value>', 'choose a setting of the app instead of its default, e.g. --set context-length=16384 (repeatable; `harbor settings <app>` lists them once installed)', (v: string, acc: string[]) => [...acc, v], [] as string[])
   .option('--internet <direct|vpn|offline>', 'internet access instead of the app\'s default: straight out, only through the VPN (harbor vpn), or none at all (decision 184)')
+  .option('--tailnet', 'also give it an address on your tailnet once it runs (not its main address; decision 186)')
+  .option('--no-tailnet', 'keep it off your tailnet even while every-app Tailscale addresses are on')
   .option('--credentials-file <path>', 'write one-time values (admin login, shown-once secrets) to this new file (0600) instead of the terminal')
   .option('--yes', 'approve the shown plan non-interactively', false)
   .option('--no-wait', 'return the operation ID instead of waiting')
-  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; set: string[]; internet?: string; credentialsFile?: string; yes: boolean; wait: boolean }) => {
+  .action(async (pkg: string, opts: { name?: string; storage: string[]; location?: string; passphraseStdin?: boolean; unencrypted?: boolean; secret: string[]; link: string[]; set: string[]; internet?: string; tailnet?: boolean; credentialsFile?: string; yes: boolean; wait: boolean }) => {
     const api = client();
     const storage: Record<string, { hostPath: string }> = {};
     for (const s of opts.storage) {
@@ -551,6 +553,7 @@ program
     if (Object.keys(links).length) extra['links'] = links;
     const settings = readSetFlags(opts.set);
     if (opts.internet !== undefined) extra['internet'] = internetFlag(opts.internet, false);
+    if (opts.tailnet !== undefined) extra['tailnet'] = opts.tailnet;
     const plan = await createPlan(api, 'install', pkg, opts.name, extra);
     await approveAndApply(api, plan, { yes: opts.yes, wait: opts.wait, passphrase, secrets, settings, ...(opts.credentialsFile ? { credentialsFile: opts.credentialsFile } : {}) });
   });

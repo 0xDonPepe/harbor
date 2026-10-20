@@ -448,6 +448,13 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
+## Phase 68 — Tailscale addresses in bulk and at install (2026-10-20, 0.37.0) ✅
+- [x] Found on the home server: Plane's `:18998` "tailnet address" was a Publish review never approved, shown as a link; Harbor and `tailscale serve` agreed (no repair bug)
+- [x] Decision 186: Settings → Remote access *Apps on Tailscale* (checkboxes, Select all/none, one review of N plain expose/unexpose plans, Apply queues them, refusals grouped by reason); install page *Also on Tailscale* + request `tailnet`, CLI `--tailnet/--no-tailnet`; policy setting gains `asked`; review shows a planned address as text
+- [x] Tests: unit `tailnet-all.test.ts` (+1: asked/coverage, old values); integration `tailnet-all.test.ts` (+4: asked with the policy off, tailnet main address, no with the policy on, schema); e2e `decision 186` (bulk publish + withdraw, install checkbox) and the Publish review text; e2e app port range widened to 80 ports
+- [x] 0.37.0: `package.json` bumped, release notes `docs/releases/v0.37.0.md`; gate: lint, typecheck, unit 631 (+2 skipped), integration 379 + 3 skipped, e2e 44, catalog verify/hash (fixtures), openapi current (no route added)
+- [ ] Live: on the home server once updated (publish Plane from the list; an install with Also on Tailscale)
+
 ## Phase 67 — VPN and offline apps (2026-10-20, 0.36.0) ✅
 - [x] Decisions 184–185 (docs/design/VPN.md): one WireGuard tunnel for apps only; per-app internet access `direct | vpn | offline` (operator's choice in `settings.json` `internet`, package default `network.internet`, every-app VPN switch); kill switch; offline = nothing opened at all
 - [x] Engine: `src/egress/` (wg-quick parser refusing command keys, nft ruleset + ip rules, effective mode, rendered resolver, fake + root provider, EgressService); root step `bootstrap/egress-apply.ts` (`harbor-egress@<action>`, FIFO for the file, `/etc/harbor/egress` 0700); boot units `harbor-egress.service` (Docker requires it, `nft -f rules.nft`) and `harbor-vpn.service`; runner: `up --no-start` → rules → start, rules before `compose start`, re-create on a stale resolver, drop on remove/purge; configure/install/update plans carry `internet`; `vpn-policy` restarts after the every-app switch

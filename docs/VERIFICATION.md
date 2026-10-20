@@ -1148,6 +1148,25 @@ the host namespace (a DNS leak; fixed with a rendered resolver per mode), silent
 app reaching other apps through its bridge gateway. All four were fixed and re-checked live on the same box.
 Not covered live: a real reboot (harbor-old's root is LUKS; the boot test replays the same unit ordering).
 
+## 3u. Tailscale addresses in bulk and at install (2026-10-20, Harbor 0.37.0, decision 186)
+
+**What started it (home server, read-only checks):** Plane's `https://harbor.<tailnet>.ts.net:18998/` refused
+connections. `tailscale serve status --json` held only the console (443) and Open WebUI (18999), and Harbor's
+`exposures` table agreed: Plane had no tailnet address. Its only expose plan (17:28 that day) was never submitted,
+and the review had shown its future address as a link. Harbor's journal had no tailnet or observer warnings.
+
+| Gate (macOS dev loop) | Result |
+|---|---|
+| `pnpm lint`, `pnpm typecheck` | clean |
+| `pnpm test` (unit) | 631 passed, 2 skipped (+1: `asked` read defensively, the policy covers asked apps only while off) |
+| `pnpm test:integration` | 379 passed, 3 live-Docker skipped (`tailnet-all.test.ts` +4: an install that asks gets exactly one address with the policy off and leaves `asked`, one that does not ask gets none, not the main address; a tailnet main address records no extra choice; no with the policy on joins the exceptions; the schema takes only a boolean) |
+| `pnpm build && pnpm test:e2e` | 44 passed (`decision 186`: Select all → review lists addresses as text → Apply → every app published; Select none → every address withdrawn; Also on Tailscale at install → the review says so → the app gets its address. The Publish review shows "(once you approve)" and no link) |
+| `catalog:verify` / `catalog:hash --check` (fixtures), `openapi -- --check` | ok / ok / current |
+
+The first e2e run of the bulk list hit the suite's 20 app ports (every app plus a tailnet port each): the e2e daemon
+now has 80, and the dialog groups refusals by reason (one line naming the apps, not one per app).
+Not covered live yet: the home server runs 0.36.0.
+
 ## 4. Qualified versions
 
 | Component | Version | Source |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readTailnetAll, tailnetAllCandidates, tailnetAllState, tailnetReadiness, type TailnetAllCandidate, type TailnetAllMemory } from '../../src/lifecycle/tailnet-all.js';
+import { policyCovers, readTailnetAll, tailnetAllCandidates, tailnetAllState, tailnetReadiness, type TailnetAllCandidate, type TailnetAllMemory } from '../../src/lifecycle/tailnet-all.js';
 import { FakeTailscale } from '../../src/exposure/tailscale.js';
 import type { Repo } from '../../src/state/repo.js';
 
@@ -47,9 +47,18 @@ describe('every app gets a Tailscale address: selection (decision 177)', () => {
 
   it('reads the stored policy defensively (absent = off, junk dropped)', () => {
     const repo = (v: unknown) => ({ setting: () => v }) as unknown as Repo;
-    expect(readTailnetAll(repo(null))).toEqual({ enabled: false, except: [] });
-    expect(readTailnetAll(repo({ enabled: true, except: ['a', 3, null] }))).toEqual({ enabled: true, except: ['a'] });
-    expect(readTailnetAll(repo({ enabled: 'yes' }))).toEqual({ enabled: false, except: [] });
+    expect(readTailnetAll(repo(null))).toEqual({ enabled: false, except: [], asked: [] });
+    expect(readTailnetAll(repo({ enabled: true, except: ['a', 3, null] }))).toEqual({ enabled: true, except: ['a'], asked: [] });
+    expect(readTailnetAll(repo({ enabled: 'yes' }))).toEqual({ enabled: false, except: [], asked: [] });
+    // decision 186: a value written before 0.37.0 has no asked list
+    expect(readTailnetAll(repo({ enabled: false, except: [], asked: ['b', 7] }))).toEqual({ enabled: false, except: [], asked: ['b'] });
+  });
+
+  it('covers every app while on, and only the apps whose install asked for an address while off (decision 186)', () => {
+    expect(policyCovers({ enabled: true, asked: [] }, 'a')).toBe(true);
+    expect(policyCovers({ enabled: false, asked: [] }, 'a')).toBe(false);
+    expect(policyCovers({ enabled: false, asked: ['a'] }, 'a')).toBe(true);
+    expect(policyCovers({ enabled: false, asked: ['a'] }, 'b')).toBe(false);
   });
 
   it('Tailscale readiness: not installed, not logged in, HTTPS off, ready', async () => {

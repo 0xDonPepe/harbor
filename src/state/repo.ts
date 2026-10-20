@@ -212,6 +212,8 @@ export interface PlanProposal {
   internet?: PlanInternetDto;
   // configure: the internet choice is the only change (nothing is re-rendered or restarted)
   internetOnly?: boolean;
+  // decision 186: install: Also on Tailscale, recorded by the install operation (absent = the policy decides)
+  tailnet?: boolean;
   changes: string[];
   warnings: string[];
   notes?: string[]; // decision 157: informational lines (absent on plans made before 0.27.1)

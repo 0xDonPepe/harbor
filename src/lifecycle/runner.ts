@@ -1237,6 +1237,8 @@ export class OperationRunner {
     if (!plan.proposal.restore && Object.keys(this.chosenSettings).length) this.storeSettings(op, pkg.manifest, this.chosenSettings);
     // decision 184: the internet access chosen in the review (a restore brought back the one it had instead)
     if (!plan.proposal.restore && plan.proposal.internet?.choice) writeInternetChoice(this.ctx.config.stateDir, inst.id, plan.proposal.internet.choice);
+    // decision 186: Also on Tailscale; the policy publishes it once it runs (its own operation, after this one)
+    if (plan.proposal.tailnet !== undefined) this.ctx.service.tailnetAll.installChoice(inst.id, plan.proposal.tailnet);
     await this.applyPlannedLinks(op, inst, plan.proposal.links ?? [], sink);
     const values = this.readSecrets(pkg, dirs.secrets, sink);
     const provisioned = this.readProvisioned(pkg, dirs.secrets, sink);

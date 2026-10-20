@@ -78,7 +78,7 @@ function mockTailnetAll(): TailnetAllDto {
       const state: TailnetAllDto['apps'][number]['state'] = ex ? 'published' : tailnetAll.except.includes(i.id) ? 'excluded' : i.runtime === 'running' ? 'pending' : 'waiting';
       return { instanceId: i.id, name: i.displayName ?? i.name, state, url: ex?.url ?? null, note: state === 'waiting' ? 'stopped; it gets its address when it runs' : state === 'pending' ? 'gets its address at the next check' : null };
     });
-  return { enabled: tailnetAll.enabled, status: tailnetAll.enabled ? 'on' : 'off', reason: null, nextAction: null, except: tailnetAll.except, apps };
+  return { enabled: tailnetAll.enabled, status: tailnetAll.enabled ? 'on' : 'off', reason: null, nextAction: null, except: tailnetAll.except, asked: [], apps };
 }
 // decision 184: the apps' VPN. ?vpn=on shows a connected tunnel, ?vpn=down one that stopped answering.
 const vpnParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('vpn') : null;

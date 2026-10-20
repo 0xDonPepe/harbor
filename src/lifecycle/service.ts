@@ -2093,7 +2093,9 @@ export class ApplicationService {
       } else if (requiresHttps(pkg) && this.ctx.config.lan.enabled && !this.httpsEnabled()) {
         throw new HarborError('INVALID_STATE', `${pkg.manifest.metadata.name} needs HTTPS: browsers block what it needs on a plain http:// address`, { nextAction: 'Turn on secure addresses in Settings → Network, or install it with Tailscale or one of your domains as its main address.' });
       }
-      const tailnetNote = await this.tailnetAll.installNote();
+      // decision 186: Also on Tailscale; a tailnet main address already is one
+      const alsoTailnet = mainExposure?.via === 'tailnet' ? undefined : req.tailnet;
+      const tailnet = await this.tailnetAll.installNote(alsoTailnet);
       const internetPlan = plannedInstallInternet(pkg.manifest, proposed.name, req.internet, this.internetContext());
       const proposal: PlanProposal = {
         packageId: pkg.id,
@@ -2110,6 +2112,7 @@ export class ApplicationService {
         links,
         ...(pkg.manifest.settings?.length ? { settings: plannedInstallSettings(pkg.manifest) } : {}),
         internet: internetPlan.internet,
+        ...(alsoTailnet !== undefined ? { tailnet: alsoTailnet } : {}),
         changes: [
           `Install ${pkg.manifest.metadata.name} (${pkg.id} revision ${pkg.revision}) as instance "${proposed.name}"`,
           `Create Compose project ${identity.project} with a private bridge network`,
@@ -2142,7 +2145,7 @@ export class ApplicationService {
           ...(location && !location.defaultKey ? ['Lose both its passphrase and your Harbor recovery key and the data is gone.'] : []),
           ...(location ? [] : [NOT_ENCRYPTED_WARNING]),
           // decision 177: the policy publishes it as soon as it answers, before anyone has created its account
-          ...(tailnetNote && mainExposure?.via !== 'tailnet' && (pkg.manifest.setup || pkg.manifest.defaultCredentials) ? [`Every app on Tailscale is on: ${pkg.manifest.metadata.name}'s ${pkg.manifest.setup ? 'first-run page (the first visitor creates the account)' : 'default login'} is reachable from every device on your tailnet once it runs. ${pkg.manifest.setup ? 'Create its account' : 'Change that login'} right after install, or switch its On Tailscale off in its drawer while it installs.`] : []),
+          ...(tailnet.publishes && mainExposure?.via !== 'tailnet' && (pkg.manifest.setup || pkg.manifest.defaultCredentials) ? [`${alsoTailnet ? 'Also on Tailscale' : 'Every app on Tailscale is on'}: ${pkg.manifest.metadata.name}'s ${pkg.manifest.setup ? 'first-run page (the first visitor creates the account)' : 'default login'} is reachable from every device on your tailnet once it runs. ${pkg.manifest.setup ? 'Create its account' : 'Change that login'} right after install, or switch its On Tailscale off in its drawer while it installs.`] : []),
         ],
         // decision 157: the plain facts (how it opens, what happens next) read as notes, not amber warnings
         notes: [
@@ -2156,7 +2159,7 @@ export class ApplicationService {
             : []),
           ...(pkg.manifest.setup ? [`After install you'll create your ${pkg.manifest.metadata.name} account; Harbor does not create it.`] : []),
           // decision 177: the every-app Tailscale policy publishes it after it starts (through its own plan)
-          ...(mainExposure?.via === 'tailnet' ? [] : [tailnetNote].filter((n): n is string => n !== null)),
+          ...(mainExposure?.via === 'tailnet' ? [] : [tailnet.note].filter((n): n is string => n !== null)),
         ],
         releaseHashes: pkg.hashes,
         ...(mainExposure ? { exposure: mainExposure } : {}),

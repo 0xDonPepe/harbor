@@ -654,7 +654,7 @@ The console's **Settings** page covers what a household operator needs after boo
 |---|---|
 | Account | change the administrator password (every other logged-in browser or CLI is signed out); *Remember this browser* (30-day session), the session list, *Log out of other sessions*, *Log out*; *What should Home call you?* sets the greeting name Home shows ("Good evening, Carlos") — the login name stays the credential, clearing it falls back to the login name |
 | Network | **secure addresses** on your home network: turn on HTTPS for Harbor and every app (`https://harbor.local/` with no warning once each device trusts the one Harbor certificate); the card shows whether *this* browser already trusts it, and *How to trust it on a new device…* walks through macOS, iOS (install the profile, then enable full trust), Windows, Android and Linux, plus the Firefox note. Once a browser trusts the certificate, opening `http://harbor.local/` moves to `https://harbor.local/` by itself (Harbor checks the browser really trusts it first, so an untrusted device stays on http with no warning page). To stay on plain http in one tab anyway, add `?skiphttps` to the address (`http://harbor.local/?skiphttps`); `?skiphttps=false` undoes it. Apps open with the same scheme as the console: from an http console their plain http address, from https their secure one. The certificate can only vouch for this machine's `.local` names, its own name and private addresses — never another website. A certificate from Harbor 0.30 or older could vouch for any site: the card then says so and offers *Replace certificate…* (`harbor network replace-ca`); trust the new one once per device afterwards. Harbor answers its console names only to devices on your own network, even when a public domain is published |
-| Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; **Every app on Tailscale** (give every app its own tailnet address, see §6a); log out of the tailnet |
+| Remote access | connect this machine to your Tailscale tailnet by clicking *Log in with Tailscale* (opens the approval page) or by pasting an auth key; see the node name; turn *Harbor on your tailnet* on or off; **Every app on Tailscale** (give every app its own tailnet address, see §6a); **Apps on Tailscale** (tick the apps that get an address, *Select all* / *Select none*, review and apply in one go); log out of the tailnet |
 | Public addresses | the wizard for publishing on the internet: this machine's public address, your domains with a DNS check (*Points here* / *Points elsewhere* / *No DNS record yet*), which app uses each, re-check and forget; certificates are automatic |
 | Remote access (details) | tailnet addresses, node key expiry, link to the Tailscale admin console; the auth key you used is single-use and is not stored |
 | Storage | disks with free space, removable drives (mount/eject, auto-mount/auto-start toggles), the Harbor data folder (`/srv/harbor`, where Harbor may create folders for you), folders currently used by apps, and a folder browser with *Create folder here* |
@@ -1133,6 +1133,22 @@ Tailscale** gives every app its own tailnet address instead (decision 177):
 - **Turning it off** never withdraws an address: every app keeps the one it has; withdraw them one by one.
 - Every kind of app counts, API-only ones too (a script on your laptop can use the address as well).
 - Uninstalled apps leave the list of apps kept off; a removed app you may reinstall keeps its choice.
+
+### Choosing apps for Tailscale in bulk, and at install (since 0.37.0)
+
+- **Settings → Remote access → Apps on Tailscale** lists every app with a checkbox: ticked = it has a
+  tailnet address. Tick or untick apps (or use **Select all** / **Select none**), then **Review N changes**:
+  the dialog lists the apps that get an address (with the address each will have) and the ones that lose
+  theirs, plus any app that cannot change and why (for example *no free port left*). **Apply** sends them
+  all to the queue; each is its own operation in the tray. Unticking an app also keeps it off when Every
+  app on Tailscale is on; ticking one that was kept off includes it again.
+- **Install page → Access → Also on Tailscale**: the new app also gets a tailnet address once it runs (not
+  its main address; that is *Change* under Access). It is ticked by default only while Every app on
+  Tailscale is on; untick it there to keep this one app off. CLI: `harbor install <app> --tailnet`
+  (or `--no-tailnet`).
+- **An address in a review is not live yet.** The review of a *Publish* shows the address it will create as
+  plain text, "(once you approve)". Nothing answers there until you approve and the operation has run;
+  the address then appears in the app's drawer, on Publishing and in the tray.
 
 ```sh
 harbor tailscale every-app                          # on/off, waiting reason, where each app stands

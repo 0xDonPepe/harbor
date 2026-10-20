@@ -570,7 +570,9 @@ export interface InstallLocationRequest {
 }
 export type PlanRequest =
   // internet (decision 184): the operator's choice for the new app (absent = the package's default)
-  | { kind: 'install'; packageId: string; name?: string; storage?: Record<string, { hostPath: string }>; location?: InstallLocationRequest; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode }
+  // tailnet (decision 186): Also on Tailscale — an address on the tailnet once it runs (absent = what Every app on
+  // Tailscale says; false keeps it off while that is on). Not the main address: that is `main`.
+  | { kind: 'install'; packageId: string; name?: string; storage?: Record<string, { hostPath: string }>; location?: InstallLocationRequest; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode; tailnet?: boolean }
   | { kind: 'start' | 'stop' | 'restart' | 'remove' | 'reinstall' | 'purge'; instanceId: string }
   | { kind: 'update'; instanceId: string; storage?: Record<string, { hostPath: string }>; links?: Record<string, LinkChoice> }
   // decisions 125/126: secrets listed in `secrets` are replaced by the values the submission carries;
@@ -696,6 +698,7 @@ export interface TailnetAllDto {
   reason: string | null;
   nextAction: string | null;
   except: string[]; // instance ids kept off the tailnet
+  asked: string[]; // decision 186: instance ids whose install asked for an address (published even with the policy off)
   apps: TailnetAllAppDto[]; // every app that is not removed, whatever the policy says (the confirm dialog lists them)
 }
 

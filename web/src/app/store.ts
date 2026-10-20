@@ -17,7 +17,7 @@ export interface Data {
 }
 
 export type Action =
-  | { kind: 'install'; packageId: string; name: string; storage?: Record<string, { hostPath: string }>; location?: { dir: string; passphrase?: string }; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode }
+  | { kind: 'install'; packageId: string; name: string; storage?: Record<string, { hostPath: string }>; location?: { dir: string; passphrase?: string }; main?: InstallMainAddress; links?: Record<string, LinkChoice>; internet?: InternetMode; tailnet?: boolean }
   // decisions 125/126/180: replace typed-in secrets (values asked in the review dialog), change link providers
   // and/or settings (the new values, from the app page's Settings → Change…)
   // decision 184: internet access (a mode, or 'default' to follow the package again)
@@ -40,7 +40,7 @@ export function planRequestFor(a: Action): PlanRequest {
       // The passphrase is validated at plan time but never stored in the plan:
       // planRequestFor strips it for the plan call; the approve step sends it
       // with the submission (see submitPassphraseFor).
-      return { kind: 'install', packageId: a.packageId, ...(a.name ? { name: a.name } : {}), ...(a.storage && Object.keys(a.storage).length ? { storage: a.storage } : {}), ...(a.location ? { location: a.location } : {}), ...(a.main ? { main: a.main } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.internet ? { internet: a.internet } : {}) };
+      return { kind: 'install', packageId: a.packageId, ...(a.name ? { name: a.name } : {}), ...(a.storage && Object.keys(a.storage).length ? { storage: a.storage } : {}), ...(a.location ? { location: a.location } : {}), ...(a.main ? { main: a.main } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.internet ? { internet: a.internet } : {}), ...(a.tailnet !== undefined ? { tailnet: a.tailnet } : {}) };
     case 'configure':
       return { kind: 'configure', instanceId: a.instance.id, ...(a.secrets?.length ? { secrets: a.secrets } : {}), ...(a.links && Object.keys(a.links).length ? { links: a.links } : {}), ...(a.settings && Object.keys(a.settings).length ? { settings: a.settings } : {}), ...(a.internet ? { internet: a.internet } : {}) };
     case 'expose':
@@ -417,7 +417,7 @@ export function useConsole(onAuthLost: (msg?: string) => void) {
       for (const p of prev) if (!left.includes(p)) acceptedHere.current.delete(p.id);
       return left;
     });
-  return { data, loaded, loadError, pending, plan, planError, waitingFor, queuedBehind, duplicate, cancelDuplicate, clearFinished, locked, unlockAndRetry, queue, activeFor, finished, dismiss, cancelOperation, trayCollapsed, setTrayCollapsed, start, approve, cancel, refresh, patchData };
+  return { data, loaded, loadError, pending, plan, planError, waitingFor, queuedBehind, duplicate, cancelDuplicate, clearFinished, locked, unlockAndRetry, queue, activeFor, finished, dismiss, cancelOperation, trayCollapsed, setTrayCollapsed, start, approve, cancel, refresh, patchData, accepted };
 }
 
 export type Console = ReturnType<typeof useConsole>;

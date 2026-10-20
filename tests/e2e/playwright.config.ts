@@ -39,8 +39,9 @@ export default defineConfig({
         HARBOR_DEV_SHELL: '/bin/sh', // a plain shell, never the developer's own login shell and its dotfiles
         HARBOR_DEV_ROOT: root,
         HARBOR_DEV_PORT: String(PORT),
+        // room for every app the suite installs plus a tailnet port each (decision 186's bulk list publishes them all)
         HARBOR_DEV_PORT_FROM: String(PORT + 80),
-        HARBOR_DEV_PORT_TO: String(PORT + 99),
+        HARBOR_DEV_PORT_TO: String(PORT + 159),
         HARBOR_DEV_PASSWORD: 'e2e-fixture-password',
         HARBOR_DEV_LOG_LEVEL: 'warn',
         HARBOR_DEV_FAKE_CONTROL: process.env['HARBOR_E2E_FAKE_CONTROL'],

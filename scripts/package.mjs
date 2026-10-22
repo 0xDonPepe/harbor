@@ -29,7 +29,7 @@ const signingEnv = takeSigningEnv(process.env);
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const NODE_VERSION = process.env.HARBOR_NODE_VERSION ?? 'v24.12.0';
+const NODE_VERSION = process.env.HARBOR_NODE_VERSION ?? 'v24.22.1';
 const TARGET = 'linux-x64';
 const name = `harbor-${pkg.version}-${TARGET}`;
 const releaseDir = path.join(ROOT, 'release');

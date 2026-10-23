@@ -16,7 +16,7 @@ jobs:
           version: 10.16.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.12.0
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
@@ -49,7 +49,7 @@ jobs:
           version: 10.16.1
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.12.0
+          node-version: 24.22.1
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # the fetch checks the zip against catalog.json with the compiled code; catalog:verify then runs this commit's sources

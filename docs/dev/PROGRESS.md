@@ -448,10 +448,17 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
+## Phase 70 — smoke restart baseline (2026-10-23, 0.37.1) ✅
+- [x] Decision 188: `catalog:smoke` judges restarts per phase (`scripts/smoke-settle.ts`): base revision = counts when healthy, upgrade = counts before the update, fresh = none; the base's tolerated restarts are named in its message
+- [x] Tests: unit `smoke-settle.test.ts` (+7); live: `catalog:smoke` of Homarr (rev 4 → a rev-5 copy) on Docker Desktop, all three phases ok
+- [x] Shipped inside 0.37.1 (its first release run failed, nothing was published): see phase 69 for the gate
+- [ ] harbor-apps: Ghost, Etherpad and Pastefy database-readiness revisions qualified through `qualify.yml` with this release
+
 ## Phase 69 — contributor PRs: Ubuntu 26.04 hosts and Node 24.22.1 (2026-10-23, 0.37.1) ✅
 - [x] PR #1 (0xDonPepe, decision 187): Ubuntu 26.04 LTS (resolute) joins the supported window; the Tailscale apt suite follows the host (`tailscaleAptRepo` from `dockerAptRepo`; Debian no longer gets Ubuntu noble); out-of-window Ubuntu/Debian releases no longer get a `--force` / `HARBOR_FORCE=1` hint. Contributor's live run: bootstrap of this code on a real Ubuntu 26.04.1 NUC (Docker, Tailscale, fscrypt, avahi, Caddy, daemon healthy)
 - [x] PR #3 (0xDonPepe): bundled Node v24.12.0 → v24.22.1 (October 21, 2026 Node.js security release: TLS hostname-check bypasses CVE-2026-106069/105483, dns NUL truncation CVE-2026-105482, eMudhra CA distrust; checked against nodejs.org's own advisory and SHASUMS256); CI and release `setup-node` pinned to it
-- [x] 0.37.1: gate on the merged tree: lint, typecheck, unit 639 (+2 skipped; +8 from PR #1), integration 379 + 3 skipped, e2e 44, catalog verify/hash (fixtures), openapi current
+- [x] The first 0.37.1 release run failed (nothing published): on Node 24.22.1 `auto-update-backup.test.ts` compared two one-second timestamps with a strict `<` and they landed in the same second every time; it now checks that the backup finished no later than the update started. A `lan-https.test.ts` timing flake also showed once in that run (5/5 passes locally on 24.22.1)
+- [x] 0.37.1: gate on Node 24.22.1 (as CI): lint, typecheck, unit 646 (+2 skipped; +8 from PR #1, +7 smoke-settle), integration 379 + 3 skipped, e2e 44, catalog verify/hash (fixtures), openapi current
 - [ ] Live: an app install and a backup on Ubuntu 26.04 (the contributor said they will report back)
 
 ## Phase 68 — Tailscale addresses in bulk and at install (2026-10-20, 0.37.0) ✅

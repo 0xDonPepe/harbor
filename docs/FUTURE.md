@@ -166,3 +166,23 @@ refused while an app uses the drive). What remains future: **partition, LUKS, SM
 - **Hosts an offline app may still reach** (`network.allow` next to `network.internet`), e.g. one update server.
 - **IPv6 inside app networks.** Harbor's app networks are IPv4 only; a non-direct app on one with an IPv6 subnet is
   refused.
+
+## Blockchain nodes: later (recorded 2026-10-23, carlosalaniz/harbor#2)
+
+A contributor asked whether Bitcoin and Ethereum nodes belong in the App Store. The direction: **yes, one step at a
+time, starting with a pruned Bitcoin Core that opens no inbound port**, which fits today's package format (settings,
+storage on a chosen location, an RPC health path) and needs no engine change. Not built, and not promised:
+
+- **Inbound peer ports** (8333/tcp, 30303 tcp+udp, 9000): manifest `ports:` is UDP-only (decision 163). A `tcp` value
+  would be an optional format addition under the same rules (single instance, accepted in the plan, a plain note that
+  it only matters with a router port-forward). Only once a package needs it.
+- **Hard-fork deadlines**: an Ethereum client that misses a fork release stops following the chain. Ideas: a catalog
+  field like `release.updateBy` that raises a notification as the date nears, or auto-update suggested for such
+  packages. Needed before an Ethereum execution + consensus pair (a `links:` pair sharing a JWT), not for Bitcoin.
+- **Size**: an install plan that shows expected size and checks free space on the chosen location would help every
+  large app, not just nodes (an engine feature, not a per-app branch).
+- **Sync progress**: a package-declared status probe ("syncing 63%") reusing the readiness machinery.
+- **Encryption cost**: measure a chain's initial sync on a sealed home (AES-NI makes fscrypt cheap on most x86-64)
+  before designing any opt-out; decision 103's rule stands (never call plaintext encrypted).
+- **Validators and staking keys are a non-goal**: slashing risk and liveness duties do not fit a single-admin
+  beta manager; no validator client goes into the official catalog.

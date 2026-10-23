@@ -7,7 +7,8 @@
 //   fresh    remove it with its data, install the new revision from nothing: it must come up healthy.
 //
 // "Healthy" is Harbor's own readiness (the package's health path answers with an expected status), then a
-// settle window in which every container keeps running without a restart.
+// settle window in which every container keeps running without restarting again (scripts/smoke-settle.ts: the
+// revision boxes already run may have restarted on its way to healthy; the new revision may not).
 //
 //   pnpm catalog:smoke --docker-socket /var/run/docker.sock --catalog <new apps dir> [--base <old apps dir>]
 //                      <id> [--out result.json] [--record] [--settle 60]
@@ -33,6 +34,7 @@ import { packageVersionOf } from '../src/packages/version.js';
 import { initializeState } from '../src/state/db.js';
 import { systemClock, systemIds } from '../src/util.js';
 import { HARBOR_ROOT } from './catalog-dir.mjs';
+import { restartBaseline, settleProblem, toleratedRestarts, type SettleContainer } from './smoke-settle.js';
 
 const ADMIN = { username: 'smoke', password: `smoke-${randomBytes(12).toString('hex')}` };
 
@@ -224,23 +226,29 @@ export async function smoke(o: ReturnType<typeof args>): Promise<SmokeResult> {
     }
     return out;
   };
-  // Harbor said healthy; now every container must keep running, unrestarted, and readiness must hold.
-  const settle = async (instanceId: string): Promise<string | null> => {
+  const snapshot = async (instanceId: string): Promise<SettleContainer[]> => {
+    const out: SettleContainer[] = [];
+    for (const c of await containers(instanceId)) {
+      const s = await docker.getContainer(c.Id).inspect();
+      out.push({ id: c.Id, service: c.Labels?.['com.docker.compose.service'] ?? c.Id.slice(0, 12), running: Boolean(s.State.Running), exitCode: s.State.ExitCode, restarts: s.RestartCount });
+    }
+    return out;
+  };
+  // Harbor said healthy; now every container must keep running, not restart beyond `allowed`, and readiness must hold.
+  const settle = async (instanceId: string, allowed: Map<string, number>): Promise<string | null> => {
     const deadline = Date.now() + o.settle * 1000;
     for (;;) {
-      for (const c of await containers(instanceId)) {
-        const s = await docker.getContainer(c.Id).inspect();
-        const svc = c.Labels?.['com.docker.compose.service'] ?? c.Id.slice(0, 12);
-        if (!s.State.Running) return `${svc} stopped (exit code ${s.State.ExitCode})`;
-        if (s.RestartCount > 0) return `${svc} restarted ${s.RestartCount} time(s)`;
-      }
+      const why = settleProblem(await snapshot(instanceId), allowed);
+      if (why) return why;
       const inst = await api.instance(name);
       if (inst && inst.readiness === 'unhealthy') return `Harbor's health check failed after the app was up (readiness ${inst.readiness})`;
       if (Date.now() >= deadline) return null;
       await sleep(5000);
     }
   };
-  const phase = async (p: Omit<SmokePhase, 'ok' | 'seconds' | 'message'>, run: () => Promise<{ op: OperationDto } | null>): Promise<boolean> => {
+  // allow: 'at-healthy' = the restarts a container had when Harbor said healthy (the published revision); a map =
+  // restarts already counted before the phase (containers it does not re-create); see scripts/smoke-settle.ts
+  const phase = async (p: Omit<SmokePhase, 'ok' | 'seconds' | 'message'>, run: () => Promise<{ op: OperationDto } | null>, allow: 'at-healthy' | Map<string, number> = new Map()): Promise<boolean> => {
     const t0 = Date.now();
     let ok = false;
     let message: string;
@@ -259,9 +267,12 @@ export async function smoke(o: ReturnType<typeof args>): Promise<SmokeResult> {
         message = `the app is not running (${inst?.runtime ?? 'gone'})`;
       } else {
         const healthy = Math.round((Date.now() - t0) / 1000);
-        const why = await settle(inst.id);
+        const atHealthy = allow === 'at-healthy' ? await snapshot(inst.id) : null;
+        const allowed = atHealthy ? restartBaseline(atHealthy) : (allow as Map<string, number>);
+        const early = atHealthy ? toleratedRestarts(atHealthy, allowed) : null;
+        const why = await settle(inst.id, allowed);
         ok = why === null;
-        message = ok ? `healthy after ${healthy} s, still healthy ${o.settle} s later` : why!;
+        message = ok ? `healthy after ${healthy} s${early ? ` (${early} before that)` : ''}, still healthy ${o.settle} s later` : why!;
       }
       if (!ok && inst) logsOut = await logs(inst.id);
     } catch (e) {
@@ -279,14 +290,15 @@ export async function smoke(o: ReturnType<typeof args>): Promise<SmokeResult> {
       const baseDir = path.join(root, 'catalog-base');
       subset(o.base!, o.id, baseDir);
       await start(baseDir);
-      const installed = await phase({ name: 'upgrade-install', revision: prev.revision, version: packageVersionOf(prev) }, () => api.run({ kind: 'install', packageId: o.id, name, ...(Object.keys(storage).length ? { storage } : {}) }, secrets, timeoutMs));
+      const installed = await phase({ name: 'upgrade-install', revision: prev.revision, version: packageVersionOf(prev) }, () => api.run({ kind: 'install', packageId: o.id, name, ...(Object.keys(storage).length ? { storage } : {}) }, secrets, timeoutMs), 'at-healthy');
       await stop();
       if (!installed) return result;
       // Harbor restarts on the new catalog, like a box that downloaded it; the app keeps running meanwhile
       await start(nextDir);
       const inst = await api.instance(name);
       if (!inst?.updateAvailable) throw new Error(`Harbor offers no update from revision ${prev.revision} to ${next.revision}`);
-      const updated = await phase({ name: 'upgrade', revision: next.revision, version: packageVersionOf(next) }, () => api.run({ kind: 'update', instanceId: inst.id }, {}, timeoutMs));
+      const before = restartBaseline(await snapshot(inst.id));
+      const updated = await phase({ name: 'upgrade', revision: next.revision, version: packageVersionOf(next) }, () => api.run({ kind: 'update', instanceId: inst.id }, {}, timeoutMs), before);
       if (!updated) return result;
       const purge = await api.run({ kind: 'purge', instanceId: inst.id }, {}, timeoutMs);
       if (purge.op.state !== 'succeeded') throw new Error(`could not remove the updated copy: ${purge.op.error?.message}`);

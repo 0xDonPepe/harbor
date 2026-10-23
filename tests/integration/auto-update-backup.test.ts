@@ -103,11 +103,13 @@ describe('automatic updates back the app up first (decision 176)', () => {
     await waitFor(async () => (await notes()).revision === '3' && (await notes()).installState === 'installed');
     const after = await notes();
     expect(after.version).toBe('1.3.0');
-    const update = await h.api.expect<{ kind: string; state: string; createdAt: string }>(200, 'GET', `/v1/operations/${after.operationId}`);
+    const update = await h.api.expect<{ kind: string; state: string; startedAt: string }>(200, 'GET', `/v1/operations/${after.operationId}`);
     expect(update).toMatchObject({ kind: 'update', state: 'succeeded' });
     const backup = (await runs(inst.id)).find((r) => r.kind === 'backup' && r.state === 'succeeded')!;
     expect(backup, 'a restore point was made').toBeDefined();
-    expect(backup.startedAt < update.createdAt).toBe(true);
+    // timestamps have one-second resolution: the backup finished no later than the update started (a strict
+    // startedAt < createdAt failed whenever both landed in the same second, every time on Node 24.22.1)
+    expect(backup.finishedAt! <= update.startedAt).toBe(true);
     const items = await notifications();
     expect(items.find((n) => n.kind === 'app-updated')).toMatchObject({ title: 'notes was updated automatically', body: expect.stringContaining('from 1.1.0 to 1.3.0') });
     expect(items.some((n) => n.kind === 'auto-update-held')).toBe(false); // resolved by the good backup

@@ -1176,12 +1176,22 @@ Two contributor pull requests (carlosalaniz/harbor#1, #3), reviewed and merged t
 | Node 24.22.1 exists and is the security release | `nodejs.org/dist/v24.22.1/SHASUMS256.txt` lists `node-v24.22.1-linux-x64.tar.xz`; the October 2026 advisory names 24.22.1 for CVE-2026-105482/105483/106069 (high) and the CA/OpenSSL/Undici updates. `scripts/package.mjs` still checks the tarball against those SHASUMS at packaging |
 | Ubuntu 26.04 bootstrap | **contributor's run, not ours**: 0.35.0 archive with this branch's `host`/`tools`/`bootstrap` swapped in, on a real Ubuntu 26.04.1 (Intel NUC10i3): Docker from `linux/ubuntu resolute`, Tailscale from `stable/ubuntu/resolute`, fscrypt ready, daemon healthy. App installs and backups on 26.04 not covered yet |
 | `pnpm lint`, `pnpm typecheck` | clean |
-| `pnpm test` (unit) | 639 passed, 2 skipped (+8: `tailscale-repo.test.ts`, 26.04 / out-of-window cases in `host-gate.test.ts`, a real 26.04 os-release in `docker-install.test.ts`) |
+| `pnpm test` (unit) | 646 passed, 2 skipped (+8: `tailscale-repo.test.ts`, 26.04 / out-of-window cases in `host-gate.test.ts`, a real 26.04 os-release in `docker-install.test.ts`; +7 `smoke-settle.test.ts`, §3w) |
 | `pnpm test:integration` | 379 passed, 3 live-Docker skipped |
 | `pnpm build && pnpm test:e2e` | 44 passed |
 | `catalog:verify` / `catalog:hash --check` (fixtures), `openapi -- --check` | ok / ok / current |
 
-The local gate ran on Node 24.12.0 (the dev machine); CI and the release job run 24.22.1.
+The first release run failed on Node 24.22.1 (nothing was published): `auto-update-backup.test.ts` compared two one-second timestamps with a strict `<` (backup `startedAt` < update `createdAt`), and on 24.22.1 both landed in the same second every time, in CI and locally. It now checks that the backup finished no later than the update started. A `lan-https.test.ts` timing flake also showed once in that run (passed in the parallel `ci` run and 5/5 locally on 24.22.1). The gate above ran locally on Node 24.22.1 (darwin-arm64, SHA256 checked against nodejs.org), as CI does.
+
+## 3w. Smoke restart baseline (2026-10-23, Harbor 0.37.1, decision 188)
+
+| Check | Result |
+|---|---|
+| `pnpm test` (unit) | 646 passed, 2 skipped (+7: `smoke-settle.test.ts`: stopped container, any restart refused with no baseline, restarts up to the baseline allowed and one more refused, re-created container starts from zero, message helpers) |
+| `pnpm lint`, `pnpm typecheck`, `pnpm build` | clean |
+| `pnpm catalog:smoke` on Docker Desktop (arm64, dev loop) | Homarr revision 4 (harbor-apps main) → a copy raised to revision 5: upgrade-install ok (healthy after 20 s), upgrade ok, fresh ok, settle 20 s each — the snapshot/baseline wiring on a real engine. The tolerated-restart path itself is covered by the unit test (no app restarted here) |
+
+The full gate for both (§3v, §3w) is the one in §3v.
 
 ## 4. Qualified versions
 

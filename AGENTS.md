@@ -18,7 +18,7 @@ ships the latest one as an offline seed.
   **root-equivalent**. The API is not a sandbox against root/Docker admins. Loopback by default;
   LAN mode, tailnet (Tailscale) and public HTTPS (Caddy + Let's Encrypt) are opt-in providers.
 - Product truth: `docs/spec/TDD.md` (original spec) + `docs/DECISIONS.md` (every scope lift since, numbered —
-  next number is **188**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
+  next number is **189**). `docs/spec/plan.md` is the historical build order; `docs/dev/PROGRESS.md` is the changelog.
 - Session map: `docs/AI_CONTEXT.md` (where things are, versions, gotchas, live droplets).
 
 ## 2. Where things live
@@ -139,7 +139,7 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (639 + 2 skipped)
+   pnpm test                    # unit (646 + 2 skipped)
    pnpm test:integration        # 379 + 3 live-Docker skipped (~9 min)
    pnpm build && pnpm test:e2e  # 44 Playwright (~3 min, ports 18500/18700; HARBOR_E2E_PORT moves them)
    pnpm catalog:verify tests/fixtures/catalog --quiet

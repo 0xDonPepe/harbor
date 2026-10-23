@@ -26,9 +26,11 @@ function facts(over: Partial<HostFacts> = {}): HostFacts {
 }
 
 describe('distroSupport', () => {
-  it('accepts Ubuntu 24.04 and Debian 12/13 as supported', () => {
+  it('accepts Ubuntu 24.04/26.04 and Debian 12/13 as supported', () => {
     expect(distroSupport('ubuntu', '24.04', '')).toBe('supported');
     expect(distroSupport('ubuntu', '24.04.3', '')).toBe('supported');
+    expect(distroSupport('ubuntu', '26.04', 'debian')).toBe('supported');
+    expect(distroSupport('ubuntu', '26.04.1', 'debian')).toBe('supported');
     expect(distroSupport('debian', '12', 'debian')).toBe('supported');
     expect(distroSupport('debian', '13.1', '')).toBe('supported');
   });
@@ -42,6 +44,7 @@ describe('distroSupport', () => {
 
   it('rejects other distros and out-of-window releases as unknown', () => {
     expect(distroSupport('ubuntu', '22.04', '')).toBe('unknown');
+    expect(distroSupport('ubuntu', '25.10', 'debian')).toBe('unknown');
     expect(distroSupport('debian', '11', '')).toBe('unknown');
     expect(distroSupport('fedora', '41', 'fedora')).toBe('unknown');
     expect(distroSupport('arch', '', '')).toBe('unknown');
@@ -52,6 +55,23 @@ describe('assertSupportedHost', () => {
   it('passes supported distros without force', () => {
     expect(() => assertSupportedHost(facts())).not.toThrow();
     expect(() => assertSupportedHost(facts({ osId: 'debian', versionId: '12', osIdLike: '', prettyName: 'Debian GNU/Linux 12 (bookworm)' }))).not.toThrow();
+    expect(() => assertSupportedHost(facts({ osId: 'ubuntu', versionId: '26.04', osIdLike: 'debian', osCodename: 'resolute', prettyName: 'Ubuntu 26.04.1 LTS' }))).not.toThrow();
+  });
+
+  it('names every supported release when it refuses', () => {
+    expect(() => assertSupportedHost(facts({ osId: 'ubuntu', versionId: '22.04', prettyName: 'Ubuntu 22.04.5 LTS' }))).toThrowError(/Ubuntu 24\.04 or 26\.04 LTS and Debian 12\/13/);
+  });
+
+  it('never suggests --force for an out-of-window Ubuntu/Debian release (force cannot accept it)', () => {
+    for (const force of [false, true]) {
+      let err: unknown;
+      try {
+        assertSupportedHost(facts({ osId: 'ubuntu', versionId: '25.10', osIdLike: 'debian', prettyName: 'Ubuntu 25.10' }), { force });
+      } catch (e) { err = e; }
+      expect(err).toBeInstanceOf(HarborError);
+      expect((err as HarborError).nextAction).not.toContain('re-run with --force');
+      expect((err as HarborError).nextAction).toContain('Install a supported release');
+    }
   });
 
   it('refuses derivatives without force and names the escape hatch', () => {

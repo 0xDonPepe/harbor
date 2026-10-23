@@ -24,6 +24,11 @@ describe('dockerAptRepo', () => {
     expect(repo.codename).toBe('noble');
     expect(repo.keyUrl).toBe('https://download.docker.com/linux/ubuntu/gpg');
   });
+  it('uses the ubuntu repo with resolute on REAL Ubuntu 26.04 (live-found: Intel NUC, 26.04.1)', () => {
+    const repo = dockerAptRepo({ ID: 'ubuntu', VERSION_ID: '26.04', ID_LIKE: 'debian', VERSION_CODENAME: 'resolute', UBUNTU_CODENAME: 'resolute' });
+    expect(repo.family).toBe('ubuntu');
+    expect(repo.codename).toBe('resolute');
+  });
   it('uses the debian repo on REAL Debian 13, where ID_LIKE is empty (live-found bug)', () => {
     // DigitalOcean debian-13-x64: ID=debian, VERSION_ID=13, ID_LIKE unset, VERSION_CODENAME=trixie.
     // The old ID_LIKE-only check fell through to ubuntu+trixie, which has no Docker Release file.

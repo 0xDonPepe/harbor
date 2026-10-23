@@ -363,8 +363,8 @@ async function bootstrapAfterStop(opts: BootstrapOptions, s: { facts: Awaited<Re
     }
   }
   if (opts.withTailscale) {
-    if (await opts.confirm('Set up Tailscale (private-cloud access path)?', tailscalePreview(facts.existing.tailscale, Boolean(opts.tailscaleAuthKey)))) {
-      tools.push(await setupTailscale(log, facts.existing.tailscale, opts.tailscaleAuthKey, now));
+    if (await opts.confirm('Set up Tailscale (private-cloud access path)?', tailscalePreview(facts.existing.tailscale, Boolean(opts.tailscaleAuthKey), facts.docker.aptRepo))) {
+      tools.push(await setupTailscale(log, facts.existing.tailscale, opts.tailscaleAuthKey, now, facts.docker.aptRepo));
     } else log('Tailscale skipped');
   }
   if (opts.withPublicProxy) {

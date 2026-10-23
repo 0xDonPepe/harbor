@@ -452,7 +452,7 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] Decision 188: `catalog:smoke` judges restarts per phase (`scripts/smoke-settle.ts`): base revision = counts when healthy, upgrade = counts before the update, fresh = none; the base's tolerated restarts are named in its message
 - [x] Tests: unit `smoke-settle.test.ts` (+7); live: `catalog:smoke` of Homarr (rev 4 → a rev-5 copy) on Docker Desktop, all three phases ok
 - [x] Shipped inside 0.37.1 (its first release run failed, nothing was published): see phase 69 for the gate
-- [ ] harbor-apps: Ghost, Etherpad and Pastefy database-readiness revisions qualified through `qualify.yml` with this release
+- [x] harbor-apps (c2baf8e): Ghost, Etherpad, Pastefy revision 3 (database healthcheck + `service_healthy`) qualified by `qualify.yml` with 0.37.1: the base revisions' first-start restarts were tolerated (Ghost 6, Etherpad 1, Pastefy 1) and every fresh install had none. Wallos 5.10.1 found a real first-start race (a probe of `/` creates an empty SQLite file); health path `/health.php`, pending
 
 ## Phase 69 — contributor PRs: Ubuntu 26.04 hosts and Node 24.22.1 (2026-10-23, 0.37.1) ✅
 - [x] PR #1 (0xDonPepe, decision 187): Ubuntu 26.04 LTS (resolute) joins the supported window; the Tailscale apt suite follows the host (`tailscaleAptRepo` from `dockerAptRepo`; Debian no longer gets Ubuntu noble); out-of-window Ubuntu/Debian releases no longer get a `--force` / `HARBOR_FORCE=1` hint. Contributor's live run: bootstrap of this code on a real Ubuntu 26.04.1 NUC (Docker, Tailscale, fscrypt, avahi, Caddy, daemon healthy)

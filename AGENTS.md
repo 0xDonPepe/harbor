@@ -24,7 +24,7 @@ ships the latest one as an offline seed.
 ## 2. Where things live
 
 ```
-src/            daemon (TypeScript strict ESM, Node 24.12, pnpm 10.16)
+src/            daemon (TypeScript strict ESM, Node 24.22, pnpm 10.16)
   contracts/    JSON Schemas + DTO types — the API's source of truth
   packages/     restricted YAML parser, manifest/compose validators, catalog loader, zip import,
                 min-harbor.ts (an app's declared `release.minHarbor` gate, decision 161)
@@ -139,7 +139,7 @@ Key separations (do not blur them):
 4. **Gate before commit** (ALL must pass — this is exactly what CI runs):
    ```sh
    pnpm lint && pnpm typecheck
-   pnpm test                    # unit (631 + 2 skipped)
+   pnpm test                    # unit (639 + 2 skipped)
    pnpm test:integration        # 379 + 3 live-Docker skipped (~9 min)
    pnpm build && pnpm test:e2e  # 44 Playwright (~3 min, ports 18500/18700; HARBOR_E2E_PORT moves them)
    pnpm catalog:verify tests/fixtures/catalog --quiet

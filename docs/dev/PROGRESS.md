@@ -448,6 +448,12 @@ Decisions: [docs/DECISIONS.md](docs/DECISIONS.md). Live evidence: [docs/VERIFICA
 - [x] harbor-apps CI: bundle (read-only) and publish (write, no checkout) split, notes via jq from the summary, toolchain per Harbor checkout (engines + packageManager), plan fails clearly when the latest release has no `catalog:plan`
 - [ ] Live: harbor-apps CI on per-version proofs (needs 0.28.2 released and latest); a published app declaring `0.28.2` seen as unavailable on 0.28.0/0.28.1
 
+## Phase 69 — contributor PRs: Ubuntu 26.04 hosts and Node 24.22.1 (2026-10-23, 0.37.1) ✅
+- [x] PR #1 (0xDonPepe, decision 187): Ubuntu 26.04 LTS (resolute) joins the supported window; the Tailscale apt suite follows the host (`tailscaleAptRepo` from `dockerAptRepo`; Debian no longer gets Ubuntu noble); out-of-window Ubuntu/Debian releases no longer get a `--force` / `HARBOR_FORCE=1` hint. Contributor's live run: bootstrap of this code on a real Ubuntu 26.04.1 NUC (Docker, Tailscale, fscrypt, avahi, Caddy, daemon healthy)
+- [x] PR #3 (0xDonPepe): bundled Node v24.12.0 → v24.22.1 (October 21, 2026 Node.js security release: TLS hostname-check bypasses CVE-2026-106069/105483, dns NUL truncation CVE-2026-105482, eMudhra CA distrust; checked against nodejs.org's own advisory and SHASUMS256); CI and release `setup-node` pinned to it
+- [x] 0.37.1: gate on the merged tree: lint, typecheck, unit 639 (+2 skipped; +8 from PR #1), integration 379 + 3 skipped, e2e 44, catalog verify/hash (fixtures), openapi current
+- [ ] Live: an app install and a backup on Ubuntu 26.04 (the contributor said they will report back)
+
 ## Phase 68 — Tailscale addresses in bulk and at install (2026-10-20, 0.37.0) ✅
 - [x] Found on the home server: Plane's `:18998` "tailnet address" was a Publish review never approved, shown as a link; Harbor and `tailscale serve` agreed (no repair bug)
 - [x] Decision 186: Settings → Remote access *Apps on Tailscale* (checkboxes, Select all/none, one review of N plain expose/unexpose plans, Apply queues them, refusals grouped by reason); install page *Also on Tailscale* + request `tailnet`, CLI `--tailnet/--no-tailnet`; policy setting gains `asked`; review shows a planned address as text

@@ -31,7 +31,7 @@ is also a `harbor` CLI command against the same local API. Owner/user: Carlos (o
 | Generated API description | `docs/openapi.json` (`pnpm openapi`; unit test asserts the exact route list — update `tests/unit/openapi.test.ts` when adding routes) |
 | Persistent memory (Claude Code auto-memory) | `~/.claude/projects/-Users-carlos-Documents-devshit-harbor/memory/` (`harbor-project-context.md`, `user-working-style.md`) |
 
-## 3. Repository layout (TypeScript strict ESM, Node 24.12, pnpm 10.16)
+## 3. Repository layout (TypeScript strict ESM, Node 24.22, pnpm 10.16)
 
 ```
 src/
@@ -53,7 +53,7 @@ src/
 web/src/               React 19 + Vite, plain CSS tokens, strict CSP (style-src allows inline for xterm); App.tsx (Umbrel-style login hero, sidebar, bell), app/pages/*, app/dialogs.tsx (InstallWizard location picker + passphrase, PlanDialog Lives-on row, locked drawer banner), app/Setup.tsx (wizard), app/Terminal.tsx, app/reorder.ts (drag-to-arrange), mock/ (fixtures for `pnpm dev:ui`)
 (no catalog/)          the 17 official apps live in carlosalaniz/harbor-apps (`apps/<id>/`, checkout beside this repo as ../harbor-apps)
 tests/fixtures/catalog FROZEN copies of 9 apps (bentopdf excalidraw freshrss immich jellyfin memos n8n nextcloud uptime-kuma) for tests, e2e and `pnpm dev`
-tests/unit (631 + 2 skipped) tests/integration (379 + 3 live-Docker skipped, files run serially) tests/e2e (Playwright 44, two dev daemons on 18500/18700: normal + setup mode)
+tests/unit (639 + 2 skipped) tests/integration (379 + 3 live-Docker skipped, files run serially) tests/e2e (Playwright 44, two dev daemons on 18500/18700: normal + setup mode)
 scripts/               package.mjs (release archive; downloads + checks the catalog seed), catalog-dir.mjs (--catalog / HARBOR_CATALOG_DIR / ../harbor-apps/apps), catalog-pin/hash/verify/bundle/qualify, openapi, vm/ (DigitalOcean controller do-vm.mjs, vm-ssh.sh, vm-scp.sh, run-vm-tests.mjs acceptance suite)
 install.sh             curl one-liner (published as a release asset too)
 ```
@@ -63,7 +63,7 @@ Key runtime paths on a host: `/opt/harbor` (release), `/etc/harbor/harbor.json`,
 ## 4. Versions, tags, releases
 
 Tags on `main`: v0.1.0-mvp, v0.2.0, v0.2.1, v0.3.0, v0.3.1, v0.4.0, v0.5.0, v0.6.0, v0.7.0, v0.8.0, v0.8.1, v0.8.2, v0.9.0, v0.10.0, v0.11.0, v0.12.0 → v0.12.5, v0.13.0, v0.14.0, v0.15.0 → v0.15.2, v0.16.0 → v0.16.2, v0.17.0-beta.1 → beta.5 (to be withdrawn), v0.17.0, then one tag per release (CI tags `v<version>` from `package.json`).
-`package.json` version is **0.37.0** (signed releases from here on, decision 168 — the release job needs the `HARBOR_SIGNING_KEY` secret; 0.31.0 was never published on its own; the beta shipped as an ordinary `0.17.x` tag, decision 108; release notes in `docs/releases/v<version>.md`). The release job refuses a version whose `v<version>` tag already exists at another commit (`scripts/release-tag-guard.sh`): bump `package.json` for every release. Since 0.28.0 the release job also needs a published catalog release on carlosalaniz/harbor-apps (`pnpm package` downloads and verifies it). GitHub Releases exist for v0.7.0 → v0.16.2 and v0.17.0 (older ones to be withdrawn; assets:
+`package.json` version is **0.37.1** (signed releases from here on, decision 168 — the release job needs the `HARBOR_SIGNING_KEY` secret; 0.31.0 was never published on its own; the beta shipped as an ordinary `0.17.x` tag, decision 108; release notes in `docs/releases/v<version>.md`). The release job refuses a version whose `v<version>` tag already exists at another commit (`scripts/release-tag-guard.sh`): bump `package.json` for every release. Since 0.28.0 the release job also needs a published catalog release on carlosalaniz/harbor-apps (`pnpm package` downloads and verifies it). GitHub Releases exist for v0.7.0 → v0.16.2 and v0.17.0 (older ones to be withdrawn; assets:
 `harbor-<v>-linux-x64.tar.gz`, `SHA256SUMS`, `install.sh` from 0.8.0). Release archive is built with
 `pnpm build && pnpm package` → `release/`; since v0.9.0 CI publishes the release automatically on
 push to `main` (`.github/workflows/release.yml`); no manual `gh release create` needed.
@@ -95,6 +95,7 @@ bootstrap adds the `caddy` user to the `harbor` group and makes the state dir gr
 validated live against Caddy v2.11.4.
 
 **Last three actions, most recent first:**
+1. **0.37.1 (decision 187, 2026-10-23)**: contributor PRs #1 and #3 — Ubuntu 26.04 LTS hosts (Tailscale apt suite follows the host; no `--force` hint for out-of-window Ubuntu/Debian) and bundled Node 24.22.1 (October 21 Node.js security release; CI and release pin it too).
 1. **0.37.0 (decision 186, 2026-10-20)**: Tailscale addresses in bulk (Settings → Remote access *Apps on Tailscale*: checkboxes → one review of plain expose/unexpose plans → Apply) and at install (*Also on Tailscale*, request `tailnet`, policy setting `asked`); a Publish review shows its future address as text, not a link (Plane's dead `:18998` on the home server was an unapproved review).
 1. **0.36.0 (decisions 184–185, 2026-10-20)**: VPN and offline apps (docs/design/VPN.md). One WireGuard tunnel for apps only (`hb-vpn0`), per-app internet access `direct|vpn|offline` (package default `network.internet`, operator's choice in settings.json `internet`), every app through the VPN (`vpn` setting, restarts moved apps as `vpn-policy`). Host side: nftables table `inet harbor_egress` (marks by app subnet, kill switch in forward/output, DNS DNAT), ip rules 5160–5180 + table 4842 (blackhole), root handoff `harbor-egress@<action>`, boot unit `harbor-egress.service` (Docker requires it; `nft -f /etc/harbor/egress/rules.nft`) + `harbor-vpn.service`. Live on harbor-old with a WireGuard server on the droplet (`wgtest0`, UDP 51840 opened with `do-vm.mjs firewall-udp on 51840`): two live bugs fixed (nft refuses `-f -`; Docker's resolver forwards from the host namespace → rendered `dns:` 198.51.100.53 / 127.0.53.53).
 1. **0.35.0 (decision 183, 2026-10-15)**: the operation queue (docs/design/QUEUE.md). No button is disabled because another operation runs (the console's global `busy` is gone); on a busy app the queueable kinds (start/stop/restart/update/remove/reinstall/purge) are queued as actions without a plan (`POST /v1/operations {action}`) and planned at their turn (`REVIEW_NEEDED` when a person must give something); `GET /v1/operations` + `POST /v1/operations/:id/cancel` + `harbor queue [cancel]`; the tray is the queue; restart cancels never-started items instead of flagging apps `needs_action`; schema v13. Three review rounds (34 defects) fixed. Local gate green; no live run yet.
@@ -187,7 +188,7 @@ validated live against Caddy v2.11.4.
 - Carlos's style: questions up front, then autonomous executive decisions; document everything; be pragmatic. He replies tersely ("ok do it", "2", "lets do it"). Confirm before outward-facing/irreversible actions (repo visibility, destroying droplets); routine judgment calls are yours.
 - Every round: code + tests (unit/integration/e2e) + live verification on a droplet + docs (DECISIONS row(s), PROGRESS phase + counts, VERIFICATION section + evidence dir with README, OPERATOR_GUIDE, design doc) + commit on `main` + tag + push (+ GitHub Release since 0.7.0) + memory file update.
 - Commits end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` (use whatever the current session's attribution reminder says).
-- Commands: `pnpm typecheck && pnpm lint`, `pnpm test` (unit, 631 + 2 skipped), `pnpm test:integration` (379 + 3 live-Docker skipped), `pnpm test:e2e` (44, Playwright, ~3 min, spins two dev daemons on 18500/18700), `pnpm openapi` after route changes (unit test pins the exact route list), `pnpm build && pnpm package`.
+- Commands: `pnpm typecheck && pnpm lint`, `pnpm test` (unit, 639 + 2 skipped), `pnpm test:integration` (379 + 3 live-Docker skipped), `pnpm test:e2e` (44, Playwright, ~3 min, spins two dev daemons on 18500/18700), `pnpm openapi` after route changes (unit test pins the exact route list), `pnpm build && pnpm package`.
 - Dev daemon: `pnpm dev` (fake Docker adapter, fakes for Tailscale/Caddy/net/fetcher/registry/release feed/power/unit starter; `HARBOR_DEV_SETUP=1 HARBOR_DEV_SETUP_CODE=…` starts in setup-wizard mode). `pnpm dev:ui` renders the console from fixtures (no daemon; `?screen=login` previews the login hero) — fastest UI iteration.
 - Fake mode conveniences live in `src/daemon.ts` (`demoFetcher`, `demoRegistry`, `demoReleaseFeed`) and are shared by dev and tests.
 - Adding a DTO field: `src/contracts/api.ts` → `src/lifecycle/dto.ts` → consumers; web imports the same contract types.

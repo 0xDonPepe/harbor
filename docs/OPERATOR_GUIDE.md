@@ -24,7 +24,8 @@ put in it). On a 4 GiB box, run one heavy app at a time.
 
 Qualified pair for this release (see `docs/VERIFICATION.md` for the run that produced it): Docker
 Engine and Compose versions installed by `--install-docker` on the date of qualification; Node
-24.12.0 bundled.
+24.22.1 bundled since 0.37.1 (the October 2026 Node.js security release; the last fresh-host qualification ran
+with 24.12.0).
 
 ## 2. Install
 

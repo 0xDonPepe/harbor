@@ -1167,6 +1167,22 @@ The first e2e run of the bulk list hit the suite's 20 app ports (every app plus 
 now has 80, and the dialog groups refusals by reason (one line naming the apps, not one per app).
 Not covered live yet: the home server runs 0.36.0.
 
+## 3v. Ubuntu 26.04 hosts and Node 24.22.1 (2026-10-23, Harbor 0.37.1, decision 187)
+
+Two contributor pull requests (carlosalaniz/harbor#1, #3), reviewed and merged together.
+
+| Check | Result |
+|---|---|
+| Node 24.22.1 exists and is the security release | `nodejs.org/dist/v24.22.1/SHASUMS256.txt` lists `node-v24.22.1-linux-x64.tar.xz`; the October 2026 advisory names 24.22.1 for CVE-2026-105482/105483/106069 (high) and the CA/OpenSSL/Undici updates. `scripts/package.mjs` still checks the tarball against those SHASUMS at packaging |
+| Ubuntu 26.04 bootstrap | **contributor's run, not ours**: 0.35.0 archive with this branch's `host`/`tools`/`bootstrap` swapped in, on a real Ubuntu 26.04.1 (Intel NUC10i3): Docker from `linux/ubuntu resolute`, Tailscale from `stable/ubuntu/resolute`, fscrypt ready, daemon healthy. App installs and backups on 26.04 not covered yet |
+| `pnpm lint`, `pnpm typecheck` | clean |
+| `pnpm test` (unit) | 639 passed, 2 skipped (+8: `tailscale-repo.test.ts`, 26.04 / out-of-window cases in `host-gate.test.ts`, a real 26.04 os-release in `docker-install.test.ts`) |
+| `pnpm test:integration` | 379 passed, 3 live-Docker skipped |
+| `pnpm build && pnpm test:e2e` | 44 passed |
+| `catalog:verify` / `catalog:hash --check` (fixtures), `openapi -- --check` | ok / ok / current |
+
+The local gate ran on Node 24.12.0 (the dev machine); CI and the release job run 24.22.1.
+
 ## 4. Qualified versions
 
 | Component | Version | Source |

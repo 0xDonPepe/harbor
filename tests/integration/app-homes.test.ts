@@ -307,6 +307,26 @@ describe('install to an encrypted app home', () => {
     }
   });
 
+  // Decision 189 (same home server): after the reboot only Vaultwarden came back. Immich and Nextcloud each have a
+  // Redis with no sealed data, which Docker's restart policy had already started, so lock-guard read "running" from
+  // that one container and never started the rest.
+  it('decision 189: lock-guard starts a sealed app after a reboot even when Docker already restarted one of its containers', async () => {
+    const appsDir = path.join(h.userDataDir, 'harbor-apps');
+    const plan = await h.api.plan({ kind: 'install', packageId: 'n8n', name: 'twosvc', location: { dir: path.join(appsDir, 'n8n') } });
+    expect((await h.api.waitOperation((await h.api.submit(plan.id)).operationId)).state).toBe('succeeded');
+    const inst = (await h.api.instances()).find((i) => i.name === 'twosvc')!;
+    const project = h.daemon.ctx.repo.instance(inst.id)!.project;
+    const ours = [...h.fake.containers.values()].filter((c) => c.project === project);
+    expect(ours.length).toBeGreaterThan(1);
+    // the reboot: every container stops and the kernel forgets every key; Docker brings one service back by itself
+    for (const c of ours) await h.fake.stopContainer(c.id, 0);
+    crypto.open.clear();
+    await h.fake.startContainer(ours[0]!.id);
+    await h.restart(); // the login unlocks the home; lock-guard must start the app although one container runs
+    await until(async () => (await h.api.instances()).find((i) => i.id === inst.id)!.runtime === 'running', 'every container of twosvc running again');
+    expect(h.daemon.ctx.repo.listOperations(500).some((o) => o.instanceId === inst.id && o.kind === 'start' && o.actor === 'lock-guard' && o.state === 'succeeded')).toBe(true);
+  });
+
   // Decision 183 review R2: the locked refusal comes while the start is PLANNED, so the CLI must read the passphrase
   // there (it never reached the old retry around the approval), unlock the app with it and plan again.
   it('`harbor start <locked> --passphrase-stdin` reads the passphrase, unlocks and starts; without it and no TTY a clear error', async () => {
